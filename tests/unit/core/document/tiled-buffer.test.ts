@@ -153,3 +153,45 @@ describe('TiledBuffer', () => {
     expect(sizes).toEqual([TILE_SIZE * TILE_SIZE * 4 * 2, TILE_SIZE * TILE_SIZE * 4 * 2]);
   });
 });
+
+describe('TiledBuffer attachment (tiles in use by open documents)', () => {
+  it('counts attached references as tiles enter and leave an attached buffer', () => {
+    const buf = new TiledBuffer(RGBA8);
+    const t1 = buf.writableTile(0, 0);
+    expect(t1.attachedRefs).toBe(0);
+    buf.attach();
+    expect(t1.attachedRefs).toBe(1);
+    buf.captureTile(0, 0);
+    const t2 = buf.writableTile(0, 0); // copy replaces t1
+    expect([t1.attachedRefs, t2.attachedRefs]).toEqual([0, 1]);
+    buf.setTile(0, 0, t1);
+    expect([t1.attachedRefs, t2.attachedRefs]).toEqual([1, 0]);
+    const clone = buf.clone(); // clones start detached
+    expect(t1.attachedRefs).toBe(1);
+    clone.attach();
+    expect(t1.attachedRefs).toBe(2);
+    buf.detach();
+    clone.detach();
+    expect(t1.attachedRefs).toBe(0);
+  });
+
+  it('refuses to attach or receive tiles whose memory is on disk', () => {
+    const buf = new TiledBuffer(RGBA8);
+    const tile = buf.writableTile(0, 0);
+    buf.captureTile(0, 0);
+    tile.release();
+    expect(() => buf.attach()).toThrow('not in memory');
+    const attached = new TiledBuffer(RGBA8);
+    attached.attach();
+    expect(() => attached.setTile(0, 0, tile)).toThrow('not in memory');
+  });
+
+  it('never releases a tile that is in use or still writable', () => {
+    const buf = new TiledBuffer(RGBA8);
+    const writable = buf.writableTile(0, 0);
+    expect(() => writable.release()).toThrow('in use');
+    buf.attach();
+    buf.captureTile(0, 0);
+    expect(() => writable.release()).toThrow('in use');
+  });
+});

@@ -38,6 +38,13 @@ export class LayerTileDiff {
     }
   }
 
+  /** Every tile version this diff keeps (for residency management). */
+  *tiles(): IterableIterator<Tile> {
+    for (const map of [this.#before, this.#after]) {
+      for (const tile of map.values()) if (tile) yield tile;
+    }
+  }
+
   undo(doc: ImageDocument): void {
     this.#apply(doc, this.#before);
   }
@@ -49,9 +56,7 @@ export class LayerTileDiff {
   /** Memory held by this diff (tiles shared with the live document are counted too). */
   get bytes(): number {
     let total = 0;
-    for (const map of [this.#before, this.#after]) {
-      for (const tile of map.values()) total += tile?.data.byteLength ?? 0;
-    }
+    for (const tile of this.tiles()) total += tile.byteLength;
     return total;
   }
 

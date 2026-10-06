@@ -13,6 +13,7 @@
  * mask/channel targets and the Invert adjustment layer.
  */
 import { layerCapabilities, type PixelLayer } from '../../document/layers';
+import type { Tile } from '../../document/tile';
 import { CommandUnavailableError, type Command, type CommandContext } from '../command';
 import { wholeLayerTiles } from '../pixel-targets';
 import type { CommandDefinition } from '../registry';
@@ -64,6 +65,10 @@ class InvertCommand implements Command {
     for (const [tx, ty] of coords) layer.buffer.markChanged(tx, ty);
     diff.captureAfter(doc);
     this.#diff = diff;
+  }
+
+  retainedTiles(): Iterable<Tile> {
+    return this.#diff?.tiles() ?? [];
   }
 
   undo(): void {

@@ -6,6 +6,7 @@
  */
 import type { ImageDocument } from '../document/document';
 import type { PixelFormat, SampleArray } from '../document/pixel-format';
+import type { Tile } from '../document/tile';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
@@ -32,6 +33,11 @@ export interface Command {
   redo(): void;
   /** Approximate memory held for undo/redo, in bytes. */
   readonly undoBytes: number;
+  /**
+   * Tiles kept for undo/redo. The tile store may move them to disk; the history
+   * brings them back into memory before calling undo() or redo().
+   */
+  retainedTiles?(): Iterable<Tile>;
 }
 
 /**

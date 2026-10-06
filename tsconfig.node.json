@@ -2,10 +2,10 @@
   // Tooling config files, scripts and tests (run under Node / Playwright).
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "jsx": "react-jsx",
     "types": ["node", "vite/client"],
     "allowImportingTsExtensions": true
   },
-  "include": ["*.ts", "scripts/**/*.ts", "tests/**/*.ts", "tests/**/*.tsx"]
+  "include": ["*.ts", "scripts/**/*.ts", "tests/**/*.ts", "tests/**/*.tsx", "src/**/*.d.ts"]
 }

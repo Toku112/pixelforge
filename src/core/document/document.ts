@@ -17,7 +17,7 @@ import {
   type PixelLayerProps,
 } from './layers';
 import { colorChannelCount, maxSampleValue, type BitDepth, type ColorMode, type PixelFormat } from './pixel-format';
-import { TILE_SIZE, heapTileMemory, type TileMemory } from './tile';
+import { TILE_SIZE, TileNotResidentError, heapTileMemory, type TileMemory } from './tile';
 import { TiledBuffer } from './tiled-buffer';
 
 export type DocumentChange =
@@ -58,6 +58,15 @@ export interface DocumentInit {
 export const MAX_DOCUMENT_SIDE = 300_000;
 
 let nextDocumentNumber = 1;
+
+/** Layers entering a document must have all their pixels in memory. */
+function assertResident(layer: LayerNode): void {
+  if (layer.kind === 'group') {
+    layer.children.forEach(assertResident);
+    return;
+  }
+  for (const [, , tile] of layer.buffer.tiles()) if (!tile.resident) throw new TileNotResidentError(tile.id);
+}
 
 function checkCanvasSize(width: number, height: number): void {
   for (const [label, side] of [
@@ -235,6 +244,7 @@ export class ImageDocument {
       throw new Error(`Layer ${layer.id} pixel format does not match the document`);
     }
 
+    assertResident(layer);
     parent.children.splice(at, 0, layer);
     layer.parent = parent;
     this.#register(layer);
@@ -331,6 +341,7 @@ export class ImageDocument {
   #register(layer: LayerNode): void {
     this.#layersById.set(layer.id, layer);
     if (layer.kind === 'pixel') {
+      layer.buffer.attach();
       const unsubscribe = layer.buffer.onTileChange((tx, ty) => {
         const rect = {
           x: tx * TILE_SIZE + layer.offsetX,
@@ -351,6 +362,7 @@ export class ImageDocument {
 
   #unregister(layer: LayerNode): void {
     this.#layersById.delete(layer.id);
+    if (layer.kind === 'pixel') layer.buffer.detach();
     this.#unsubscribe.get(layer.id)?.();
     this.#unsubscribe.delete(layer.id);
     if (layer.kind === 'group') for (const child of layer.children) this.#unregister(child);

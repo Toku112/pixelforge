@@ -11,6 +11,7 @@ import {
   copySamples,
   createSampleArray,
   samplesPerPixel,
+  type BitDepth,
   type PixelFormat,
   type SampleArray,
 } from './pixel-format';
@@ -26,22 +27,62 @@ export const TILE_PIXELS = TILE_SIZE * TILE_SIZE;
 export interface TileMemory {
   /** Must return zero-filled memory of exactly `byteLength` bytes. */
   allocate(byteLength: number): ArrayBuffer | SharedArrayBuffer;
+  /** Called for every new tile, so a memory manager can account for it and later evict it. */
+  track?(tile: Tile): void;
 }
 
 export const heapTileMemory: TileMemory = {
   allocate: (byteLength) => new ArrayBuffer(byteLength),
 };
 
+/**
+ * Makes tiles whose pixel memory was moved to disk (by the engine's tile store)
+ * resident again. The default implementation does nothing: without a store,
+ * every tile is always resident.
+ */
+export interface TileResidency {
+  ensureResident(tiles: Iterable<Tile>): Promise<void>;
+}
+
+export const alwaysResident: TileResidency = {
+  ensureResident: () => Promise.resolve(),
+};
+
+export class TileNotResidentError extends Error {
+  override readonly name = 'TileNotResidentError';
+  constructor(id: number) {
+    super(`Tile ${id} is not in memory; call ensureResident() first`);
+  }
+}
+
 let nextTileId = 1;
 
 export class Tile {
   /** Unique id, useful for caches keyed by tile identity (e.g. GPU textures). */
   readonly id = nextTileId++;
-  readonly data: SampleArray;
+  readonly depth: BitDepth;
+  /** Number of samples. */
+  readonly length: number;
+  readonly byteLength: number;
+  #data: SampleArray | null;
   #frozen = false;
+  #attachedRefs = 0;
 
   constructor(data: SampleArray) {
-    this.data = data;
+    this.#data = data;
+    this.length = data.length;
+    this.byteLength = data.byteLength;
+    this.depth = data instanceof Uint8Array ? 8 : data instanceof Uint16Array ? 16 : 32;
+  }
+
+  /** The pixel samples. Throws `TileNotResidentError` if the memory was moved to disk. */
+  get data(): SampleArray {
+    if (!this.#data) throw new TileNotResidentError(this.id);
+    return this.#data;
+  }
+
+  get resident(): boolean {
+    return this.#data !== null;
   }
 
   /** True once the tile may be referenced elsewhere; frozen tiles must not be written. */
@@ -52,6 +93,34 @@ export class Tile {
   freeze(): this {
     this.#frozen = true;
     return this;
+  }
+
+  /** How many buffers of open documents currently hold this tile. */
+  get attachedRefs(): number {
+    return this.#attachedRefs;
+  }
+
+  /** Bookkeeping for TiledBuffer. */
+  adjustAttachedRefs(delta: 1 | -1): void {
+    this.#attachedRefs += delta;
+    if (this.#attachedRefs < 0) throw new Error(`Tile ${this.id}: attached reference count below zero`);
+  }
+
+  /**
+   * Drops the pixel memory after the tile store saved it elsewhere. Only frozen tiles
+   * that no open document holds may be released.
+   */
+  release(): void {
+    if (!this.#frozen || this.#attachedRefs > 0) throw new Error(`Tile ${this.id} is in use and cannot be released`);
+    this.#data = null;
+  }
+
+  /** Gives a released tile its pixel memory back (filled by the caller). */
+  restore(buffer: ArrayBuffer | SharedArrayBuffer): SampleArray {
+    if (this.#data) throw new Error(`Tile ${this.id} is already resident`);
+    if (buffer.byteLength !== this.byteLength) throw new Error(`Tile ${this.id}: restore size mismatch`);
+    this.#data = createSampleArray(this.depth, this.length, buffer);
+    return this.#data;
   }
 }
 
@@ -64,14 +133,18 @@ export function allocateTile(format: PixelFormat, memory: TileMemory, pixel: Arr
   const spp = samplesPerPixel(format);
   const data = createSampleArray(format.depth, TILE_PIXELS * spp, memory.allocate(tileByteLength(format)));
   if (!isZeroPixel(pixel)) fillPixels(data, pixel, spp); // fresh memory is already zero
-  return new Tile(data);
+  const tile = new Tile(data);
+  memory.track?.(tile);
+  return tile;
 }
 
 /** Allocates a writable copy of `source`. */
 export function copyTile(source: Tile, format: PixelFormat, memory: TileMemory): Tile {
   const data = createSampleArray(format.depth, source.data.length, memory.allocate(tileByteLength(format)));
   copySamples(data, source.data);
-  return new Tile(data);
+  const tile = new Tile(data);
+  memory.track?.(tile);
+  return tile;
 }
 
 /** Fills `data` (a whole number of pixels) with a repeating pixel of `spp` samples. */

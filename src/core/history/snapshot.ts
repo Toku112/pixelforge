@@ -5,6 +5,7 @@
  */
 import type { CanvasProps, ImageDocument } from '../document/document';
 import { GroupLayer, PixelLayer, type LayerNode } from '../document/layers';
+import type { Tile } from '../document/tile';
 
 export interface DocumentState {
   readonly canvas: CanvasProps;
@@ -57,4 +58,13 @@ export function restoreDocumentState(doc: ImageDocument, state: DocumentState): 
   doc.setCanvasProps(state.canvas);
   for (const layer of state.layers) doc.insertLayer(detach(cloneLayer(layer)));
   doc.setActiveLayer(state.activeLayerId !== null && doc.getLayer(state.activeLayerId) ? state.activeLayerId : null);
+}
+
+/** Every tile a snapshot holds (for residency management). */
+export function* stateTiles(state: DocumentState): IterableIterator<Tile> {
+  const visit = function* (layer: LayerNode): IterableIterator<Tile> {
+    if (layer.kind === 'pixel') for (const [, , tile] of layer.buffer.tiles()) yield tile;
+    else for (const child of layer.children) yield* visit(child);
+  };
+  for (const layer of state.layers) yield* visit(layer);
 }

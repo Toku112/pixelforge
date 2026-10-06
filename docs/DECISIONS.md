@@ -129,3 +129,16 @@ share frozen tiles); before doing so the current state is saved as an anchor, so
 stops at the oldest kept command, as in the reference app. Commands refer to layers by id (never by object), so
 they stay valid after a snapshot restore. All history operations are queued, so an undo pressed while an
 asynchronous command runs waits for it.
+
+## D-015 — 2026-10-07 — Tile store: what may be evicted to the scratch disk
+
+**Context:** CLAUDE.md §3.3 asks for a memory budget with OPFS eviction. If any tile could be evicted, every pixel
+access in the app (rendering, painting, eyedropper, export) would have to become asynchronous.
+**Decision:** Tiles track how many buffers of open documents hold them (`attachedRefs`). Only frozen tiles that no
+open document holds — undo data and history snapshots — are evicted, oldest first, to the OPFS scratch disk (one
+file per tile size, fixed slots, per-tab session folders guarded by Web Locks, stale folders deleted at start-up). The
+history calls `ensureResident` before undo/redo/snapshot restores. Tile memory is SharedArrayBuffer when the page is
+cross-origin isolated. Default budget: 60 % of `navigator.deviceMemory` (4 GB assumed when the browser does not
+report it).
+**Consequences:** All live-document access stays synchronous and fast. Documents whose live tiles exceed memory are
+not yet handled (KNOWN_GAPS; PLAN B25). Without OPFS (private windows), nothing is evicted.

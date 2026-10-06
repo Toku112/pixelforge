@@ -14,7 +14,8 @@
 import type { Command } from '../commands/command';
 import { Emitter } from '../document/events';
 import type { ImageDocument } from '../document/document';
-import { captureDocumentState, restoreDocumentState, type DocumentState } from './snapshot';
+import { alwaysResident, type TileResidency } from '../document/tile';
+import { captureDocumentState, restoreDocumentState, stateTiles, type DocumentState } from './snapshot';
 
 export const DEFAULT_HISTORY_STATES = 50;
 
@@ -38,11 +39,14 @@ export interface HistoryOptions {
   maxStates?: number;
   /** Label of the initial entry, e.g. "Open". */
   initialLabel?: string;
+  /** Brings tiles moved to disk back into memory before undo/redo (default: none are ever moved). */
+  residency?: TileResidency;
 }
 
 export class History {
   readonly doc: ImageDocument;
   readonly changes = new Emitter<void>();
+  readonly #residency: TileResidency;
   #maxStates: number;
   readonly #entries: Entry[];
   #current = 0;
@@ -60,6 +64,7 @@ export class History {
 
   constructor(doc: ImageDocument, options: HistoryOptions = {}) {
     this.doc = doc;
+    this.#residency = options.residency ?? alwaysResident;
     this.#maxStates = Math.max(1, options.maxStates ?? DEFAULT_HISTORY_STATES);
     this.#entries = [{ id: this.#nextId++, label: options.initialLabel ?? 'Open', command: null }];
     this.#initialState = captureDocumentState(doc);
@@ -126,37 +131,37 @@ export class History {
   }
 
   undo(): Promise<void> {
-    return this.#enqueue(() => {
-      if (this.canUndo) this.#moveTo(this.#current - 1);
+    return this.#enqueue(async () => {
+      if (this.canUndo) await this.#moveTo(this.#current - 1);
     });
   }
 
   redo(): Promise<void> {
-    return this.#enqueue(() => {
-      if (this.canRedo) this.#moveTo(this.#current + 1);
+    return this.#enqueue(async () => {
+      if (this.canRedo) await this.#moveTo(this.#current + 1);
     });
   }
 
   /** Jumps to an entry (clicking a state in the History panel). */
   goTo(index: number): Promise<void> {
-    return this.#enqueue(() => {
+    return this.#enqueue(async () => {
       if (!Number.isInteger(index) || index < 0 || index >= this.#entries.length) {
         throw new Error(`No history entry at index ${index}`);
       }
-      this.#moveTo(index);
+      await this.#moveTo(index);
     });
   }
 
   /** Edit > Toggle Last State: switches between the current state and the previous one. */
   toggleLastState(): Promise<void> {
-    return this.#enqueue(() => {
+    return this.#enqueue(async () => {
       if (this.#toggleTarget !== null && this.#toggleTarget < this.#entries.length) {
         const back = this.#current;
-        this.#moveTo(this.#toggleTarget);
+        await this.#moveTo(this.#toggleTarget);
         this.#toggleTarget = back;
       } else if (this.canUndo) {
         const back = this.#current;
-        this.#moveTo(this.#current - 1);
+        await this.#moveTo(this.#current - 1);
         this.#toggleTarget = back;
       }
     });
@@ -168,26 +173,32 @@ export class History {
     return this.#purged ? 1 : 0;
   }
 
-  #moveTo(target: number): void {
+  async #moveTo(target: number): Promise<void> {
     if (target === this.#current) return;
     if (this.#purged && target === 0) {
       this.#anchor ??= { index: this.#current, state: captureDocumentState(this.doc) };
+      await this.#residency.ensureResident(stateTiles(this.#initialState));
       restoreDocumentState(this.doc, this.#initialState);
       this.#current = 0;
       return;
     }
     if (this.#purged && this.#current === 0) {
       if (!this.#anchor) throw new Error('History anchor missing');
+      await this.#residency.ensureResident(stateTiles(this.#anchor.state));
       restoreDocumentState(this.doc, this.#anchor.state);
       this.#current = this.#anchor.index;
     }
     while (this.#current > target) {
-      this.#entries[this.#current]!.command!.undo();
+      const command = this.#entries[this.#current]!.command!;
+      await this.#residency.ensureResident(command.retainedTiles?.() ?? []);
+      command.undo();
       this.#current--;
     }
     while (this.#current < target) {
+      const command = this.#entries[this.#current + 1]!.command!;
+      await this.#residency.ensureResident(command.retainedTiles?.() ?? []);
+      command.redo();
       this.#current++;
-      this.#entries[this.#current]!.command!.redo();
     }
   }
 

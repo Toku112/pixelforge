@@ -19,6 +19,7 @@ import {
   tileCoordsFromKey,
   tileIndex,
   tileKey,
+  TileNotResidentError,
   type Tile,
   type TileMemory,
 } from './tile';
@@ -40,6 +41,8 @@ export class TiledBuffer {
   readonly #tiles = new Map<number, Tile>();
   readonly #listeners = new Set<TileChangeListener>();
   #defaultRow: SampleArray | undefined;
+  /** True while the buffer belongs to a layer of an open document (see Tile.attachedRefs). */
+  #attached = false;
 
   constructor(format: PixelFormat, options: TiledBufferOptions = {}) {
     this.format = format;
@@ -67,10 +70,10 @@ export class TiledBuffer {
     let tile = this.#tiles.get(key);
     if (!tile) {
       tile = allocateTile(this.format, this.memory, this.defaultPixel);
-      this.#tiles.set(key, tile);
+      this.#put(key, tile);
     } else if (tile.frozen) {
       tile = copyTile(tile, this.format, this.memory);
-      this.#tiles.set(key, tile);
+      this.#put(key, tile);
     }
     this.#notify(tx, ty);
     return tile;
@@ -88,10 +91,13 @@ export class TiledBuffer {
   setTile(tx: number, ty: number, tile: Tile | undefined): void {
     const key = tileKey(tx, ty);
     if (tile) {
-      if (tile.data.length !== TILE_SIZE * TILE_SIZE * this.spp) throw new Error('setTile: tile format mismatch');
-      this.#tiles.set(key, tile.freeze());
+      if (tile.length !== TILE_SIZE * TILE_SIZE * this.spp || tile.depth !== this.format.depth) {
+        throw new Error('setTile: tile format mismatch');
+      }
+      if (this.#attached && !tile.resident) throw new TileNotResidentError(tile.id);
+      this.#put(key, tile.freeze());
     } else {
-      this.#tiles.delete(key);
+      this.#put(key, undefined);
     }
     this.#notify(tx, ty);
   }
@@ -161,9 +167,41 @@ export class TiledBuffer {
     return copy;
   }
 
+  get attached(): boolean {
+    return this.#attached;
+  }
+
+  /**
+   * Marks the buffer as part of an open document. Its tiles then count as in use
+   * and are never moved out of memory. Every tile must be resident.
+   */
+  attach(): void {
+    if (this.#attached) return;
+    for (const tile of this.#tiles.values()) if (!tile.resident) throw new TileNotResidentError(tile.id);
+    this.#attached = true;
+    for (const tile of this.#tiles.values()) tile.adjustAttachedRefs(1);
+  }
+
+  detach(): void {
+    if (!this.#attached) return;
+    this.#attached = false;
+    for (const tile of this.#tiles.values()) tile.adjustAttachedRefs(-1);
+  }
+
   onTileChange(listener: TileChangeListener): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  #put(key: number, tile: Tile | undefined): void {
+    const old = this.#tiles.get(key);
+    if (old === tile) return;
+    if (this.#attached) {
+      old?.adjustAttachedRefs(-1);
+      tile?.adjustAttachedRefs(1);
+    }
+    if (tile) this.#tiles.set(key, tile);
+    else this.#tiles.delete(key);
   }
 
   #notify(tx: number, ty: number): void {

@@ -163,3 +163,28 @@ describe('ImageDocument', () => {
     expect(new Set(LAYER_BLEND_MODES).size).toBe(27);
   });
 });
+
+describe('ImageDocument tile attachment', () => {
+  it('attaches layer buffers on insert and detaches them on remove', () => {
+    const doc = new ImageDocument({ width: 10, height: 10 });
+    const layer = doc.createPixelLayer();
+    const tile = layer.buffer.writableTile(0, 0);
+    doc.insertLayer(layer);
+    expect(layer.buffer.attached).toBe(true);
+    expect(tile.attachedRefs).toBe(1);
+    doc.removeLayer(layer.id);
+    expect(layer.buffer.attached).toBe(false);
+    expect(tile.attachedRefs).toBe(0);
+  });
+
+  it('refuses layers whose pixels are not in memory, without changing the tree', () => {
+    const doc = new ImageDocument({ width: 10, height: 10 });
+    const layer = doc.createPixelLayer();
+    const tile = layer.buffer.writableTile(0, 0);
+    layer.buffer.captureTile(0, 0);
+    tile.release();
+    expect(() => doc.insertLayer(layer)).toThrow('not in memory');
+    expect(doc.layerCount).toBe(0);
+    expect(doc.root.children).toHaveLength(0);
+  });
+});
