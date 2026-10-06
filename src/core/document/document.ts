@@ -31,6 +31,16 @@ export type DocumentChange =
   | { kind: 'canvas' }
   | { kind: 'active-layer'; layerId: string | null };
 
+/** Canvas-level properties (changed by Image Size, Canvas Size, Mode conversions…). */
+export interface CanvasProps {
+  width: number;
+  height: number;
+  resolution: number;
+  mode: ColorMode;
+  depth: BitDepth;
+  multichannelCount: number;
+}
+
 export interface DocumentInit {
   width: number;
   height: number;
@@ -48,6 +58,17 @@ export interface DocumentInit {
 export const MAX_DOCUMENT_SIDE = 300_000;
 
 let nextDocumentNumber = 1;
+
+function checkCanvasSize(width: number, height: number): void {
+  for (const [label, side] of [
+    ['width', width],
+    ['height', height],
+  ] as const) {
+    if (!Number.isInteger(side) || side < 1 || side > MAX_DOCUMENT_SIDE) {
+      throw new Error(`Document ${label} must be an integer from 1 to ${MAX_DOCUMENT_SIDE}, got ${side}`);
+    }
+  }
+}
 
 export class ImageDocument {
   /** Session-unique identifier. */
@@ -71,14 +92,7 @@ export class ImageDocument {
   readonly #unsubscribe = new Map<string, () => void>();
 
   constructor(init: DocumentInit) {
-    for (const [label, side] of [
-      ['width', init.width],
-      ['height', init.height],
-    ] as const) {
-      if (!Number.isInteger(side) || side < 1 || side > MAX_DOCUMENT_SIDE) {
-        throw new Error(`Document ${label} must be an integer from 1 to ${MAX_DOCUMENT_SIDE}, got ${side}`);
-      }
-    }
+    checkCanvasSize(init.width, init.height);
     this.name = init.name ?? 'Untitled';
     this.width = init.width;
     this.height = init.height;
@@ -88,6 +102,11 @@ export class ImageDocument {
     this.multichannelCount = init.multichannelCount ?? 1;
     this.memory = init.memory ?? heapTileMemory;
     this.root = new GroupLayer('root', '');
+  }
+
+  canvasProps(): CanvasProps {
+    const { width, height, resolution, mode, depth, multichannelCount } = this;
+    return { width, height, resolution, mode, depth, multichannelCount };
   }
 
   get canvasRect(): Rect {
@@ -264,6 +283,29 @@ export class ImageDocument {
     Object.assign(layer, props);
     this.changes.emit({ kind: 'layer', layerId: id, props: Object.keys(props) });
     return previous as P;
+  }
+
+  /**
+   * Changes canvas properties and returns their previous values (for undo). Colour
+   * mode and bit depth can only change while the document has no layers: mode
+   * conversions replace every layer with a converted one.
+   */
+  setCanvasProps(props: Partial<CanvasProps>): Partial<CanvasProps> {
+    const formatChange =
+      (props.mode !== undefined && props.mode !== this.mode) ||
+      (props.depth !== undefined && props.depth !== this.depth) ||
+      (props.multichannelCount !== undefined && props.multichannelCount !== this.multichannelCount);
+    if (formatChange && this.layerCount > 0)
+      throw new Error('Remove all layers before changing colour mode or bit depth');
+    checkCanvasSize(props.width ?? this.width, props.height ?? this.height);
+    if (props.resolution !== undefined && !(props.resolution > 0)) throw new Error('Resolution must be positive');
+    const previous: Partial<CanvasProps> = {};
+    for (const key of Object.keys(props) as (keyof CanvasProps)[]) {
+      (previous as Record<string, unknown>)[key] = this[key];
+    }
+    Object.assign(this, props);
+    this.changes.emit({ kind: 'canvas' });
+    return previous;
   }
 
   setActiveLayer(id: string | null): void {

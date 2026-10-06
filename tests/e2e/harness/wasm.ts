@@ -1,5 +1,6 @@
 // Test-only page (served by the dev server) exposing the pixel worker to Playwright.
 import { createPixelWorker } from '../../../src/workers/pixel-client';
+import { createWorkerPixelOps } from '../../../src/workers/pixel-ops-client';
 import { transfer } from '../../../src/workers/rpc';
 
 const workers = { mt: createPixelWorker(), st: createPixelWorker({ threads: false }) };
@@ -21,6 +22,15 @@ const harness = {
       if (out[i] !== expected) mismatches++;
     }
     return { ms, mismatches, length: out.length };
+  },
+
+  /** Runs PixelOps.invert on one heap-backed and one shared-memory tile; returns their first pixels. */
+  async pixelOpsInvert() {
+    const pixelOps = createWorkerPixelOps(workers.mt);
+    const heap = new Uint8Array(256 * 256 * 4).fill(10);
+    const shared = new Uint8Array(new SharedArrayBuffer(256 * 256 * 4)).fill(20);
+    await pixelOps.invert([heap, shared], { depth: 8, colorChannels: 3, hasAlpha: true });
+    return { heap: [...heap.subarray(0, 4)], shared: [...shared.subarray(0, 4)], heapLength: heap.length };
   },
 };
 

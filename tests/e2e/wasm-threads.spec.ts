@@ -32,3 +32,10 @@ test('pixel worker falls back to the single-threaded SIMD build', async ({ page 
   const result = await page.evaluate(() => window.__harness!.invertPattern(1000 * 1000, 'st'));
   expect(result.mismatches).toBe(0);
 });
+
+test('worker PixelOps writes results into heap and shared-memory tiles', async ({ page }) => {
+  await page.goto('/tests/e2e/harness/wasm.html');
+  await page.waitForFunction(() => window.__harness !== undefined);
+  const result = await page.evaluate(() => window.__harness!.pixelOpsInvert());
+  expect(result).toEqual({ heap: [245, 245, 245, 10], shared: [235, 235, 235, 20], heapLength: 256 * 256 * 4 });
+});

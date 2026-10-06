@@ -41,3 +41,24 @@ describe('pixel-ops WebAssembly (single-threaded build)', () => {
     expect(() => ops.invertU8(new Uint8Array(5), 4, true)).toThrow('not a multiple of the channel count');
   });
 });
+
+describe('pixel-ops WebAssembly matches the reference implementation', () => {
+  it.each([
+    [8, 4, true],
+    [8, 3, false],
+    [8, 2, true],
+    [16, 4, true],
+    [16, 5, true],
+  ] as const)('%i-bit, %i channels, alpha=%s', async (depth, channels, hasAlpha) => {
+    const { referencePixelOps } = await import('../core/helpers');
+    const n = 256 * 256 * channels;
+    const max = depth === 8 ? 256 : 65536;
+    const a = depth === 8 ? new Uint8Array(n) : new Uint16Array(n);
+    for (let i = 0; i < n; i++) a[i] = (i * 2654435761) % max;
+    const b = a.slice();
+    if (a instanceof Uint8Array) ops.invertU8(a, channels, hasAlpha);
+    else ops.invertU16(a, channels, hasAlpha);
+    await referencePixelOps.invert([b], { depth, colorChannels: hasAlpha ? channels - 1 : channels, hasAlpha });
+    expect(a).toEqual(b);
+  });
+});

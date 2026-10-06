@@ -556,7 +556,7 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] CI (GitHub Actions): typecheck, lint, unit, golden, e2e, wasm build
   ↳ partial: `.github/workflows/ci.yml` written and every step verified locally with `CI=true`; it has not run on GitHub yet because the repo has no remote. Tick after the first green run on GitHub.
 - [x] `core/document`: Document, LayerNode tree, PixelLayer with tiled buffer (8/16/32-bit), Background layer semantics
-- [ ] `core/commands` + `core/history`: Command interface, descriptors, undo/redo stack with tile-diff storage, history labels
+- [x] `core/commands` + `core/history`: Command interface, descriptors, undo/redo stack with tile-diff storage, history labels
 - [ ] `engine/tiles`: tile store, dirty-rect tracking, memory budget, OPFS eviction
 - [ ] `engine/gl`: WebGL2 context, tile textures, compositor with Normal blend + opacity, transparency checkerboard, mip pyramid
 - [ ] Viewport: pan, zoom (0.1%–12800%), rotate view, pixel grid at high zoom, HiDPI

@@ -32,13 +32,18 @@ with SIMD (`simd128`) and threads. A single-threaded SIMD build is used as a fal
 cross-origin isolated. Approved by the owner on 2026-10-06.
 **Consequences:** Updating the nightly is a deliberate, tested change (update the pin, rebuild, run all tests).
 
-## D-004 — 2026-10-06 — Real commands as the Phase 0 "test command"
+## D-004 — 2026-10-06 — Invert as the Phase 0 "test command" (revised 2026-10-07)
 
 **Context:** Phase 0 exit criteria require undo/redo of a test command. CLAUDE.md forbids placeholder features.
-**Decision:** Use real commands: Image > Adjustments > Invert (Ctrl/Cmd+I) on the active pixel layer (exercises tile-diff
-undo and the WASM worker path), and Image > Image Rotation > Flip Canvas Horizontal/Vertical.
-**Consequences:** These menu items are visible and work in Phase 0, but their PLAN Part B items stay unticked until they
-meet the full Definition of Done (adjustment-layer variant, selections, all colour modes).
+**Decision:** Use a real command: Image > Adjustments > Invert (Ctrl/Cmd+I) on the active pixel layer. It exercises
+tile-diff undo, the command registry and the multi-threaded WASM worker path. (The original plan also listed Flip
+Canvas Horizontal/Vertical; those move to Phase 1 with the other Image Rotation commands, since flipping layers with
+offsets and a canvas-aligned Background needs the general resampling path built there.)
+**Behaviour notes:** Invert is greyed out in 32-bit documents: the reference app's list of adjustments supported for
+32-bit images (Levels, Exposure, Hue/Saturation, Channel Mixer, Photo Filter) does not include it. Lab, Indexed,
+Bitmap, Duotone and Multichannel behaviour is not yet verified and stays disabled until Phase 4.
+**Consequences:** The menu item is visible and works in Phase 0, but its PLAN Part B item stays unticked until the full
+Definition of Done (adjustment-layer variant, selections, all colour modes).
 
 ## D-005 — 2026-10-06 — Own docking-panel framework
 
@@ -113,3 +118,14 @@ bundling can behave differently from the dev server.
 - Integer per-layer offsets, so whole-pixel moves don't rewrite tiles.
 - CMYK samples are ink amounts (0 = no ink); PSD's inverted storage is converted on I/O.
 - The class is named `ImageDocument` to avoid shadowing the DOM's global `Document` type in UI code.
+
+## D-014 — 2026-10-07 — History model: command undo + snapshot for the initial state
+
+**Context:** History must be command-based with tile-diff undo (CLAUDE.md §3.2), but when the state limit drops the
+oldest commands, the reference app still lets the user return to the opened state and back.
+**Decision:** Entries are [initial snapshot, command 1 … n]. Moving between entries undoes/redoes commands. After the
+oldest commands are dropped, jumping to the initial entry restores a captured document state (cheap: layer buffers
+share frozen tiles); before doing so the current state is saved as an anchor, so later entries stay reachable. Undo
+stops at the oldest kept command, as in the reference app. Commands refer to layers by id (never by object), so
+they stay valid after a snapshot restore. All history operations are queued, so an undo pressed while an
+asynchronous command runs waits for it.
