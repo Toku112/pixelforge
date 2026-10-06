@@ -98,3 +98,18 @@ bundling can behave differently from the dev server.
 **Decision:** Test-only pages live in `tests/e2e/harness/` (served by the dev server; added to a build only with
 `PF_E2E_BUILD=1`). `pnpm test:e2e:preview` runs the whole E2E suite against a production build;
 `pnpm test:e2e:all` adds Firefox and WebKit.
+
+## D-013 — 2026-10-06 — Document model storage choices
+
+**Context:** The tiled document model (PLAN Phase 0) fixes formats every later feature builds on.
+**Decision:**
+
+- Interleaved samples per tile (colour channels, then alpha) rather than planar channels: simpler compositing and GPU
+  upload. Layer masks and alpha channels will be separate single-channel buffers.
+- Straight (non-premultiplied) alpha in storage, as in PSD; premultiplication happens only inside the compositor.
+- Copy-on-write via a one-way "frozen" flag instead of reference counting: a frozen tile is never written again, which
+  is simple and always safe; at worst a tile is copied once more than strictly necessary.
+- Unallocated tiles read as a per-buffer default pixel, so a new white Background costs no memory until painted.
+- Integer per-layer offsets, so whole-pixel moves don't rewrite tiles.
+- CMYK samples are ink amounts (0 = no ink); PSD's inverted storage is converted on I/O.
+- The class is named `ImageDocument` to avoid shadowing the DOM's global `Document` type in UI code.

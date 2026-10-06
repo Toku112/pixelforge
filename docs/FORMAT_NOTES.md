@@ -22,6 +22,29 @@ The reference app's 16-bit mode uses the range 0–32768 (so that 50% grey is ex
 
 Both mappings are monotonic and keep 0 and full scale exact.
 
+### 1.2 Channel layout and encodings
+
+- Samples are interleaved per pixel: colour channels in mode order, then alpha (if the buffer has transparency).
+  Alpha is straight (not premultiplied). Background layers have no alpha channel.
+- **RGB / Grayscale / Duotone / Bitmap:** 0 = black, max = white. Bitmap documents are stored as 8-bit 0/255.
+- **CMYK:** samples are **ink amounts**, 0 = no ink, max = 100 % ink (PSD stores the inverse; converted on I/O).
+- **Lab:** L\* scaled 0–100 → 0–max; a\* and b\* offset so that 0 maps to mid-scale (128 in 8-bit, 32768 in 16-bit).
+  32-bit Lab is not supported (as in the reference app).
+- **Indexed:** one channel of palette indices plus the colour table.
+
+### 1.3 Tiles
+
+Layer pixels live in 256 × 256 tiles (`src/core/document/tile.ts`). Tiles are allocated on first write; an unallocated
+tile reads as the buffer's default pixel (transparent, or the background colour for a Background layer). Tiles are
+copy-on-write: a tile captured for undo or shared with another buffer is frozen and replaced by a private copy before
+the next write, so undo data is only the tiles that changed.
+
+### 1.4 Layer order and position
+
+Group children are stored bottom → top (index 0 = bottom), as in PSD files. Each pixel layer has an integer offset
+(`offsetX/offsetY`) applied to its tile grid, so moving a layer by whole pixels does not rewrite its tiles; layers may
+hold pixels outside the canvas.
+
 ## 2. Colour measurement
 
 ### 2.1 sRGB transfer function

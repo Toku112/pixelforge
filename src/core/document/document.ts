@@ -1,0 +1,316 @@
+/**
+ * The document model: canvas properties plus the layer tree.
+ *
+ * The mutation methods here are low-level primitives for Commands (CLAUDE.md §3.2):
+ * UI code must change documents only by executing commands, so that every change
+ * is undoable, recordable and journaled. Every primitive emits a change event that
+ * the renderer and panels use to update.
+ */
+import { Emitter } from './events';
+import { isEmptyRect, type Rect } from './geometry';
+import {
+  GroupLayer,
+  PixelLayer,
+  layerCapabilities,
+  type GroupLayerProps,
+  type LayerNode,
+  type PixelLayerProps,
+} from './layers';
+import { colorChannelCount, maxSampleValue, type BitDepth, type ColorMode, type PixelFormat } from './pixel-format';
+import { TILE_SIZE, heapTileMemory, type TileMemory } from './tile';
+import { TiledBuffer } from './tiled-buffer';
+
+export type DocumentChange =
+  /** Pixels of a layer changed inside `rect` (document coordinates, tile-aligned). */
+  | { kind: 'pixels'; layerId: string; rect: Rect }
+  /** A layer property (visibility, opacity, blend mode, name, offset, locks…) changed. */
+  | { kind: 'layer'; layerId: string; props: readonly string[] }
+  /** Layers were inserted, removed or reordered. */
+  | { kind: 'structure' }
+  /** Canvas size, resolution, colour mode or bit depth changed. */
+  | { kind: 'canvas' }
+  | { kind: 'active-layer'; layerId: string | null };
+
+export interface DocumentInit {
+  width: number;
+  height: number;
+  name?: string;
+  mode?: ColorMode;
+  depth?: BitDepth;
+  /** Pixels per inch. */
+  resolution?: number;
+  /** Channel count for multichannel mode. */
+  multichannelCount?: number;
+  memory?: TileMemory;
+}
+
+/** Largest supported canvas side, in pixels (the PSB format's limit). */
+export const MAX_DOCUMENT_SIDE = 300_000;
+
+let nextDocumentNumber = 1;
+
+export class ImageDocument {
+  /** Session-unique identifier. */
+  readonly id = `doc-${nextDocumentNumber++}`;
+  name: string;
+  width: number;
+  height: number;
+  resolution: number;
+  mode: ColorMode;
+  depth: BitDepth;
+  multichannelCount: number;
+  readonly memory: TileMemory;
+  /** Invisible container of the top-level layers. */
+  readonly root: GroupLayer;
+  readonly changes = new Emitter<DocumentChange>();
+
+  #activeLayerId: string | null = null;
+  #nextLayerId = 1;
+  #nextLayerNumber = 1;
+  readonly #layersById = new Map<string, LayerNode>();
+  readonly #unsubscribe = new Map<string, () => void>();
+
+  constructor(init: DocumentInit) {
+    for (const [label, side] of [
+      ['width', init.width],
+      ['height', init.height],
+    ] as const) {
+      if (!Number.isInteger(side) || side < 1 || side > MAX_DOCUMENT_SIDE) {
+        throw new Error(`Document ${label} must be an integer from 1 to ${MAX_DOCUMENT_SIDE}, got ${side}`);
+      }
+    }
+    this.name = init.name ?? 'Untitled';
+    this.width = init.width;
+    this.height = init.height;
+    this.resolution = init.resolution ?? 72;
+    this.mode = init.mode ?? 'rgb';
+    this.depth = init.depth ?? 8;
+    this.multichannelCount = init.multichannelCount ?? 1;
+    this.memory = init.memory ?? heapTileMemory;
+    this.root = new GroupLayer('root', '');
+  }
+
+  get canvasRect(): Rect {
+    return { x: 0, y: 0, w: this.width, h: this.height };
+  }
+
+  get colorChannels(): number {
+    return colorChannelCount(this.mode, this.multichannelCount);
+  }
+
+  /** Pixel format of layers in this document (Background layers have no alpha). */
+  layerFormat(hasAlpha = true): PixelFormat {
+    return { depth: this.depth, colorChannels: this.colorChannels, hasAlpha };
+  }
+
+  /**
+   * White in this document's colour mode, as interleaved samples (without alpha).
+   * Encodings (docs/FORMAT_NOTES.md §1.2): CMYK samples are ink amounts (0 = no ink);
+   * the Lab a and b channels are stored offset so that neutral is mid-scale (128 / 32768).
+   */
+  whitePixel(): number[] {
+    const max = maxSampleValue(this.depth);
+    switch (this.mode) {
+      case 'cmyk':
+        return [0, 0, 0, 0];
+      case 'lab': {
+        const neutral = this.depth === 8 ? 128 : 32768;
+        return [max, neutral, neutral];
+      }
+      case 'indexed':
+        throw new Error('White depends on the colour table in Indexed Color mode');
+      default:
+        return new Array<number>(this.colorChannels).fill(max);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Layer creation (not yet inserted)
+  // ---------------------------------------------------------------------------
+
+  newLayerId(): string {
+    return `L${this.#nextLayerId++}`;
+  }
+
+  /** Default name for the next new layer: "Layer 1", "Layer 2", … */
+  nextLayerName(): string {
+    return `Layer ${this.#nextLayerNumber++}`;
+  }
+
+  createPixelLayer(name = this.nextLayerName()): PixelLayer {
+    const buffer = new TiledBuffer(this.layerFormat(true), { memory: this.memory });
+    return new PixelLayer(this.newLayerId(), name, buffer);
+  }
+
+  /** A Background layer filled with `color` (colour samples, no alpha; default white). */
+  createBackgroundLayer(color: ArrayLike<number> = this.whitePixel()): PixelLayer {
+    const buffer = new TiledBuffer(this.layerFormat(false), { memory: this.memory, defaultPixel: color });
+    return new PixelLayer(this.newLayerId(), 'Background', buffer, true);
+  }
+
+  createGroup(name = 'Group'): GroupLayer {
+    return new GroupLayer(this.newLayerId(), name);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Queries
+  // ---------------------------------------------------------------------------
+
+  getLayer(id: string): LayerNode | undefined {
+    return this.#layersById.get(id);
+  }
+
+  requireLayer(id: string): LayerNode {
+    const layer = this.#layersById.get(id);
+    if (!layer) throw new Error(`No layer with id ${id}`);
+    return layer;
+  }
+
+  requirePixelLayer(id: string): PixelLayer {
+    const layer = this.requireLayer(id);
+    if (layer.kind !== 'pixel') throw new Error(`Layer ${id} is not a pixel layer`);
+    return layer;
+  }
+
+  /** All layers, depth first; each group is followed by its children, bottom → top. */
+  *layers(parent: GroupLayer = this.root): IterableIterator<LayerNode> {
+    for (const child of parent.children) {
+      yield child;
+      if (child.kind === 'group') yield* this.layers(child);
+    }
+  }
+
+  get layerCount(): number {
+    return this.#layersById.size;
+  }
+
+  get background(): PixelLayer | undefined {
+    const bottom = this.root.children[0];
+    return bottom?.kind === 'pixel' && bottom.isBackground ? bottom : undefined;
+  }
+
+  get activeLayerId(): string | null {
+    return this.#activeLayerId;
+  }
+
+  get activeLayer(): LayerNode | undefined {
+    return this.#activeLayerId ? this.getLayer(this.#activeLayerId) : undefined;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Primitives for commands
+  // ---------------------------------------------------------------------------
+
+  /** Inserts `layer` into `parent` at `index` (default: on top). */
+  insertLayer(layer: LayerNode, parentId: string = this.root.id, index?: number): void {
+    const parent = parentId === this.root.id ? this.root : this.requireLayer(parentId);
+    if (parent.kind !== 'group') throw new Error(`Layer ${parentId} is not a group`);
+    if (layer.parent || this.#layersById.has(layer.id)) throw new Error(`Layer ${layer.id} is already in a document`);
+    const at = index ?? parent.children.length;
+    if (!Number.isInteger(at) || at < 0 || at > parent.children.length) throw new Error(`Invalid layer index ${at}`);
+    this.#checkPlacement(layer, parent, at);
+    if (
+      layer.kind === 'pixel' &&
+      (layer.buffer.format.depth !== this.depth || layer.buffer.format.colorChannels !== this.colorChannels)
+    ) {
+      throw new Error(`Layer ${layer.id} pixel format does not match the document`);
+    }
+
+    parent.children.splice(at, 0, layer);
+    layer.parent = parent;
+    this.#register(layer);
+    this.changes.emit({ kind: 'structure' });
+  }
+
+  /** Removes a layer (and its children); returns where it was, for undo. */
+  removeLayer(id: string): { parentId: string; index: number; layer: LayerNode } {
+    const layer = this.requireLayer(id);
+    const parent = layer.parent;
+    if (!parent) throw new Error(`Layer ${id} has no parent`);
+    const index = parent.children.indexOf(layer);
+    parent.children.splice(index, 1);
+    layer.parent = null;
+    this.#unregister(layer);
+    if (this.#activeLayerId && !this.#layersById.has(this.#activeLayerId)) this.setActiveLayer(null);
+    this.changes.emit({ kind: 'structure' });
+    return { parentId: parent.id, index, layer };
+  }
+
+  /**
+   * Changes layer properties and returns their previous values (for undo).
+   * Enforces Background-layer and lock restrictions.
+   */
+  updateLayer<P extends Partial<PixelLayerProps & GroupLayerProps>>(id: string, props: P): P {
+    const layer = this.requireLayer(id);
+    const can = layerCapabilities(layer);
+    const previous: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(props) as [keyof (PixelLayerProps & GroupLayerProps), unknown][]) {
+      if ((key === 'opacity' || key === 'fillOpacity') && !can.changeOpacity && value !== 1) {
+        throw new Error('The Background layer is always fully opaque');
+      }
+      if (key === 'blendMode' && !can.changeBlendMode && value !== 'normal') {
+        throw new Error('The Background layer always uses the Normal blend mode');
+      }
+      if ((key === 'offsetX' || key === 'offsetY') && layer.kind === 'pixel') {
+        if (layer.isBackground && value !== 0) throw new Error('The Background layer cannot be moved');
+        if (!Number.isInteger(value)) throw new Error('Layer offsets are whole pixels');
+      }
+      if ((key === 'opacity' || key === 'fillOpacity') && (typeof value !== 'number' || value < 0 || value > 1)) {
+        throw new Error(`${key} must be between 0 and 1`);
+      }
+      if (!(key in layer)) throw new Error(`Layer ${id} has no property ${key}`);
+      previous[key] = (layer as unknown as Record<string, unknown>)[key];
+    }
+    Object.assign(layer, props);
+    this.changes.emit({ kind: 'layer', layerId: id, props: Object.keys(props) });
+    return previous as P;
+  }
+
+  setActiveLayer(id: string | null): void {
+    if (id !== null) this.requireLayer(id);
+    if (id === this.#activeLayerId) return;
+    this.#activeLayerId = id;
+    this.changes.emit({ kind: 'active-layer', layerId: id });
+  }
+
+  // ---------------------------------------------------------------------------
+
+  #checkPlacement(layer: LayerNode, parent: GroupLayer, index: number): void {
+    const isBackground = layer.kind === 'pixel' && layer.isBackground;
+    if (isBackground) {
+      if (parent !== this.root || index !== 0) throw new Error('The Background layer must be the bottom layer');
+      if (this.background) throw new Error('A document can only have one Background layer');
+      if (layer.offsetX !== 0 || layer.offsetY !== 0) throw new Error('The Background layer cannot be offset');
+    } else if (parent === this.root && index === 0 && this.background) {
+      throw new Error('Nothing can be placed below the Background layer');
+    }
+  }
+
+  #register(layer: LayerNode): void {
+    this.#layersById.set(layer.id, layer);
+    if (layer.kind === 'pixel') {
+      const unsubscribe = layer.buffer.onTileChange((tx, ty) => {
+        const rect = {
+          x: tx * TILE_SIZE + layer.offsetX,
+          y: ty * TILE_SIZE + layer.offsetY,
+          w: TILE_SIZE,
+          h: TILE_SIZE,
+        };
+        if (!isEmptyRect(rect)) this.changes.emit({ kind: 'pixels', layerId: layer.id, rect });
+      });
+      this.#unsubscribe.set(layer.id, unsubscribe);
+    } else {
+      for (const child of layer.children) {
+        child.parent = layer;
+        this.#register(child);
+      }
+    }
+  }
+
+  #unregister(layer: LayerNode): void {
+    this.#layersById.delete(layer.id);
+    this.#unsubscribe.get(layer.id)?.();
+    this.#unsubscribe.delete(layer.id);
+    if (layer.kind === 'group') for (const child of layer.children) this.#unregister(child);
+  }
+}
