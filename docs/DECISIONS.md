@@ -151,3 +151,32 @@ not yet handled (KNOWN_GAPS; PLAN B25). Without OPFS (private windows), nothing 
 script; JPEG and WebP are encoded by headless Chromium, and Chromium's own decode of each is stored as the expected
 image. Our decoders must match it within the golden tolerance (ΔE00 average ≤ 1, maximum ≤ 3). An EXIF orientation
 block is spliced into one JPEG to test rotation.
+
+## D-017 — 2026-10-07 — GPU compositor design
+
+**Context:** CLAUDE.md §3.4 requires GPU compositing of dirty tiles only, a mip pyramid, and 60 fps pan/zoom on a
+50-layer 8000×6000 document.
+**Decision:**
+
+- Layer tiles become textures on demand, cached by tile identity and version: 8-bit as normalised, 16-bit as
+  unsigned-integer, 32-bit as float textures, all read exactly with `texelFetch` (no filtering at document resolution).
+- Composite tiles (256 × 256) are RGBA16F (RGBA8 fallback) holding premultiplied colour in the document's encoding;
+  the Normal mode uses hardware blending `ONE, ONE_MINUS_SRC_ALPHA`. Isolated groups composite into temporary
+  textures; Pass Through groups with opacity mix before/after via a shader.
+- The pyramid: a level-L tile covers 256·2^L document pixels and is the 2×2 average of its four children, computed
+  lazily. The display level is `floor(log2(1/zoom))`; textures are sampled nearest-neighbour at ≥ 100 % and bilinear
+  below. Edits invalidate a tile and its ancestors; stale or coarser tiles are shown until refreshed.
+- Work per frame is capped (count and ~8 ms of CPU time) so interaction stays smooth.
+- Transparency checkerboard: 8 CSS-px squares in document space (they move and rotate with the image), white/light
+  grey. Pixel grid: one device pixel wide, above 500 %.
+  **Verification:** GPU composites match the CPU reference within half-float precision in Chromium, Firefox and WebKit;
+  every displayed pixel matches the expected colour at 100 %, 90° rotation, 25 % (pyramid), 16-bit, 32-bit and
+  grayscale. On the development machine's GPU the 50-layer test pans/zooms/rotates at a steady 60 fps with ≈ 0.1 ms of
+  main-thread work per frame (`pnpm test:perf`; CI's software GPU only checks correctness).
+
+## D-018 — 2026-10-07 — Zoom means device pixels; zoom steps
+
+**Decision:** 100 % shows one image pixel per _physical_ screen pixel (as pro editors do on high-density displays), so
+the view works in device pixels and the canvas backing store is sized by `devicePixelRatio`. Zoom In/Out step through
+preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200 %, 1600 %, 2400 %, 3200 %, 4800 %, 6400 %,
+9600 %, 12 800 %), with finer steps down to 0.1 %. Fit on Screen is not snapped to a preset.

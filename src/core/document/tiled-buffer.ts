@@ -75,6 +75,7 @@ export class TiledBuffer {
       tile = copyTile(tile, this.format, this.memory);
       this.#put(key, tile);
     }
+    tile.touch();
     this.#notify(tx, ty);
     return tile;
   }
@@ -104,6 +105,8 @@ export class TiledBuffer {
 
   /** Reports a tile as changed without touching it (e.g. after a worker wrote into it). */
   markChanged(tx: number, ty: number): void {
+    const tile = this.getTile(tx, ty);
+    if (tile && !tile.frozen) tile.touch();
     this.#notify(tx, ty);
   }
 

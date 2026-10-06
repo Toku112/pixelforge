@@ -96,6 +96,11 @@ is then composited onto the backdrop with the group's opacity. Pass Through grou
 onto the backdrop, and the group opacity mixes between the backdrop before and after the group. With only the Normal
 mode the two give identical results; they differ once other modes are used.
 
+### 3.3 GPU composite precision
+
+The GPU compositor stores composites as half floats (RGBA16F). Accumulated rounding over several blends stays below
+0.0025 (≈ 0.65 of an 8-bit step) in the tests; 32-bit documents keep values above 1.0.
+
 _Other blend modes are documented as they are implemented (Phase 1)._
 
 ## 4. File formats

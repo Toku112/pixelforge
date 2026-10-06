@@ -67,6 +67,7 @@ export class Tile {
   #data: SampleArray | null;
   #frozen = false;
   #attachedRefs = 0;
+  #version = 0;
 
   constructor(data: SampleArray) {
     this.#data = data;
@@ -93,6 +94,20 @@ export class Tile {
   freeze(): this {
     this.#frozen = true;
     return this;
+  }
+
+  /**
+   * Increases whenever the tile's samples may have changed (writable tiles are
+   * edited in place), so caches such as GPU textures know to refresh.
+   */
+  get version(): number {
+    return this.#version;
+  }
+
+  /** Marks the samples as (possibly) changed. Frozen tiles never change. */
+  touch(): void {
+    if (this.#frozen) throw new Error(`Tile ${this.id} is frozen and cannot change`);
+    this.#version++;
   }
 
   /** How many buffers of open documents currently hold this tile. */

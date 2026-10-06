@@ -559,7 +559,7 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [x] `core/commands` + `core/history`: Command interface, descriptors, undo/redo stack with tile-diff storage, history labels
 - [x] `engine/tiles`: tile store, dirty-rect tracking, memory budget, OPFS eviction
   ↳ note: eviction covers tiles not used by open documents (undo data, snapshots); swapping live tiles of documents larger than RAM is part of B25 (see KNOWN_GAPS, DECISIONS D-015).
-- [ ] `engine/gl`: WebGL2 context, tile textures, compositor with Normal blend + opacity, transparency checkerboard, mip pyramid
+- [x] `engine/gl`: WebGL2 context, tile textures, compositor with Normal blend + opacity, transparency checkerboard, mip pyramid
 - [ ] Viewport: pan, zoom (0.1%–12800%), rotate view, pixel grid at high zoom, HiDPI
 - [ ] App shell: menu bar (all top-level menus present; unimplemented items hidden behind feature flags), toolbar frame, options bar frame, docking panel framework, status bar, document tabs
 - [x] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG

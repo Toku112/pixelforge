@@ -195,3 +195,19 @@ describe('TiledBuffer attachment (tiles in use by open documents)', () => {
     expect(() => writable.release()).toThrow('in use');
   });
 });
+
+describe('Tile versions', () => {
+  it('increase when a writable tile is handed out or marked changed, never for frozen tiles', () => {
+    const buf = new TiledBuffer(RGBA8);
+    const tile = buf.writableTile(0, 0);
+    const v1 = tile.version;
+    buf.writableTile(0, 0);
+    expect(tile.version).toBe(v1 + 1);
+    buf.markChanged(0, 0);
+    expect(tile.version).toBe(v1 + 2);
+    buf.captureTile(0, 0);
+    buf.markChanged(0, 0); // frozen: no change
+    expect(tile.version).toBe(v1 + 2);
+    expect(() => tile.touch()).toThrow('frozen');
+  });
+});

@@ -23,6 +23,7 @@
     "test:e2e": "pnpm wasm:ensure && playwright test",
     "test:e2e:all": "pnpm wasm:ensure && PW_ALL_BROWSERS=1 playwright test",
     "test:e2e:preview": "PW_PREVIEW=1 playwright test",
+    "test:perf": "pnpm wasm:ensure && PW_PERF=1 playwright test",
     "test:rust": "cd src/wasm && cargo test --workspace && cargo test --workspace --all-features",
     "wasm": "node scripts/build-wasm.ts",
     "wasm:ensure": "node scripts/build-wasm.ts --if-stale",
