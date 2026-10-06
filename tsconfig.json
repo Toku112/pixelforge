@@ -1,0 +1,9 @@
+{
+  // Editor/lint entry point. `pnpm typecheck` checks each project separately.
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

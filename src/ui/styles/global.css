@@ -1,0 +1,27 @@
+:root {
+  color-scheme: dark;
+  --ui-bg: #282828;
+  --ui-fg: #d6d6d6;
+  --ui-font-size: 12px;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: var(--ui-font-size);
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+}
+
+.app-root {
+  height: 100%;
+}

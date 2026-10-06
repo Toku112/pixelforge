@@ -1,0 +1,11 @@
+{
+  // The document core must stay pure: no DOM, no browser APIs, no Node APIs.
+  // It is compiled here with only the ECMAScript library, so any accidental use
+  // of `window`, `document`, WebGL, etc. fails the typecheck.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": []
+  },
+  "include": ["src/core/**/*.ts"]
+}
