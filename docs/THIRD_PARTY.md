@@ -42,7 +42,21 @@ Notable transitive tooling licences (build-time only): `lightningcss` (MPL-2.0, 
 
 ## Rust crates (WebAssembly)
 
-_None yet._
+Direct dependencies of the crates in `src/wasm/` (all compiled into the shipped `.wasm`):
+
+| Crate              | Licence           | Purpose                                                                                                                    |
+| ------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| wasm-bindgen       | MIT OR Apache-2.0 | Rust ↔ JavaScript bindings                                                                                                 |
+| rayon              | MIT OR Apache-2.0 | Data-parallel loops (threaded build only)                                                                                  |
+| wasm-bindgen-rayon | Apache-2.0        | Runs the rayon pool on Web Workers (threaded build only); its `workerHelpers.js` is bundled with its licence header intact |
+
+Transitive crates (checked automatically by `pnpm check:licenses`): bumpalo, cfg-if, crossbeam-\*, either,
+futures-core/task/util, js-sys, once_cell, pin-project-lite, proc-macro2, quote, rayon-core, rustversion, slab, syn,
+wasm-bindgen-macro/-macro-support/-shared, wasm_sync, web-sys — all MIT and/or Apache-2.0 — and unicode-ident
+(`(MIT OR Apache-2.0) AND Unicode-3.0`, compile-time only).
+
+Build tools (not shipped): wasm-pack (MIT OR Apache-2.0) downloads `wasm-bindgen-cli` (MIT OR Apache-2.0) and
+binaryen's `wasm-opt` (Apache-2.0) into its own cache.
 
 ## ML models
 

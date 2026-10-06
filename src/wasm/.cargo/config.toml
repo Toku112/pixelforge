@@ -1,0 +1,4 @@
+# Single-threaded WASM builds: SIMD on. The multi-threaded build overrides these
+# flags from scripts/build-wasm.ts (adds atomics + shared memory, rebuilds std).
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

@@ -552,7 +552,7 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 # PART C — PHASE 0 TASK BREAKDOWN (start here)
 
 - [x] Initialise repo: pnpm, Vite, React, TypeScript strict, ESLint, Prettier, Vitest, Playwright, Husky pre-commit
-- [ ] Rust workspace under `src/wasm/` with one sample crate built by `wasm-pack`, SIMD + threads (COOP/COEP headers in dev server and production config)
+- [x] Rust workspace under `src/wasm/` with one sample crate built by `wasm-pack`, SIMD + threads (COOP/COEP headers in dev server and production config)
 - [ ] CI (GitHub Actions): typecheck, lint, unit, golden, e2e, wasm build
 - [ ] `core/document`: Document, LayerNode tree, PixelLayer with tiled buffer (8/16/32-bit), Background layer semantics
 - [ ] `core/commands` + `core/history`: Command interface, descriptors, undo/redo stack with tile-diff storage, history labels

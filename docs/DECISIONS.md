@@ -59,10 +59,42 @@ others are N/A and stated in the PLAN note or commit message.
 **Context:** Vite/ESLint pull in transitive packages under BlueOak-1.0.0 (`minimatch`), CC-BY-4.0 (`caniuse-lite`
 browser data), CC0-1.0 and Python-2.0. None are GPL/AGPL/non-commercial and none are bundled into the app.
 **Decision:** Allow these licences for development tooling only. `scripts/check-licenses.ts` enforces the stricter
-CLAUDE.md list for anything that ships.
+CLAUDE.md list for anything that ships. For Rust crates the shipped list plus Unicode-3.0 is allowed: it appears only
+on `unicode-ident`, a compile-time helper of the bindings' procedural macros, and is a permissive notice-style licence.
 
 ## D-008 — 2026-10-06 — One tsconfig per architecture layer
 
 **Context:** CLAUDE.md §3.1 requires `src/core` to have no DOM/browser dependencies and run in Node.
 **Decision:** `tsconfig.core.json` compiles `src/core` with only the ECMAScript library (no DOM, no Node types), so any
 browser API use fails `pnpm typecheck`. ESLint `no-restricted-imports` rules enforce the import direction between layers.
+
+## D-009 — 2026-10-06 — Cross-origin isolation via a server middleware
+
+**Context:** SharedArrayBuffer (threaded WASM, shared tile memory) requires COOP `same-origin` + COEP `require-corp`.
+Vite's `server.headers` option leaves these headers off 304 Not Modified responses; WebKit then blocks module imports
+inside workers. Chromium and Firefox tolerate it.
+**Decision:** A small Vite plugin (`crossOriginIsolation()` in `vite.config.ts`) sets the headers on every dev and
+preview response. `public/_headers` declares them for static hosts. E2E tests check fresh and 304 responses.
+**Consequences:** Production hosting must send both headers on every response (README). With `require-corp`, any future
+cross-origin resource (e.g. web fonts) must be served with CORS/CORP headers or proxied — handle when it comes up.
+
+## D-010 — 2026-10-06 — 4 GiB maximum shared memory for the threaded WASM build
+
+**Context:** Shared WebAssembly memory must declare a maximum size up front. rustc's default for threaded builds was
+1 GiB, too small for decoding or filtering large 16-bit images in one piece.
+**Decision:** Link the threaded build with `--max-memory=4294967296` (the wasm32 limit). The memory is reserved, not
+committed, and was verified to instantiate in Chromium, Firefox and WebKit. Tile-based processing keeps actual use low.
+
+## D-011 — 2026-10-06 — Own worker RPC helper
+
+**Context:** Main thread ↔ worker calls need typed request/response messaging with zero-copy buffer transfer.
+**Decision:** A ~150-line helper (`src/workers/rpc.ts`) instead of a dependency such as Comlink: typed proxies,
+`transfer()` marking, immediate rejection once a worker fails or is terminated.
+
+## D-012 — 2026-10-06 — Test harness pages and production-build E2E
+
+**Context:** Engine pieces (workers, WASM, later the compositor) need browser tests before the full UI exists, and
+bundling can behave differently from the dev server.
+**Decision:** Test-only pages live in `tests/e2e/harness/` (served by the dev server; added to a build only with
+`PF_E2E_BUILD=1`). `pnpm test:e2e:preview` runs the whole E2E suite against a production build;
+`pnpm test:e2e:all` adds Firefox and WebKit.

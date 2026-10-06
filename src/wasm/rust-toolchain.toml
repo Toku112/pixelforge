@@ -1,0 +1,6 @@
+# Pinned nightly: required for multi-threaded WebAssembly (rebuilding std with
+# atomics). See docs/DECISIONS.md D-003. Change only deliberately, then run all tests.
+[toolchain]
+channel = "nightly-2026-10-01"
+components = ["rust-src", "rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
