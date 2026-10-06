@@ -122,3 +122,36 @@ describe('Viewport', () => {
     expect(view({ zoom: 6 }).showsPixelGrid).toBe(true);
   });
 });
+
+describe('Viewport limits (Overscroll off)', () => {
+  it('keeps a document smaller than the view centred', () => {
+    const v = new Viewport({ viewWidth: 800, viewHeight: 600, zoom: 0.1, centerX: 0, centerY: 0 });
+    v.panBy(300, 300);
+    v.clampToDocument(4000, 3000);
+    expect([v.centerX, v.centerY]).toEqual([2000, 1500]);
+  });
+
+  it('stops panning when the document edge meets the view edge', () => {
+    const v = new Viewport({ viewWidth: 800, viewHeight: 600, zoom: 1, centerX: 1000, centerY: 1000 });
+    v.panBy(5000, -5000); // drag far right/up → would show beyond the left/bottom edges
+    v.clampToDocument(4000, 3000);
+    expect(v.centerX).toBe(400); // left edge at the view's left edge
+    expect(v.centerY).toBe(2700); // bottom edge at the view's bottom edge
+  });
+
+  it('allows free panning when rotated, keeping the view centre on the document', () => {
+    const v = new Viewport({ viewWidth: 800, viewHeight: 600, zoom: 1, centerX: 100, centerY: 100, rotation: 30 });
+    v.clampToDocument(4000, 3000);
+    expect([v.centerX, v.centerY]).toEqual([100, 100]);
+    v.centerX = -50;
+    v.centerY = 5000;
+    v.clampToDocument(4000, 3000);
+    expect([v.centerX, v.centerY]).toEqual([0, 3000]);
+  });
+
+  it('fills the view with the document', () => {
+    const v = new Viewport({ viewWidth: 800, viewHeight: 600 });
+    v.fill(4000, 1000);
+    expect(v.zoom).toBeCloseTo(0.6, 6); // height-limited: 600 / 1000
+  });
+});

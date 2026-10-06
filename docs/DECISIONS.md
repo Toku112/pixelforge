@@ -180,3 +180,17 @@ block is spliced into one JPEG to test rotation.
 the view works in device pixels and the canvas backing store is sized by `devicePixelRatio`. Zoom In/Out step through
 preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200 %, 1600 %, 2400 %, 3200 %, 4800 %, 6400 %,
 9600 %, 12 800 %), with finer steps down to 0.1 %. Fit on Screen is not snapped to a preset.
+
+## D-019 — 2026-10-07 — Navigation input
+
+**Decision:**
+
+- Wheel / two-finger scroll pans (Shift + wheel: horizontal); Alt/Option + wheel zooms around the pointer, as in the
+  reference app. Ctrl + wheel also zooms, because browsers report trackpad pinch gestures as Ctrl + wheel; this
+  differs from the reference app on Windows, where Ctrl + wheel scrolls horizontally.
+- Space = temporary Hand; Ctrl/Cmd + Space = temporary Zoom (add Alt/Option to zoom out). Escape abandons a drag.
+- Pan limits follow the reference app's default with Overscroll off: an unrotated document smaller than the window
+  stays centred; a larger one pans until its edge meets the window edge. Rotated views pan freely while the view
+  centre stays on the document. (The Overscroll preference arrives with Preferences, PLAN B21.)
+- Gesture distances (click-vs-drag slop, scrubby-zoom rate) are measured in CSS pixels so they feel the same on
+  high-density displays; zoom percentages stay in device pixels (D-018).

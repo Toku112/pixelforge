@@ -560,7 +560,8 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [x] `engine/tiles`: tile store, dirty-rect tracking, memory budget, OPFS eviction
   ↳ note: eviction covers tiles not used by open documents (undo data, snapshots); swapping live tiles of documents larger than RAM is part of B25 (see KNOWN_GAPS, DECISIONS D-015).
 - [x] `engine/gl`: WebGL2 context, tile textures, compositor with Normal blend + opacity, transparency checkerboard, mip pyramid
-- [ ] Viewport: pan, zoom (0.1%–12800%), rotate view, pixel grid at high zoom, HiDPI
+- [x] Viewport: pan, zoom (0.1%–12800%), rotate view, pixel grid at high zoom, HiDPI
+  ↳ note: Hand/Zoom/Rotate View tools, wheel/pinch, Space/Ctrl+Space spring-loading and pan limits work on the canvas; toolbar buttons, options-bar fields and View-menu shortcuts are wired in the app-shell and keymap tasks.
 - [ ] App shell: menu bar (all top-level menus present; unimplemented items hidden behind feature flags), toolbar frame, options bar frame, docking panel framework, status bar, document tabs
 - [x] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG
   ↳ note: wired into the app's File menu and canvas in the app-shell task; known temporary limits (palette → RGB, CMYK JPEG, PNG-only save) in KNOWN_GAPS.
