@@ -565,6 +565,7 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] App shell: menu bar (all top-level menus present; unimplemented items hidden behind feature flags), toolbar frame, options bar frame, docking panel framework, status bar, document tabs
 - [x] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG
   ↳ note: wired into the app's File menu and canvas in the app-shell task; known temporary limits (palette → RGB, CMYK JPEG, PNG-only save) in KNOWN_GAPS.
-- [ ] Keymap system with Photoshop-default bindings scaffold and conflict handling
+- [x] Keymap system with Photoshop-default bindings scaffold and conflict handling
+  ↳ note: connected to menus and tools in the app-shell task; the Keyboard Shortcuts editor UI is PLAN B4.
 - [x] Golden-image test harness with ΔE2000 comparison and diff image output
 - [x] `docs/` files created: THIRD_PARTY.md, DECISIONS.md, FORMAT_NOTES.md, KNOWN_GAPS.md

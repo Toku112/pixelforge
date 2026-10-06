@@ -194,3 +194,19 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   centre stays on the document. (The Overscroll preference arrives with Preferences, PLAN B21.)
 - Gesture distances (click-vs-drag slop, scrubby-zoom rate) are measured in CSS pixels so they feel the same on
   high-density displays; zoom percentages stay in device pixels (D-018).
+
+## D-020 — 2026-10-07 — Keymap design
+
+**Decision:**
+
+- Chords are stored platform-neutrally ("Mod" = Cmd/Ctrl, "Alt" = Option/Alt, literal "Ctrl" only where macOS uses
+  Control); on Windows/Linux "Ctrl" folds into "Mod".
+- Matching: letters follow the character typed (so shortcuts follow the keyboard layout, e.g. AZERTY's Z key undoes),
+  falling back to the physical key when Option/Alt changes the character; digits and punctuation use the physical
+  key. "+" is stored as "=" (same key).
+- A chord bound in the keymap is always kept from the browser (no "Save page" dialog on Ctrl+S) even when its command
+  is not available yet. Plain keys and text-editing chords (Ctrl/Cmd + Z, X, C, V, A, Y) are left to text fields.
+- Tool keys are spring-loaded: a tap switches tools; holding ≥ 300 ms or using the tool while the key is down makes it
+  temporary. Shift + letter cycles tools sharing the letter.
+- The default table covers the reference app's default shortcuts, including commands not implemented yet (their keys
+  do nothing until registered). A unit test checks it has no conflicting chords on either platform.
