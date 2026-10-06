@@ -78,16 +78,14 @@ interface CargoPackage {
   license: string | null;
 }
 
+// Run inside src/wasm so rustup picks the toolchain pinned there.
 const metadata = JSON.parse(
-  execFileSync(
-    'cargo',
-    ['metadata', '--format-version', '1', '--all-features', '--manifest-path', 'src/wasm/Cargo.toml'],
-    {
-      encoding: 'utf8',
-      env: { ...process.env, PATH: `${join(homedir(), '.cargo', 'bin')}:${process.env['PATH'] ?? ''}` },
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  ),
+  execFileSync('cargo', ['metadata', '--format-version', '1', '--all-features'], {
+    cwd: join(import.meta.dirname, '..', 'src', 'wasm'),
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${join(homedir(), '.cargo', 'bin')}:${process.env['PATH'] ?? ''}` },
+    maxBuffer: 64 * 1024 * 1024,
+  }),
 ) as { packages: CargoPackage[]; workspace_members: string[] };
 const members = new Set(metadata.workspace_members);
 const crates = metadata.packages.filter((p) => !members.has(p.id));
