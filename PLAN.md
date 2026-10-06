@@ -10,10 +10,11 @@
 
 _Update this section at the end of every session._
 
-- Phase: 0
-- Last completed: —
-- Next up: Phase 0, first item
-- Blockers: —
+- Phase: 0 (nearly complete)
+- Last completed: tasks 1–12 (repo, docs, WASM pipeline, golden harness, document model, commands/history, tile store, io, GPU renderer, viewport, keymap); CI written (partial: not yet run on GitHub)
+- In progress: App shell (works end to end; ESLint findings to fix in src/ui — see note on that item)
+- Next up: fix lint, run `pnpm test:e2e:all` and `pnpm test:e2e:preview`, tick App shell, write the Phase 0 summary
+- Blockers: none (CI needs a GitHub remote to run)
 
 ---
 
@@ -563,6 +564,7 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [x] Viewport: pan, zoom (0.1%–12800%), rotate view, pixel grid at high zoom, HiDPI
   ↳ note: Hand/Zoom/Rotate View tools, wheel/pinch, Space/Ctrl+Space spring-loading and pan limits work on the canvas; toolbar buttons, options-bar fields and View-menu shortcuts are wired in the app-shell and keymap tasks.
 - [ ] App shell: menu bar (all top-level menus present; unimplemented items hidden behind feature flags), toolbar frame, options bar frame, docking panel framework, status bar, document tabs
+  ↳ partial: implemented and passing typecheck, 274 unit tests and 46 browser tests (incl. the Phase 0 exit-criteria flow in tests/e2e/app.spec.ts); remaining: fix ~5 ESLint React-rule findings in src/ui (unbound methods, setState in effect, ref read during render), run all-browser + preview suites, then tick and update docs.
 - [x] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG
   ↳ note: wired into the app's File menu and canvas in the app-shell task; known temporary limits (palette → RGB, CMYK JPEG, PNG-only save) in KNOWN_GAPS.
 - [x] Keymap system with Photoshop-default bindings scaffold and conflict handling

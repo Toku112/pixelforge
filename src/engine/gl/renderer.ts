@@ -286,6 +286,53 @@ export class Renderer {
     return out;
   }
 
+  /**
+   * A small picture of the whole document — the top pyramid tile, at most
+   * 256 × 256 — over a fine checkerboard, as opaque sRGB RGBA8 (for the Navigator).
+   */
+  thumbnail(): { width: number; height: number; scale: number; data: Uint8ClampedArray } | null {
+    const doc = this.#doc;
+    if (!doc || this.#lost || !this.#programs) return null;
+    this.#applyDirty();
+    const level = this.#maxLevel(doc);
+    const entry = this.#ensure(doc, level, 0, 0, { left: Infinity, deadline: Infinity });
+    if (!entry) return null;
+    const scale = 2 ** level;
+    const width = Math.max(1, Math.ceil(doc.width / scale));
+    const height = Math.max(1, Math.ceil(doc.height / scale));
+    const gl = this.#gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.#fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, entry.tex, 0);
+    const src = new Float32Array(width * height * 4);
+    if (this.#floatTargets) {
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, src);
+    } else {
+      const bytes = new Uint8Array(width * height * 4);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+      for (let i = 0; i < bytes.length; i++) src[i] = bytes[i]! / 255;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const [ca, cb] = this.#options.checkerColors;
+    const linear = doc.depth === 32;
+    const toSrgb = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
+    const toLinear = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const checker = ((x >> 2) + (y >> 2)) % 2 === 0 ? ca : cb;
+        const a = src[i + 3]!;
+        for (let c = 0; c < 3; c++) {
+          const k = checker[c] ?? 1;
+          const v = linear ? toSrgb(Math.min(1, Math.max(0, src[i + c]! + toLinear(k) * (1 - a)))) : src[i + c]! + k * (1 - a);
+          data[i + c] = Math.round(Math.min(1, Math.max(0, v)) * 255);
+        }
+        data[i + 3] = 255;
+      }
+    }
+    return { width, height, scale, data };
+  }
+
   /** Reads the canvas (RGBA8, rows top to bottom). Requires `preserveDrawingBuffer` or a fresh render. */
   readCanvas(): Uint8Array {
     const gl = this.#gl;

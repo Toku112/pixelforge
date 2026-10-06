@@ -18,6 +18,8 @@ export interface CanvasViewOptions {
   overscroll?(): boolean;
   /** Called after the view (zoom, position, rotation) changes. */
   onViewChange?(state: ViewportState): void;
+  /** Called when a drag starts on the canvas. */
+  onGestureStart?(): void;
   renderer?: RendererOptions;
 }
 
@@ -34,7 +36,7 @@ export class CanvasView {
   readonly #resizeObserver: ResizeObserver;
   #dprQuery: MediaQueryList | null = null;
   #cssSize = { w: 1, h: 1 };
-  #pendingFit = false;
+  #pendingFit: 'open' | 'fit' | null = null;
 
   constructor(host: HTMLElement, canvas: HTMLCanvasElement, overlay: HTMLElement, options: CanvasViewOptions) {
     this.#host = host;
@@ -62,6 +64,7 @@ export class CanvasView {
       context: this.context,
       getActiveToolId: () => options.getActiveToolId(),
       devicePixelRatio: () => this.renderer.devicePixelRatio,
+      onGestureStart: () => options.onGestureStart?.(),
     });
     this.#resizeObserver = new ResizeObserver(() => this.#resize());
     this.#resizeObserver.observe(host);
@@ -85,19 +88,30 @@ export class CanvasView {
       });
       this.#viewChanged();
     } else if (doc) {
-      this.fitOnScreen();
+      this.#fit(true);
     }
     this.#input.refresh();
   }
 
+  /** View > Fit on Screen: the whole image, as large as the window allows (may exceed 100 %). */
   fitOnScreen(): void {
+    this.#fit(false);
+  }
+
+  /**
+   * Fits the document; when `atMost100` (a newly opened document, as in the reference
+   * app) small images are shown at 100 % rather than enlarged.
+   */
+  #fit(atMost100: boolean): void {
     const doc = this.renderer.document;
     if (!doc) return;
     if (this.#cssSize.w <= 1 || this.#cssSize.h <= 1) {
-      this.#pendingFit = true; // not laid out yet: fit after the first resize
+      this.#pendingFit = atMost100 ? 'open' : 'fit'; // not laid out yet: fit after the first resize
       return;
     }
-    this.renderer.viewport.fit(doc.width, doc.height, FIT_MARGIN * this.renderer.devicePixelRatio);
+    const viewport = this.renderer.viewport;
+    viewport.fit(doc.width, doc.height, FIT_MARGIN * this.renderer.devicePixelRatio);
+    if (atMost100 && viewport.zoom > 1) viewport.centerDocument(doc.width, doc.height, 1);
     this.#viewChanged();
   }
 
@@ -126,8 +140,9 @@ export class CanvasView {
     // Zoom is in device pixels, so 100 % stays one image pixel per screen pixel on any display.
     this.renderer.resize(rect.width, rect.height, window.devicePixelRatio || 1);
     if (this.#pendingFit && rect.width > 1 && rect.height > 1) {
-      this.#pendingFit = false;
-      this.fitOnScreen();
+      const kind = this.#pendingFit;
+      this.#pendingFit = null;
+      this.#fit(kind === 'open');
       return;
     }
     this.#viewChanged();

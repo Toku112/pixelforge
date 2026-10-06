@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Connect, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -54,8 +54,13 @@ function buildInputs(): Record<string, string> | undefined {
   return inputs;
 }
 
+const packageVersion = (JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string }).version;
+
 export default defineConfig({
   plugins: [crossOriginIsolation(), react(), brandHtml()],
+  define: {
+    __APP_VERSION__: JSON.stringify(packageVersion),
+  },
   server: {
     port: 5173,
     strictPort: true,

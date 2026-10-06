@@ -16,6 +16,8 @@ export interface CanvasInputOptions {
   context: ToolContext;
   getActiveToolId(): string;
   devicePixelRatio(): number;
+  /** Called when a drag starts on the canvas (ends spring-loaded tool switches on key release). */
+  onGestureStart?(): void;
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -97,6 +99,7 @@ export class CanvasInput {
     this.#o.element.setPointerCapture(e.pointerId);
     this.#pointerId = e.pointerId;
     this.#dragTool = this.currentTool;
+    this.#o.onGestureStart?.();
     this.#dragTool.onPointerDown?.(this.#toolEvent(e), this.#o.context);
     this.#updateCursor();
   };

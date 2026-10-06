@@ -1,8 +1,25 @@
+/* Design tokens. Dark charcoal interface, compact density, 12 px type (CLAUDE.md §8). */
 :root {
   color-scheme: dark;
-  --ui-bg: #282828;
-  --ui-fg: #d6d6d6;
   --ui-font-size: 12px;
+  --bg-app: #1f1f1f;
+  --bg-bar: #2b2b2b;
+  --bg-panel: #303030;
+  --bg-panel-raised: #3a3a3a;
+  --bg-input: #1c1c1c;
+  --bg-hover: #444;
+  --bg-active: #505050;
+  --bg-canvas: #282828;
+  --border: #161616;
+  --border-soft: #3f3f3f;
+  --fg: #d8d8d8;
+  --fg-strong: #f2f2f2;
+  --fg-dim: #9a9a9a;
+  --fg-disabled: #6a6a6a;
+  --accent: #3d8bf2;
+  --accent-soft: rgb(61 139 242 / 30%);
+  --danger: #e5484d;
+  --shadow: 0 6px 24px rgb(0 0 0 / 45%);
   font-family:
     system-ui,
     -apple-system,
@@ -18,10 +35,70 @@ body,
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--ui-bg);
-  color: var(--ui-fg);
+  background: var(--bg-app);
+  color: var(--fg);
 }
 
-.app-root {
-  height: 100%;
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type='text'] {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 5px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.hint {
+  color: var(--fg-dim);
+}
+
+.primary-button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #5a9cf5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
