@@ -27,6 +27,13 @@ Node.js ≥ 22.12, pnpm, Rust (via rustup) with the `wasm32-unknown-unknown` tar
 | `pnpm test:rust`        | Rust unit tests                                  |
 | `pnpm wasm`             | Build the Rust crates to WebAssembly             |
 
+## Golden-image tests
+
+Visual results are checked against approved images in `tests/golden/<feature>/<case>.expected.png` using the CIEDE2000
+colour difference (average ≤ 1.0, worst pixel ≤ 3.0). When a test fails, the actual output and a heat map
+(red = small difference, magenta = over the limit) are written to `tests/golden/__output__/`. After a deliberate,
+reviewed visual change, refresh the expected images with `pnpm test:golden:update`.
+
 ## Deploying
 
 The app needs **cross-origin isolation** (for multi-threaded WebAssembly). The web server must send these headers on

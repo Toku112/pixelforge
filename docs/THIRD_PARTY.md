@@ -36,6 +36,7 @@ Every dependency and every ML model must be listed here with its licence (CLAUDE
 | prettier                                    | MIT        | Code formatting                                 |
 | husky                                       | MIT        | Git pre-commit hook                             |
 | lint-staged                                 | MIT        | Runs lint/format on staged files                |
+| pngjs, @types/pngjs                         | MIT        | Independent PNG reader/writer for test images   |
 
 Notable transitive tooling licences (build-time only): `lightningcss` (MPL-2.0, CSS processing inside Vite),
 `minimatch` (BlueOak-1.0.0), `caniuse-lite` (CC-BY-4.0, browser-support data).
