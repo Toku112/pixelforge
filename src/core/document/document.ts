@@ -89,6 +89,11 @@ export class ImageDocument {
   mode: ColorMode;
   depth: BitDepth;
   multichannelCount: number;
+  /**
+   * Embedded ICC profile bytes kept from the opened file, written back on save.
+   * (Colour management that uses it arrives in Phase 7.)
+   */
+  iccProfile: Uint8Array | null = null;
   readonly memory: TileMemory;
   /** Invisible container of the top-level layers. */
   readonly root: GroupLayer;

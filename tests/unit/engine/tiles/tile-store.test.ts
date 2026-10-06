@@ -122,6 +122,29 @@ describe('TileStore', () => {
     expect(loads).toBe(1);
   });
 
+  it('keeps tiles in memory when the scratch disk fails, without throwing', async () => {
+    const failing: SwapBackend = {
+      store: () => Promise.reject(new Error('disk full')),
+      load: () => Promise.reject(new Error('unused')),
+      free: () => {},
+    };
+    const store = new TileStore({ budgetBytes: 0, swap: failing, autoEnforce: false });
+    const { doc } = docWithStore(store);
+    const buffer = doc.background!.buffer;
+    buffer.writableTile(0, 0);
+    const old = buffer.captureTile(0, 0)!;
+    buffer.writableTile(0, 0);
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await store.enforceBudget();
+    } finally {
+      console.warn = warn;
+    }
+    expect(old.resident).toBe(true);
+    expect(store.stats.evictionErrors).toBe(1);
+  });
+
   it('never evicts without a scratch disk', async () => {
     const store = new TileStore({ budgetBytes: 0, swap: null, autoEnforce: false });
     const { doc } = docWithStore(store);

@@ -138,6 +138,18 @@ export function allocateTile(format: PixelFormat, memory: TileMemory, pixel: Arr
   return tile;
 }
 
+/**
+ * Wraps sample data produced elsewhere (e.g. a decoder in a worker) as a tile,
+ * registering it with the memory manager. `data` must be a whole tile.
+ */
+export function adoptTile(data: SampleArray, format: PixelFormat, memory: TileMemory): Tile {
+  if (data.length !== TILE_PIXELS * samplesPerPixel(format)) throw new Error('adoptTile: data is not a whole tile');
+  const tile = new Tile(data);
+  if (tile.depth !== format.depth) throw new Error('adoptTile: sample type does not match the format');
+  memory.track?.(tile);
+  return tile;
+}
+
 /** Allocates a writable copy of `source`. */
 export function copyTile(source: Tile, format: PixelFormat, memory: TileMemory): Tile {
   const data = createSampleArray(format.depth, source.data.length, memory.allocate(tileByteLength(format)));

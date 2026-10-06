@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
 
 // OPFS needs a persistent browser profile (private/ephemeral contexts, like Safari
-// private windows, have none), so these tests launch one per test.
+// private windows, have none), so these tests launch one per test. They run one at a
+// time: several persistent WebKit test browsers at once make its OPFS fail randomly.
+base.describe.configure({ mode: 'serial' });
+
 const test = base.extend<{ persistentPage: Page }>({
   persistentPage: async ({ playwright, browserName, baseURL }, use) => {
     const dir = mkdtempSync(join(tmpdir(), 'pf-opfs-'));

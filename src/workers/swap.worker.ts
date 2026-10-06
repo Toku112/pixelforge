@@ -56,15 +56,40 @@ async function init(): Promise<FileSystemDirectoryHandle> {
 
 const ready = init();
 
-async function sizeClass(size: number): Promise<SizeClass> {
-  let cls = classes.get(size);
-  if (!cls) {
-    const dir = await ready;
-    const fileHandle = await dir.getFileHandle(`${size}.bin`, { create: true });
-    cls = { size, file: await fileHandle.createSyncAccessHandle(), free: [], next: 0 };
-    classes.set(size, cls);
+/** Retries an OPFS call that browsers occasionally fail with a transient error (seen in WebKit). */
+async function withRetry<T>(operation: () => Promise<T>, attempts = 4): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i >= attempts) throw error;
+      await new Promise((r) => setTimeout(r, 20 * i));
+    }
   }
-  return cls;
+}
+
+const opening = new Map<number, Promise<SizeClass>>();
+
+async function sizeClass(size: number): Promise<SizeClass> {
+  const existing = classes.get(size);
+  if (existing) return existing;
+  let pending = opening.get(size);
+  if (!pending) {
+    pending = (async () => {
+      const dir = await ready;
+      const fileHandle = await withRetry(() => dir.getFileHandle(`${size}.bin`, { create: true }));
+      const cls: SizeClass = {
+        size,
+        file: await withRetry(() => fileHandle.createSyncAccessHandle()),
+        free: [],
+        next: 0,
+      };
+      classes.set(size, cls);
+      return cls;
+    })().finally(() => opening.delete(size));
+    opening.set(size, pending);
+  }
+  return pending;
 }
 
 const api = {

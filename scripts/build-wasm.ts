@@ -31,7 +31,11 @@ interface CrateBuild {
   variants: Variant[];
 }
 
-const CRATES: CrateBuild[] = [{ crate: 'pixel-ops', outName: 'pixel_ops', variants: ['mt', 'st'] }];
+const CRATES: CrateBuild[] = [
+  { crate: 'pixel-ops', outName: 'pixel_ops', variants: ['mt', 'st'] },
+  // Decoding/encoding one file is sequential; parallelism comes from running several codec workers.
+  { crate: 'codecs', outName: 'codecs', variants: ['st'] },
+];
 
 function newestMtime(dir: string): number {
   let newest = 0;

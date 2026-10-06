@@ -562,7 +562,8 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] `engine/gl`: WebGL2 context, tile textures, compositor with Normal blend + opacity, transparency checkerboard, mip pyramid
 - [ ] Viewport: pan, zoom (0.1%–12800%), rotate view, pixel grid at high zoom, HiDPI
 - [ ] App shell: menu bar (all top-level menus present; unimplemented items hidden behind feature flags), toolbar frame, options bar frame, docking panel framework, status bar, document tabs
-- [ ] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG
+- [x] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG
+  ↳ note: wired into the app's File menu and canvas in the app-shell task; known temporary limits (palette → RGB, CMYK JPEG, PNG-only save) in KNOWN_GAPS.
 - [ ] Keymap system with Photoshop-default bindings scaffold and conflict handling
 - [x] Golden-image test harness with ΔE2000 comparison and diff image output
 - [x] `docs/` files created: THIRD_PARTY.md, DECISIONS.md, FORMAT_NOTES.md, KNOWN_GAPS.md

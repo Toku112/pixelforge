@@ -67,6 +67,8 @@ export interface TileStoreStats {
   residentTiles: number;
   swappedTiles: number;
   evictions: number;
+  /** Evictions that failed (tile kept in memory). */
+  evictionErrors: number;
   reloads: number;
 }
 
@@ -102,6 +104,7 @@ export class TileStore implements TileMemory, TileResidency {
   #residentBytes = 0;
   #swappedBytes = 0;
   #evictions = 0;
+  #evictionErrors = 0;
   #reloads = 0;
   #enforcing: Promise<void> | null = null;
   #enforceScheduled = false;
@@ -178,6 +181,7 @@ export class TileStore implements TileMemory, TileResidency {
       residentTiles,
       swappedTiles,
       evictions: this.#evictions,
+      evictionErrors: this.#evictionErrors,
       reloads: this.#reloads,
     };
   }
@@ -205,7 +209,14 @@ export class TileStore implements TileMemory, TileResidency {
         continue;
       }
       if (!evictable(tile) || record.evicting || record.loading) continue;
-      await this.#evict(tile, record, swap);
+      try {
+        await this.#evict(tile, record, swap);
+      } catch (error) {
+        // Nothing is lost: the tile stays in memory. Try again on the next round.
+        this.#evictionErrors++;
+        console.warn('Could not move a tile to the scratch disk; keeping it in memory.', error);
+        return;
+      }
     }
   }
 

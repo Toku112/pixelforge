@@ -78,10 +78,43 @@ the two. Colour under zero alpha is therefore ignored, while alpha differences a
 §4): average ΔE00 ≤ 1.0 and maximum ≤ 3.0 unless a test documents otherwise. For scale, raising one 8-bit channel by
 one code value gives a worst case around 0.6.
 
-## 3. Blend modes
+## 3. Compositing and blend modes
 
-_Documented as each mode is implemented._
+Compositing works in the document's own encoding: gamma-encoded values (0–1) for 8/16-bit documents, linear light for
+32-bit (the reference app's default; "blend RGB colours using gamma" is a later option). Layers have straight alpha;
+the compositor works premultiplied internally.
+
+### 3.1 Normal
+
+With layer alpha `α`, layer opacity `o` and fill opacity `f`: `a = α·o·f`; premultiplied colour
+`C' = C·a + C_b·(1 − a)`; alpha `A' = a + A_b·(1 − a)`. A Background layer is opaque everywhere.
+
+### 3.2 Groups
+
+Groups with a blend mode other than Pass Through are isolated: children are composited onto a transparent buffer, which
+is then composited onto the backdrop with the group's opacity. Pass Through groups composite their children directly
+onto the backdrop, and the group opacity mixes between the backdrop before and after the group. With only the Normal
+mode the two give identical results; they differ once other modes are used.
+
+_Other blend modes are documented as they are implemented (Phase 1)._
 
 ## 4. File formats
 
-_Documented as each codec is implemented._
+### 4.1 Opening (PNG, JPEG, WebP)
+
+- Opaque images open as a locked **Background** layer; images with transparency open as a normal layer named
+  **Layer 0**. Grayscale files open in Grayscale mode, colour files in RGB; 16-bit PNGs open as 16-bit documents.
+- Resolution comes from PNG `pHYs` or the JPEG JFIF density (dots/inch or /cm); 72 ppi when absent.
+- An embedded ICC profile is kept on the document and written back on save (not yet applied to colours, see
+  KNOWN_GAPS).
+- JPEG and WebP EXIF **orientation** (values 1–8) is applied on open, so photos appear upright.
+- Palette PNGs are expanded to RGB(A) until Indexed Color mode exists; `tRNS` transparency becomes alpha.
+- Decoding and tiling happen in the codec worker; fully transparent tiles are not stored.
+
+### 4.2 Saving PNG
+
+- Visible layers are flattened (§3) in the codec worker. The PNG has an alpha channel only if the flattened result has
+  any transparency; otherwise it is RGB/Gray. 8- and 16-bit documents save at their own depth.
+- Writes `pHYs` (document resolution) and `iCCP` (kept profile). Default compression: balanced.
+- Not available for 32-bit, CMYK, Lab and other modes (PNG cannot store them), matching the reference app.
+- The colour of fully transparent pixels is not preserved (it is invisible and dropped when flattening).
