@@ -563,4 +563,4 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG
 - [ ] Keymap system with Photoshop-default bindings scaffold and conflict handling
 - [ ] Golden-image test harness with ΔE2000 comparison and diff image output
-- [ ] `docs/` files created: THIRD_PARTY.md, DECISIONS.md, FORMAT_NOTES.md, KNOWN_GAPS.md
+- [x] `docs/` files created: THIRD_PARTY.md, DECISIONS.md, FORMAT_NOTES.md, KNOWN_GAPS.md
