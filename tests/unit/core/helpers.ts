@@ -5,6 +5,7 @@ import { ImageDocument, type DocumentInit } from '../../../src/core/document/doc
 import { convertAlphaTile } from '../../../src/core/commands/alpha';
 import { compositeTiles } from '../../../src/core/composite/composite-tiles';
 import { fillTiles } from '../../../src/core/paint/fill';
+import { movePixels } from '../../../src/core/paint/move-pixels';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
 import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
 import { invertSelection, selectShape } from '../../../src/core/selection/mask-ops';
@@ -38,6 +39,10 @@ export const referencePixelOps: PixelOps = {
   },
   invertSelection(current, canvas) {
     return Promise.resolve(invertSelection(current, canvas));
+  },
+  movePixels(setup, sources, outputs) {
+    movePixels(setup, sources, outputs);
+    return Promise.resolve();
   },
   fill(tiles, format, through, spec, hdr) {
     fillTiles(tiles, format, through, spec, hdr);

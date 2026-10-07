@@ -27,6 +27,10 @@ export interface CanvasViewOptions {
   execute?(descriptor: CommandDescriptor): void;
   /** Starts brush/eraser strokes. */
   paint?: PaintHost;
+  /** Live preview of a tool's command (null cancels it). */
+  preview?(descriptor: CommandDescriptor | null): void;
+  selectLayers?(ids: string[]): void;
+  report?(title: string, message: string): void;
   /** Marching ants: a 2D canvas stacked above the document canvas, and the outline tracer. */
   ants?: { canvas: HTMLCanvasElement; trace: OutlineTracer };
   renderer?: RendererOptions;
@@ -71,6 +75,9 @@ export class CanvasView {
       execute: (descriptor) => options.execute?.(descriptor),
       paint: options.paint ?? null,
       setBrushOutline: (outline) => this.#ants?.setBrushOutline(outline),
+      preview: (descriptor) => options.preview?.(descriptor),
+      selectLayers: (ids) => options.selectLayers?.(ids),
+      report: (title, message) => options.report?.(title, message),
     };
     canvas.tabIndex = 0; // focusable, so keyboard tools work after clicking the canvas
     this.#input = new CanvasInput({

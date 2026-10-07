@@ -68,6 +68,12 @@ export interface ToolContext {
   readonly paint: PaintHost | null;
   /** Shows the brush outline at a document point (diameter in document px), or hides it. */
   setBrushOutline(outline: { x: number; y: number; size: number } | null): void;
+  /** Shows a command's result live without recording it (null cancels); `execute` then records it. */
+  preview(descriptor: CommandDescriptor | null): void;
+  /** Selects layers of the document (e.g. the Move tool's Auto-Select). */
+  selectLayers(ids: string[]): void;
+  /** Tells the user why something cannot be done. */
+  report(title: string, message: string): void;
 }
 
 /** Modifier and drag state that decides a tool's cursor. */

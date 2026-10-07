@@ -3,6 +3,7 @@
  * implemented yet are not listed (no placeholder tools).
  */
 import { HandTool } from './hand/hand-tool';
+import { MoveTool } from './move/move-tool';
 import { PaintingTool } from './paint/paint-tool';
 import { RotateViewTool } from './rotate-view/rotate-view-tool';
 import { LassoTool, PolygonalLassoTool } from './selection/lasso-tool';
@@ -18,6 +19,7 @@ export interface ToolGroup {
 }
 
 export function createTools() {
+  const move = new MoveTool();
   const hand = new HandTool();
   const rotateView = new RotateViewTool();
   const zoom = new ZoomTool();
@@ -30,6 +32,7 @@ export function createTools() {
   const brush = new PaintingTool('brush');
   const eraser = new PaintingTool('eraser');
   const groups: ToolGroup[] = [
+    { id: 'move-group', tools: [move] },
     {
       id: 'marquee-group',
       tools: [marqueeRect, marqueeEllipse, marqueeRow, marqueeColumn],
@@ -43,6 +46,7 @@ export function createTools() {
   ];
   const byId = new Map<string, Tool>(groups.flatMap((g) => g.tools.map((t) => [t.id, t] as const)));
   return {
+    move,
     hand,
     rotateView,
     zoom,

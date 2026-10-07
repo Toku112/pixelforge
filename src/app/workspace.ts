@@ -52,6 +52,8 @@ export class Workspace {
   #task: { control: { cancelled: boolean }; label: string; fraction: number; shown: boolean } | null = null;
   #queue: Promise<void> = Promise.resolve();
   readonly #work = new Set<Promise<unknown>>();
+  #nextPreview: CommandDescriptor | null = null;
+  #previewRun: Promise<void> | null = null;
 
   constructor(options: WorkspaceOptions) {
     this.#options = options;
@@ -216,14 +218,20 @@ export class Workspace {
    * final value lands in the History as a single step from the original value.
    */
   preview(descriptor: CommandDescriptor): Promise<void> {
-    return this.#serial(async () => {
+    // Previews arriving faster than they run collapse: only the latest is shown.
+    this.#nextPreview = descriptor;
+    this.#previewRun ??= this.#serial(async () => {
+      const latest = this.#nextPreview!;
+      this.#nextPreview = null;
+      this.#previewRun = null;
       await this.#undoPreview();
       const session = this.active;
       if (!session || session.history.busy) return;
-      const command = this.registry.create({ doc: session.doc, services: this.#options.services }, descriptor);
+      const command = this.registry.create({ doc: session.doc, services: this.#options.services }, latest);
       await command.execute();
       this.#preview = { session, undo: () => command.undo() };
     });
+    return this.#previewRun;
   }
 
   /** Undoes a running preview (Escape, or before an undo/redo). */

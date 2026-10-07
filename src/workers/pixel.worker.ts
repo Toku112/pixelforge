@@ -12,6 +12,7 @@ import { clearMasked, invertMasked, type MaskedTarget } from '../core/selection/
 import { invertSelection, selectShape, type SelectionMode, type SelectionShape } from '../core/selection/mask-ops';
 import type { Dab } from '../core/paint/brush';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
+import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
 import { StrokeRenderer, type StrokeSetup } from '../core/paint/stroke';
 import { selectionOutline } from '../core/selection/outline';
 import type { MaskData } from '../core/selection/selection';
@@ -180,6 +181,16 @@ const conversions = {
       tiles,
       tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
     );
+  },
+
+  /** See PixelOps.movePixels: edited outputs not in shared memory come back (by index), the rest are null. */
+  movePixels(
+    setup: MovePixelsSetup,
+    sources: { tx: number; ty: number; data: SampleArray }[],
+    outputs: { tx: number; ty: number; data: SampleArray }[],
+  ): (SampleArray | null)[] {
+    movePixels(setup, sources, outputs);
+    return returnUnshared(outputs.map((o) => o.data));
   },
 
   /** See PixelOps.fill; same return convention as invertTiles. */

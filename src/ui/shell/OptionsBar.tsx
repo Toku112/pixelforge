@@ -2,6 +2,7 @@
 import type { SelectionMode } from '../../core/selection/mask-ops';
 import { resetView, setViewRotation } from '../../tools/rotate-view/rotate-view-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
+import { MoveTool } from '../../tools/move/move-tool';
 import { PaintingTool } from '../../tools/paint/paint-tool';
 import { MarqueeTool, SingleLineMarqueeTool, type MarqueeStyle } from '../../tools/selection/marquee-tool';
 import { SelectionTool } from '../../tools/selection/selection-tool';
@@ -23,6 +24,39 @@ const MARQUEE_STYLES: [MarqueeStyle, string][] = [
   ['fixed-ratio', 'Fixed Ratio'],
   ['fixed-size', 'Fixed Size'],
 ];
+
+/** Options of the Move tool. */
+function MoveOptions({ tool }: { tool: MoveTool }) {
+  const bump = useUi((s) => s.bumpToolOptions);
+  useUi((s) => s.toolOptionsVersion);
+  return (
+    <>
+      <label className="option-check">
+        <input
+          type="checkbox"
+          checked={tool.options.autoSelect}
+          onChange={(e) => {
+            tool.setOptions({ autoSelect: e.target.checked });
+            bump();
+          }}
+        />
+        Auto-Select:
+      </label>
+      <select
+        className="option-select"
+        aria-label="Auto-select target"
+        value={tool.options.autoSelectTarget}
+        onChange={(e) => {
+          tool.setOptions({ autoSelectTarget: e.target.value as 'layer' | 'group' });
+          bump();
+        }}
+      >
+        <option value="layer">Layer</option>
+        <option value="group">Group</option>
+      </select>
+    </>
+  );
+}
 
 /** Options of the Brush and Eraser. */
 function PaintOptions({ tool }: { tool: PaintingTool }) {
@@ -256,6 +290,7 @@ export function OptionsBar() {
       <span className="options-divider" />
       {tool instanceof SelectionTool && <SelectionOptions key={tool.id} tool={tool} />}
       {tool instanceof PaintingTool && <PaintOptions key={tool.id} tool={tool} />}
+      {tool instanceof MoveTool && <MoveOptions tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}
       {toolId === 'zoom' && (
         <>

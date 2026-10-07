@@ -40,6 +40,13 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
     invertSelection(current, canvas) {
       return worker.invertSelection(current, canvas);
     },
+    async movePixels(setup, sources, outputs) {
+      if (outputs.length === 0) return;
+      copyBack(
+        outputs.map((o) => o.data),
+        await worker.movePixels(setup, sources, outputs),
+      );
+    },
     async fill(tiles, format, through, spec, hdr) {
       if (tiles.length === 0) return;
       copyBack(tiles, await worker.fillTiles(tiles, format, through, spec, hdr));

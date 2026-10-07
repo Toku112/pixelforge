@@ -11,6 +11,7 @@ import { colorToSamples, type RGB } from '../core/color/color';
 import { paintTarget, strokeSetup, type PaintTool } from '../core/commands/builtin/paint';
 import { stepBrushSize, stepHardness, type BrushSettings } from '../core/paint/brush';
 import { PaintingTool } from '../tools/paint/paint-tool';
+import { SelectionTool } from '../tools/selection/selection-tool';
 import type { PaintHost, PaintStroke } from '../tools/types';
 import { PaintSession } from './paint-session';
 import { ColorSwatches } from './colors';
@@ -84,6 +85,7 @@ const TOOL_COMMANDS: Record<string, string> = {
   'tool.hand': 'hand',
   'tool.rotateView': 'rotate-view',
   'tool.zoom': 'zoom',
+  'tool.move': 'move',
   'tool.brush': 'brush',
   'tool.eraser': 'eraser',
 };
@@ -303,10 +305,32 @@ export class AppController {
     });
   }
 
+  /** Tells the user why something cannot be done. */
+  report(title: string, message: string): Promise<void> {
+    return this.#ui.alert(title, message);
+  }
+
+  /** Parameters a tool leaves to the app: the background colour for moving pixels on the Background. */
+  #withAppParams(descriptor: CommandDescriptor): CommandDescriptor {
+    if (descriptor.name !== 'moveSelectedPixels' || descriptor.params['color']) return descriptor;
+    const color = this.#backgroundSamples();
+    return color ? { ...descriptor, params: { ...descriptor.params, color } } : descriptor;
+  }
+
+  /** Live preview for a tool (null cancels it). */
+  async previewDocumentCommand(descriptor: CommandDescriptor | null): Promise<void> {
+    try {
+      if (descriptor) await this.workspace.preview(this.#withAppParams(descriptor));
+      else await this.workspace.cancelPreview();
+    } catch {
+      // A preview that cannot run shows nothing; the final command reports the reason.
+    }
+  }
+
   /** Runs a document command for a tool, reporting problems (cancelling is not one). */
   async runDocumentCommand(descriptor: CommandDescriptor): Promise<void> {
     try {
-      await this.workspace.execute(descriptor);
+      await this.workspace.execute(this.#withAppParams(descriptor));
     } catch (error) {
       if (error instanceof CommandCancelledError || error instanceof CommandUnavailableError) return;
       await this.#ui.alert('Something went wrong', error instanceof Error ? error.message : String(error));
@@ -644,6 +668,41 @@ export class AppController {
         enabled: () => paintTool() || ws.active !== null,
         run: () => this.#numberKey(digit, true),
       });
+    }
+
+    // Arrow keys: nudge the selected layers (or selected pixels) with the Move tool, or the
+    // selection outline with a selection tool; Shift moves 10 px.
+    const nudge = (dx: number, dy: number): CommandDescriptor | null => {
+      const doc = ws.active?.doc;
+      const toolId = this.#ui.activeToolId();
+      if (!doc) return null;
+      if (toolId === 'move') {
+        if (doc.selection && ws.canExecute('moveSelectedPixels'))
+          return { name: 'moveSelectedPixels', params: { dx, dy, nudge: true } };
+        return ws.canExecute('translateLayers') ? { name: 'translateLayers', params: { dx, dy, nudge: true } } : null;
+      }
+      const tool = this.tools.byId.get(toolId);
+      if (tool instanceof SelectionTool && doc.selection) return { name: 'moveSelection', params: { dx, dy } };
+      return null;
+    };
+    for (const [suffix, label, dx, dy] of [
+      ['Left', 'Left', -1, 0],
+      ['Right', 'Right', 1, 0],
+      ['Up', 'Up', 0, -1],
+      ['Down', 'Down', 0, 1],
+    ] as const) {
+      for (const step of [1, 10]) {
+        const descriptor = () => nudge(dx * step, dy * step);
+        add({
+          id: `move.nudge${suffix}${step === 10 ? '10' : ''}`,
+          label: `Nudge ${label}${step === 10 ? ' 10 px' : ''}`,
+          enabled: () => !toolBusy() && descriptor() !== null,
+          run: () => {
+            const d = descriptor();
+            return d ? this.runDocumentCommand(d) : undefined;
+          },
+        });
+      }
     }
 
     // Colours

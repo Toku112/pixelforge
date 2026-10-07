@@ -2,6 +2,7 @@
 import type { IconName } from './icons';
 
 export const TOOL_ICONS: Readonly<Record<string, IconName>> = {
+  move: 'move',
   hand: 'hand',
   'rotate-view': 'rotateView',
   zoom: 'zoom',

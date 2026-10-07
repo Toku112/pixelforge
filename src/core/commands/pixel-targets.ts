@@ -30,16 +30,18 @@ export function wholeLayerTiles(doc: ImageDocument, layer: PixelLayer): [number,
 }
 
 /**
- * The layer tiles a selection-limited edit touches (those of `wholeLayerTiles`
- * meeting the selection's bounds), with the selection data for the worker.
+ * The layer tiles a selection-limited edit touches (the `candidates` — by default
+ * those of `wholeLayerTiles` — meeting the selection's bounds), with the selection
+ * data for the worker.
  */
 export function selectedLayerTiles(
   doc: ImageDocument,
   layer: PixelLayer,
   selection: Selection,
+  candidates: [number, number][] = wholeLayerTiles(doc, layer),
 ): { coords: [number, number][]; through: MaskedTarget } {
   const bounds = selection.bounds(doc.canvasRect);
-  const coords = wholeLayerTiles(doc, layer).filter(
+  const coords = candidates.filter(
     ([tx, ty]) =>
       !isEmptyRect(
         intersectRects(bounds, {

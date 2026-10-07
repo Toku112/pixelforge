@@ -217,6 +217,12 @@ const icons = {
       <rect x="9.5" y="9.5" width="5" height="5" fill="currentColor" fillOpacity="0.5" stroke="none" />
     </Svg>
   ),
+  move: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M5 3.5 5 17l3.5-3.2 2.4 5.5 2.6-1.1-2.4-5.4 4.9-.3Z" />
+      <path d="M17 13.5v7M13.5 17h7" />
+    </Svg>
+  ),
   brush: (p: IconProps) => (
     <Svg {...p}>
       <path d="M20 3.5 11.5 12" />

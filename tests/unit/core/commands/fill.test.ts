@@ -40,6 +40,15 @@ describe('Edit > Fill', () => {
     expect(doc.background!.buffer.getPixel(150, 150)).toEqual([255, 255, 255]);
   });
 
+  it('fills the selection on a new, empty layer', async () => {
+    const { doc, run } = setup();
+    const layer = addLayer(doc);
+    await run('selectShape', { tool: 'rectangular-marquee', shape: { kind: 'rect', x: 60, y: 40, w: 20, h: 20 } });
+    await run('fill', { color: [255, 0, 0] });
+    expect(layer.buffer.getPixel(70, 50)).toEqual([255, 0, 0, 255]);
+    expect(layer.buffer.getPixel(10, 10)).toEqual([0, 0, 0, 0]);
+  });
+
   it('fills a transparent layer over the whole canvas (not beyond it)', async () => {
     const { doc, run } = setup();
     const layer = addLayer(doc);

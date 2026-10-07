@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D items 1–8 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill)
-- Next up: Part D item 9 (Move tool)
+- Last completed: Part D items 1–9 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool)
+- Next up: Part D item 10 (Crop tool and Image > Crop; Image Size; Canvas Size; Image Rotation)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -595,7 +595,8 @@ scope (all modes, masks, etc.) is complete.
   ↳ note: Opacity caps a stroke, Flow builds up; Shift-click lines; selection and locked transparency respected; strokes recorded as replayable descriptors (D-028). Not in this item (Phase 2 painting engine): brush blend modes (the blend-mode shortcuts must then set the tool's mode while a painting tool is active; until then they do nothing with the Brush/Eraser), Brush Settings panel and presets, tilt/rotation, smoothing, Alt+right-drag size HUD, Pencil.
 - [x] Edit > Fill (foreground/background/colour/black/white/50% gray, mode, opacity, preserve transparency) and Delete/Backspace fills
   ↳ note: Fill dialog (Color… opens the Color Picker over it), Alt/Ctrl+Backspace quick fills (Shift: preserve transparency), Delete on the Background opens Fill (D-029). Content-Aware, Pattern and History contents come with their features (PatchMatch, patterns, History Brush).
-- [ ] Move tool: move layers (and selected pixels), auto-select, arrow nudge (Shift = 10 px), Alt-drag duplicate
+- [x] Move tool: move layers (and selected pixels), auto-select, arrow nudge (Shift = 10 px), Alt-drag duplicate
+  ↳ note: also Shift-constrained drags, live preview, arrows moving the selection outline with selection tools (D-030). Not in this item (Part B): transform controls, align/distribute buttons, moving between documents.
 - [ ] Crop tool and Image > Crop; Image Size (resample methods); Canvas Size (anchor, relative); Image Rotation (180°, 90° CW/CCW, Flip Canvas)
 - [ ] Free Transform (Ctrl/Cmd+T): scale, rotate, skew, distort, perspective, numeric fields, reference point, interpolation
 - [ ] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd

@@ -20,6 +20,9 @@ function setup(zoom = 1) {
     execute: () => {},
     paint: null,
     setBrushOutline: () => {},
+    preview: () => {},
+    selectLayers: () => {},
+    report: () => {},
   };
   return { viewport, ctx, overlays, changes: () => changes };
 }

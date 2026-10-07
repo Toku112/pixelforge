@@ -386,3 +386,23 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   defaulting to Content-Aware, which arrives later).
 - Dialogs can stack (Fill opens the Color Picker); only the topmost reacts to Escape/Tab, and each dialog has its own
   title id (with a shared id, screen readers announced the picker as "Fill").
+
+## D-030 — 2026-10-07 — Move tool
+
+**Decision:**
+
+- Moves are relative commands (translateLayers, moveSelectedPixels with dx, dy), so recorded Actions move whatever is
+  selected on replay; drags show a live preview and record one "Move" step; arrow keys record "Nudge".
+- Previews that arrive faster than they can run collapse to the latest one, so heavy previews (moving many pixels)
+  never pile up.
+- Dragging inside a selection moves the active layer's selected pixels (cut, or copied with Alt) and the selection
+  outline with them; the vacated area becomes transparent, or the background colour where alpha cannot change.
+  Pixels moved outside the canvas stay on layers with transparency; the Background keeps only what is on the canvas.
+- Auto-Select (off by default) picks the topmost visible layer with a non-transparent pixel under the pointer (or its
+  outermost group); Ctrl/Cmd-click inverts the option for one click. Refusals ("The Background layer cannot be moved")
+  appear only when a drag actually starts.
+- Arrow keys move the selection outline when a selection tool is active and there is a selection.
+- Keyboard: app shortcuts pause while a modal dialog is open; navigation keys (arrows, Home/End, Page Up/Down, Enter,
+  Space) stay with lists, sliders and menus. Delete and tool letters still work there.
+- Duplicating a copy counts up ("Sky copy" → "Sky copy 2") instead of adding another "copy", as in the reference app.
+- Fix: Fill with a selection now also fills where a layer has no pixels yet (a new layer).

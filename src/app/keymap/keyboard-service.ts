@@ -70,6 +70,34 @@ function isEditable(target: EventTarget | null): boolean {
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
+/** Navigation keys that widgets (lists, sliders, menus) use themselves. */
+const WIDGET_KEYS = new Set([
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+  'Enter',
+  'Space',
+]);
+
+/** Widgets that handle navigation keys themselves (arrows in a list, a slider, a menu…). */
+const KEY_WIDGETS =
+  '[role="tree"], [role="slider"], [role="listbox"], [role="radiogroup"], [role="menu"], [role="menubar"], [role="tablist"]';
+
+function inKeyWidget(target: EventTarget | null): boolean {
+  if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement)) return false;
+  return target.closest(KEY_WIDGETS) !== null;
+}
+
+/** A modal dialog is open: it handles the keyboard itself. */
+function modalOpen(): boolean {
+  return typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]') !== null;
+}
+
 export interface KeyboardServiceOptions {
   keymap: Keymap;
   commands: AppCommandRegistry;
@@ -117,6 +145,8 @@ export class KeyboardService {
     // characters on macOS), and the text-editing chords edit the field.
     const typing = !chord.mod && !chord.ctrl;
     if (isEditable(e.target) && (typing || (TEXT_EDITING_KEYS.has(chord.key) && !chord.alt))) return;
+    if (inKeyWidget(e.target) && typing && WIDGET_KEYS.has(chord.key)) return;
+    if (modalOpen()) return;
 
     if (plain && this.#handleToolKey(chord, e)) return;
 
@@ -165,6 +195,13 @@ export class KeyboardService {
 
   /** Zoom and history steps repeat while the key is held; other commands fire once. */
   #repeats(commands: readonly string[]): boolean {
-    return commands.some((c) => c === 'view.zoomIn' || c === 'view.zoomOut' || c === 'edit.undo' || c === 'edit.redo');
+    return commands.some(
+      (c) =>
+        c === 'view.zoomIn' ||
+        c === 'view.zoomOut' ||
+        c === 'edit.undo' ||
+        c === 'edit.redo' ||
+        c.startsWith('move.nudge'),
+    );
   }
 }

@@ -127,8 +127,10 @@ export function suggestedCopyName(doc: ImageDocument, base: string): string {
 
 export function uniqueCopyName(doc: ImageDocument, base: string, taken: Set<string>): string {
   for (const l of doc.layers()) taken.add(l.name);
-  let name = `${base} copy`;
-  for (let n = 2; taken.has(name); n++) name = `${base} copy ${n}`;
+  // A copy of a copy counts up ("Sky copy" → "Sky copy 2") rather than adding another "copy".
+  const root = base.replace(/ copy( \d+)?$/, '');
+  let name = `${root} copy`;
+  for (let n = 2; taken.has(name); n++) name = `${root} copy ${n}`;
   taken.add(name);
   return name;
 }
