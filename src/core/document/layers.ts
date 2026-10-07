@@ -144,13 +144,31 @@ export interface LayerCapabilities {
   editPixels: boolean;
 }
 
+/** A layer's locks combined with those of the groups containing it (a group's locks apply to its contents). */
+export function effectiveLocks(layer: LayerNode): LayerLocks {
+  let locks = layer.locks;
+  for (let group = layer.parent; group; group = group.parent) {
+    const g = group.locks;
+    if (g === NO_LOCKS) continue;
+    locks = {
+      transparency: locks.transparency || g.transparency,
+      pixels: locks.pixels || g.pixels,
+      position: locks.position || g.position,
+      artboardNesting: locks.artboardNesting || g.artboardNesting,
+      all: locks.all || g.all,
+    };
+  }
+  return locks;
+}
+
 export function layerCapabilities(layer: LayerNode): LayerCapabilities {
   const background = layer.kind === 'pixel' && layer.isBackground;
+  const locks = effectiveLocks(layer);
   return {
-    move: !background && !layer.locks.position && !layer.locks.all,
+    move: !background && !locks.position && !locks.all,
     reorder: !background,
-    changeOpacity: !background && !layer.locks.all,
-    changeBlendMode: !background && !layer.locks.all,
-    editPixels: layer.kind === 'pixel' && !layer.locks.pixels && !layer.locks.all,
+    changeOpacity: !background && !locks.all,
+    changeBlendMode: !background && !locks.all,
+    editPixels: layer.kind === 'pixel' && !locks.pixels && !locks.all,
   };
 }

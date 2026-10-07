@@ -19,7 +19,14 @@
  * undo/redo stays correct even after the history restores a snapshot.
  */
 import type { ImageDocument } from '../../document/document';
-import { GroupLayer, PixelLayer, type LayerNode } from '../../document/layers';
+import {
+  GroupLayer,
+  LAYER_BLEND_MODES,
+  PixelLayer,
+  effectiveLocks,
+  type BlendMode,
+  type LayerNode,
+} from '../../document/layers';
 import { adoptTile, allocateTile, type Tile } from '../../document/tile';
 import { TiledBuffer } from '../../document/tiled-buffer';
 import { cloneLayer, detach, layerTreeTiles } from '../../history/snapshot';
@@ -49,6 +56,46 @@ function captureSelection(doc: ImageDocument): Selection {
 function restoreSelection(doc: ImageDocument, sel: Selection): void {
   const ids = sel.ids.filter((id) => doc.getLayer(id));
   doc.selectLayers(ids, sel.active && ids.includes(sel.active) ? sel.active : (ids.at(-1) ?? null));
+}
+
+/** Name, blend mode and opacity chosen in the New Layer / New Group dialogs. */
+interface LayerOptions {
+  name?: string;
+  blendMode?: BlendMode;
+  opacity?: number;
+}
+
+function parseLayerOptions(p: JsonObject, allowPassThrough: boolean): LayerOptions {
+  const options: LayerOptions = {};
+  const name = optionalString(p['name'], 'name');
+  if (name !== undefined) options.name = name;
+  const mode = p['blendMode'];
+  if (mode !== undefined) {
+    const valid =
+      (allowPassThrough && mode === 'pass-through') || (LAYER_BLEND_MODES as readonly unknown[]).includes(mode);
+    if (!valid) throw new Error('blendMode is not a valid blend mode');
+    options.blendMode = mode as BlendMode;
+  }
+  const opacity = p['opacity'];
+  if (opacity !== undefined) {
+    if (typeof opacity !== 'number' || !(opacity >= 0 && opacity <= 1))
+      throw new Error('opacity must be between 0 and 1');
+    options.opacity = opacity;
+  }
+  return options;
+}
+
+function layerOptionParams(options: LayerOptions): JsonObject {
+  const params: JsonObject = {};
+  if (options.name !== undefined) params['name'] = options.name;
+  if (options.blendMode !== undefined) params['blendMode'] = options.blendMode;
+  if (options.opacity !== undefined) params['opacity'] = options.opacity;
+  return params;
+}
+
+function applyLayerOptions(layer: LayerNode, options: LayerOptions): void {
+  if (options.blendMode !== undefined) layer.blendMode = options.blendMode;
+  if (options.opacity !== undefined) layer.opacity = options.opacity;
 }
 
 function stringArray(value: unknown, name: string): string[] | undefined {
@@ -108,6 +155,11 @@ function moveAbove(doc: ImageDocument, id: string, parentId: string, anchorId: s
 }
 
 /** Layer names in the document, for "copy", "copy 2" naming. */
+/** The name a duplicate of a layer named `base` gets ("Sky copy", "Sky copy 2"…). */
+export function suggestedCopyName(doc: ImageDocument, base: string): string {
+  return uniqueCopyName(doc, base, new Set());
+}
+
 function uniqueCopyName(doc: ImageDocument, base: string, taken: Set<string>): string {
   for (const l of doc.layers()) taken.add(l.name);
   let name = `${base} copy`;
@@ -172,21 +224,25 @@ abstract class LayerCommand implements Command {
 class NewLayerCommand extends LayerCommand {
   readonly label = 'New Layer';
   readonly descriptor: { name: string; params: JsonObject };
-  readonly #name: string | undefined;
+  readonly #options: LayerOptions;
   #id: string | null = null;
   #layerName: string | null = null;
   #place: { parentId: string; index: number } | null = null;
 
-  constructor(ctx: CommandContext, name: string | undefined) {
+  constructor(ctx: CommandContext, options: LayerOptions) {
     super(ctx);
-    this.#name = name;
-    this.descriptor = { name: 'newLayer', params: name === undefined ? {} : { name } };
+    this.#options = options;
+    this.descriptor = { name: 'newLayer', params: layerOptionParams(options) };
   }
 
   execute(): void {
     this.selectionBefore = captureSelection(this.doc);
     this.#id ??= this.doc.newLayerId();
-    this.#layerName ??= this.#name ?? this.doc.nextLayerName();
+    // The number is used up even when the dialog gave another name (as in the reference app).
+    if (this.#layerName === null) {
+      const numbered = this.doc.nextLayerName();
+      this.#layerName = this.#options.name ?? numbered;
+    }
     this.#place ??= insertionAbove(this.doc, this.doc.activeLayerId);
     this.redo();
   }
@@ -202,6 +258,7 @@ class NewLayerCommand extends LayerCommand {
       this.#layerName!,
       new TiledBuffer(this.doc.layerFormat(true), { memory: this.doc.memory }),
     );
+    applyLayerOptions(layer, this.#options);
     this.doc.insertLayer(layer, this.#place!.parentId, this.#place!.index);
     this.doc.setActiveLayer(layer.id);
   }
@@ -232,7 +289,7 @@ class DeleteLayersCommand extends LayerCommand {
     const doc = this.doc;
     const targets = topLevelTargets(doc, this.#ids);
     if (targets.length === 0) throw new CommandUnavailableError('No layer is selected');
-    const locked = targets.find((id) => doc.requireLayer(id).locks.all);
+    const locked = targets.find((id) => effectiveLocks(doc.requireLayer(id)).all);
     if (locked) throw new CommandUnavailableError(`“${doc.requireLayer(locked).name}” is locked`);
     const remaining = doc.root.children.filter((l) => !targets.includes(l.id)).length;
     if (remaining === 0) throw new CommandUnavailableError('A document must keep at least one layer');
@@ -281,12 +338,17 @@ class DuplicateLayersCommand extends LayerCommand {
   readonly label = 'Duplicate Layer';
   readonly descriptor: { name: string; params: JsonObject };
   readonly #ids: string[] | undefined;
+  readonly #name: string | undefined;
   #copies: (Placement & { copy: LayerNode })[] = [];
 
-  constructor(ctx: CommandContext, ids: string[] | undefined) {
+  constructor(ctx: CommandContext, ids: string[] | undefined, name: string | undefined) {
     super(ctx);
     this.#ids = ids;
-    this.descriptor = { name: 'duplicateLayers', params: ids ? { layerIds: ids } : {} };
+    this.#name = name;
+    const params: JsonObject = {};
+    if (ids) params['layerIds'] = ids;
+    if (name !== undefined) params['name'] = name;
+    this.descriptor = { name: 'duplicateLayers', params };
   }
 
   retainedTiles(): Iterable<Tile> {
@@ -300,11 +362,12 @@ class DuplicateLayersCommand extends LayerCommand {
     this.selectionBefore = captureSelection(doc);
 
     // Build every copy first (converting a Background needs the worker), then insert.
+    if (this.#name !== undefined && targets.length > 1) throw new Error('duplicateLayers: a name needs a single layer');
     const taken = new Set<string>();
     const built: { sourceId: string; layer: LayerNode }[] = [];
     for (const id of targets) {
       const source = doc.requireLayer(id);
-      const name = uniqueCopyName(doc, source.name, taken);
+      const name = this.#name ?? uniqueCopyName(doc, source.name, taken);
       let layer: LayerNode;
       if (source.kind === 'pixel' && source.isBackground) {
         layer = new PixelLayer(doc.newLayerId(), name, await backgroundToLayerBuffer(doc, source, this.ctx.services));
@@ -347,21 +410,24 @@ class DuplicateLayersCommand extends LayerCommand {
 class NewGroupCommand extends LayerCommand {
   readonly label = 'New Group';
   readonly descriptor: { name: string; params: JsonObject };
-  readonly #name: string | undefined;
+  readonly #options: LayerOptions;
   #id: string | null = null;
   #groupName: string | null = null;
   #place: { parentId: string; index: number } | null = null;
 
-  constructor(ctx: CommandContext, name: string | undefined) {
+  constructor(ctx: CommandContext, options: LayerOptions) {
     super(ctx);
-    this.#name = name;
-    this.descriptor = { name: 'newGroup', params: name === undefined ? {} : { name } };
+    this.#options = options;
+    this.descriptor = { name: 'newGroup', params: layerOptionParams(options) };
   }
 
   execute(): void {
     this.selectionBefore = captureSelection(this.doc);
     this.#id ??= this.doc.newLayerId();
-    this.#groupName ??= this.#name ?? this.doc.nextGroupName();
+    if (this.#groupName === null) {
+      const numbered = this.doc.nextGroupName();
+      this.#groupName = this.#options.name ?? numbered;
+    }
     this.#place ??= insertionAbove(this.doc, this.doc.activeLayerId);
     this.redo();
   }
@@ -372,7 +438,9 @@ class NewGroupCommand extends LayerCommand {
   }
 
   redo(): void {
-    this.doc.insertLayer(new GroupLayer(this.#id!, this.#groupName!), this.#place!.parentId, this.#place!.index);
+    const group = new GroupLayer(this.#id!, this.#groupName!);
+    applyLayerOptions(group, this.#options);
+    this.doc.insertLayer(group, this.#place!.parentId, this.#place!.index);
     this.doc.setActiveLayer(this.#id);
   }
 }
@@ -381,18 +449,17 @@ class GroupLayersCommand extends LayerCommand {
   readonly label = 'Group Layers';
   readonly descriptor: { name: string; params: JsonObject };
   readonly #ids: string[] | undefined;
-  readonly #name: string | undefined;
+  readonly #options: LayerOptions;
   #groupId: string | null = null;
   #groupName: string | null = null;
   #placements: Placement[] = [];
 
-  constructor(ctx: CommandContext, ids: string[] | undefined, name: string | undefined) {
+  constructor(ctx: CommandContext, ids: string[] | undefined, options: LayerOptions) {
     super(ctx);
     this.#ids = ids;
-    this.#name = name;
-    const params: JsonObject = {};
+    this.#options = options;
+    const params: JsonObject = layerOptionParams(options);
     if (ids) params['layerIds'] = ids;
-    if (name !== undefined) params['name'] = name;
     this.descriptor = { name: 'groupLayers', params };
   }
 
@@ -411,7 +478,10 @@ class GroupLayersCommand extends LayerCommand {
     this.selectionBefore = captureSelection(doc);
     this.#placements = recordPlacements(doc, targets);
     this.#groupId ??= doc.newLayerId();
-    this.#groupName ??= this.#name ?? doc.nextGroupName();
+    if (this.#groupName === null) {
+      const numbered = doc.nextGroupName();
+      this.#groupName = this.#options.name ?? numbered;
+    }
     this.redo();
   }
 
@@ -424,6 +494,7 @@ class GroupLayersCommand extends LayerCommand {
   redo(): void {
     const top = this.#placements.at(-1)!;
     const group = new GroupLayer(this.#groupId!, this.#groupName!);
+    applyLayerOptions(group, this.#options);
     this.doc.insertLayer(group, top.parentId, this.doc.positionOf(top.id).index + 1);
     for (const p of this.#placements) this.doc.moveLayer(p.id, group.id, group.children.length);
     this.doc.setActiveLayer(group.id);
@@ -586,14 +657,14 @@ function arrange(doc: ImageDocument, targets: string[], mode: ArrangeMode): void
 class LayerFromBackgroundCommand extends LayerCommand {
   readonly label = 'Layer From Background';
   readonly descriptor: { name: string; params: JsonObject };
-  readonly #name: string;
+  readonly #options: LayerOptions;
   #before: LayerNode | null = null;
   #after: LayerNode | null = null;
 
-  constructor(ctx: CommandContext, name: string | undefined) {
+  constructor(ctx: CommandContext, options: LayerOptions) {
     super(ctx);
-    this.#name = name ?? 'Layer 0';
-    this.descriptor = { name: 'layerFromBackground', params: name === undefined ? {} : { name } };
+    this.#options = options;
+    this.descriptor = { name: 'layerFromBackground', params: layerOptionParams(options) };
   }
 
   retainedTiles(): Iterable<Tile> {
@@ -607,10 +678,11 @@ class LayerFromBackgroundCommand extends LayerCommand {
     this.selectionBefore = captureSelection(doc);
     const layer = new PixelLayer(
       background.id,
-      this.#name,
+      this.#options.name ?? 'Layer 0',
       await backgroundToLayerBuffer(doc, background, this.ctx.services),
     );
     layer.visible = background.visible;
+    applyLayerOptions(layer, this.#options);
     this.#before = detach(cloneLayer(background));
     doc.removeLayer(background.id);
     doc.insertLayer(layer, doc.root.id, 0);
@@ -638,11 +710,11 @@ class LayerFromBackgroundCommand extends LayerCommand {
 // Definitions
 // ---------------------------------------------------------------------------
 
-const optionalString = (v: unknown, name: string): string | undefined => {
+function optionalString(v: unknown, name: string): string | undefined {
   if (v === undefined) return undefined;
   if (typeof v !== 'string') throw new Error(`${name} must be a string`);
   return v;
-};
+}
 
 const hasSelection = (ctx: CommandContext) => ctx.doc.selectedLayerIds.length > 0;
 const selectionIsMovable = (ctx: CommandContext) =>
@@ -653,24 +725,29 @@ const selectionIsMovable = (ctx: CommandContext) =>
   });
 
 export const layerCommands: CommandDefinition[] = [
-  { name: 'newLayer', create: (ctx, p) => new NewLayerCommand(ctx, optionalString(p['name'], 'name')) },
+  { name: 'newLayer', create: (ctx, p) => new NewLayerCommand(ctx, parseLayerOptions(p, false)) },
   {
     name: 'deleteLayers',
     isAvailable: (ctx) =>
-      hasSelection(ctx) && ctx.doc.root.children.some((l) => !ctx.doc.selectedLayerIds.includes(l.id)),
+      hasSelection(ctx) &&
+      ctx.doc.root.children.some((l) => !ctx.doc.selectedLayerIds.includes(l.id)) &&
+      !ctx.doc.selectedLayerIds.some((id) => {
+        const l = ctx.doc.getLayer(id);
+        return l !== undefined && effectiveLocks(l).all;
+      }),
     create: (ctx, p) => new DeleteLayersCommand(ctx, stringArray(p['layerIds'], 'layerIds')),
   },
   {
     name: 'duplicateLayers',
     isAvailable: hasSelection,
-    create: (ctx, p) => new DuplicateLayersCommand(ctx, stringArray(p['layerIds'], 'layerIds')),
+    create: (ctx, p) =>
+      new DuplicateLayersCommand(ctx, stringArray(p['layerIds'], 'layerIds'), optionalString(p['name'], 'name')),
   },
-  { name: 'newGroup', create: (ctx, p) => new NewGroupCommand(ctx, optionalString(p['name'], 'name')) },
+  { name: 'newGroup', create: (ctx, p) => new NewGroupCommand(ctx, parseLayerOptions(p, true)) },
   {
     name: 'groupLayers',
     isAvailable: selectionIsMovable,
-    create: (ctx, p) =>
-      new GroupLayersCommand(ctx, stringArray(p['layerIds'], 'layerIds'), optionalString(p['name'], 'name')),
+    create: (ctx, p) => new GroupLayersCommand(ctx, stringArray(p['layerIds'], 'layerIds'), parseLayerOptions(p, true)),
   },
   {
     name: 'ungroup',
@@ -725,6 +802,6 @@ export const layerCommands: CommandDefinition[] = [
   {
     name: 'layerFromBackground',
     isAvailable: (ctx) => !!ctx.doc.background,
-    create: (ctx, p) => new LayerFromBackgroundCommand(ctx, optionalString(p['name'], 'name')),
+    create: (ctx, p) => new LayerFromBackgroundCommand(ctx, parseLayerOptions(p, false)),
   },
 ];

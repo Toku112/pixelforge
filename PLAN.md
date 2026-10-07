@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D item 3 (all 27 blend modes, CPU + GPU, with shortcuts); item 1 before it
-- Next up: Part D item 2 (Layers panel)
+- Last completed: Part D items 1–3 (layer commands, Layers panel with dialogs, all 27 blend modes)
+- Next up: Part D item 4 (Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -581,7 +581,8 @@ scope (all modes, masks, etc.) is complete.
 
 - [x] Layer model and commands: multi-layer selection; New/Delete/Duplicate/Rename layer; New Group, Group/Ungroup; reorder and Arrange (bring forward/to front, send backward/to back); visibility, locks, opacity, fill, blend mode; Layer from Background
   ↳ note: Background from Layer moved to the merge/flatten item (it needs the same compositing step); the New Layer / Duplicate Layer dialogs come with the Layers panel.
-- [ ] Layers panel: thumbnails, visibility (Alt-click solo), rename, blend mode menu, Opacity/Fill fields, lock buttons, new/delete/group buttons, drag to reorder, multi-select, group expand/collapse
+- [x] Layers panel: thumbnails, visibility (Alt-click solo), rename, blend mode menu, Opacity/Fill fields, lock buttons, new/delete/group buttons, drag to reorder, multi-select, group expand/collapse
+  ↳ note: includes the New Layer, New Group, Group from Layers, Layer from Background and Duplicate Layer dialogs and keyboard navigation (D-024). Not in this item (Part B Layers panel): filtering by kind, colour labels, Panel Options (thumbnail size/contents), Alt-drag to duplicate, dragging across eyes, row context menu, mask/fx/adjustment buttons (their phases).
 - [x] All 27 blend modes with Photoshop math in the CPU and GPU compositors (incl. Dissolve, Darker/Lighter Color, Hue/Saturation/Color/Luminosity, Fill vs Opacity for the "special eight"); Shift+/− and Alt+Shift+letter blend-mode shortcuts
   ↳ note: formulas in FORMAT_NOTES §3, choices in D-023. The blend-mode menu itself comes with the Layers panel; PSD blend-mode keys with the PSD item; CMYK on screen with Phase 7. The Special-eight Fill formula should be re-checked against real reference files when the owner provides them.
 - [ ] Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer (composited off the main thread)

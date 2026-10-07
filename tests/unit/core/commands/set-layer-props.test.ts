@@ -65,7 +65,7 @@ describe('setLayerProps on several layers', () => {
       name: 'setLayerProps',
       params: { layerIds: [layer.id, other.id], props: { visible: false } },
     });
-    expect(cmd.label).toBe('Hide Layer');
+    expect(cmd.label).toBe('Hide Layers');
     await cmd.execute();
     expect([layer.visible, other.visible]).toEqual([false, false]);
     cmd.undo();
@@ -76,5 +76,39 @@ describe('setLayerProps on several layers', () => {
     });
     await expect(async () => bad.execute()).rejects.toThrow('fully opaque');
     expect(layer.opacity).toBe(1);
+  });
+});
+
+describe('setLayerProps with different changes per layer', () => {
+  it('applies each layer its own properties as one step (Alt-click solo)', async () => {
+    const { doc, ctx, registry, layer } = setup();
+    const other = doc.createPixelLayer();
+    doc.insertLayer(other);
+    doc.updateLayer(layer.id, { visible: false });
+    const cmd = registry.create(ctx, {
+      name: 'setLayerProps',
+      params: {
+        changes: [
+          { layerId: layer.id, props: { visible: true } },
+          { layerId: other.id, props: { visible: false } },
+          { layerId: doc.background!.id, props: { visible: false } },
+        ],
+      },
+    });
+    expect(cmd.label).toBe('Show/Hide Layers');
+    expect(cmd.descriptor.params).toEqual({
+      changes: [
+        { layerId: layer.id, props: { visible: true } },
+        { layerId: other.id, props: { visible: false } },
+        { layerId: doc.background!.id, props: { visible: false } },
+      ],
+    });
+    await cmd.execute();
+    expect([layer.visible, other.visible, doc.background!.visible]).toEqual([true, false, false]);
+    cmd.undo();
+    expect([layer.visible, other.visible, doc.background!.visible]).toEqual([false, true, true]);
+    expect(() =>
+      registry.create(ctx, { name: 'setLayerProps', params: { changes: [{ props: { visible: true } }] } }),
+    ).toThrow('layerId');
   });
 });

@@ -55,56 +55,93 @@ function labelFor(props: LayerPropChanges): string {
   return 'Layer Properties';
 }
 
+interface LayerChange {
+  id: string;
+  props: LayerPropChanges;
+}
+
 class SetLayerPropsCommand implements Command {
   readonly label: string;
   readonly descriptor: { name: string; params: JsonObject };
   readonly undoBytes = 0;
   readonly #ctx: CommandContext;
-  readonly #layerIds: string[];
-  readonly #props: LayerPropChanges;
+  readonly #changes: LayerChange[];
   #previous: LayerPropChanges[] = [];
 
-  constructor(ctx: CommandContext, layerIds: string[], props: LayerPropChanges, single: boolean) {
+  constructor(ctx: CommandContext, changes: LayerChange[], params: JsonObject) {
     this.#ctx = ctx;
-    this.#layerIds = layerIds;
-    this.#props = props;
-    this.label = labelFor(props);
-    const target: JsonObject = single ? { layerId: layerIds[0]! } : { layerIds };
-    this.descriptor = { name: 'setLayerProps', params: { ...target, props: props as unknown as JsonObject } };
+    this.#changes = changes;
+    const visibilityOnly = changes.every((c) => Object.keys(c.props).length === 1 && 'visible' in c.props);
+    const shown = new Set(changes.map((c) => c.props.visible));
+    if (visibilityOnly && changes.length > 1) {
+      this.label = shown.size > 1 ? 'Show/Hide Layers' : shown.has(true) ? 'Show Layers' : 'Hide Layers';
+    } else {
+      this.label = labelFor(changes[0]!.props);
+    }
+    this.descriptor = { name: 'setLayerProps', params };
   }
 
   execute(): void {
     const doc = this.#ctx.doc;
     // Check every layer first so a refusal leaves nothing half-changed.
-    for (const id of this.#layerIds) doc.requireLayer(id);
+    for (const c of this.#changes) doc.requireLayer(c.id);
     this.#previous = [];
     try {
-      for (const id of this.#layerIds) this.#previous.push(doc.updateLayer(id, this.#props));
+      for (const c of this.#changes) this.#previous.push(doc.updateLayer(c.id, c.props));
     } catch (error) {
-      this.#previous.forEach((prev, i) => doc.updateLayer(this.#layerIds[i]!, prev));
+      this.#previous.forEach((prev, i) => doc.updateLayer(this.#changes[i]!.id, prev));
       throw error;
     }
   }
 
   undo(): void {
-    this.#previous.forEach((prev, i) => this.#ctx.doc.updateLayer(this.#layerIds[i]!, prev));
+    for (let i = this.#previous.length - 1; i >= 0; i--)
+      this.#ctx.doc.updateLayer(this.#changes[i]!.id, this.#previous[i]!);
   }
 
   redo(): void {
-    for (const id of this.#layerIds) this.#ctx.doc.updateLayer(id, this.#props);
+    for (const c of this.#changes) this.#ctx.doc.updateLayer(c.id, c.props);
   }
 }
 
-/** Changes properties of one layer (`layerId`) or several at once (`layerIds`), as one history step. */
+const toJson = (props: LayerPropChanges) => props as unknown as JsonObject;
+
+const isIdList = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.length > 0 && v.every((id) => typeof id === 'string');
+
+/**
+ * Changes properties of one layer (`layerId`), the same properties of several
+ * (`layerIds`), or different properties per layer (`changes: [{ layerId, props }]`),
+ * always as one history step.
+ */
 export const setLayerPropsCommand: CommandDefinition = {
   name: 'setLayerProps',
   create: (ctx, params) => {
     const single = params['layerId'];
     const many = params['layerIds'];
-    if (typeof single === 'string') return new SetLayerPropsCommand(ctx, [single], parseProps(params['props']), true);
-    if (Array.isArray(many) && many.length > 0 && many.every((v) => typeof v === 'string')) {
-      return new SetLayerPropsCommand(ctx, many, parseProps(params['props']), false);
+    const changes = params['changes'];
+    if (typeof single === 'string') {
+      const props = parseProps(params['props']);
+      return new SetLayerPropsCommand(ctx, [{ id: single, props }], { layerId: single, props: toJson(props) });
     }
-    throw new Error('setLayerProps: layerId must be a string (or layerIds a list of layer ids)');
+    if (isIdList(many)) {
+      const props = parseProps(params['props']);
+      return new SetLayerPropsCommand(
+        ctx,
+        many.map((id) => ({ id, props })),
+        { layerIds: many, props: toJson(props) },
+      );
+    }
+    if (Array.isArray(changes) && changes.length > 0) {
+      const list = changes.map((c) => {
+        if (typeof c !== 'object' || c === null || Array.isArray(c) || typeof c['layerId'] !== 'string')
+          throw new Error('setLayerProps: each change needs a layerId and props');
+        return { id: c['layerId'], props: parseProps(c['props']) };
+      });
+      return new SetLayerPropsCommand(ctx, list, {
+        changes: list.map((c) => ({ layerId: c.id, props: toJson(c.props) })),
+      });
+    }
+    throw new Error('setLayerProps: layerId must be a string (or layerIds a list of layer ids, or changes a list)');
   },
 };

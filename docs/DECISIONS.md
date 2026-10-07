@@ -265,3 +265,27 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   in a text field these chords type characters instead. Once painting tools exist they will target the tool's mode
   while a painting tool is active, as in the reference app.
 - Lock All now also fixes a layer's opacity, fill and blend mode, and Pass Through is refused for pixel layers.
+
+## D-024 — 2026-10-07 — Layers panel
+
+**Decision:**
+
+- Thumbnails show the layer over the whole canvas (the reference app's default "Entire Document" contents), rendered
+  in the pixel worker: each thumbnail pixel averages up to 4 × 4 samples of its footprint, which looks smooth at
+  thumbnail size at a tiny fraction of the cost of averaging every pixel. They refresh one at a time after edits.
+- Selecting layers and expanding/collapsing groups are view state and not history steps, as in the reference app.
+  Visibility changes are history steps (as with its "make layer visibility changes undoable" History option on); the
+  option to turn that off belongs with History Options.
+- Dragging a value (Opacity/Fill labels) previews it live without recording; releasing records one step from the
+  original value. Previews and commands run strictly one after another so rapid drags cannot lose the original.
+- Deleting from the panel's button or the menus asks first ("Don't show again" is remembered in the browser, like the
+  panel layout, until a Preferences dialog exists); Alt/Option-click skips the question, and Delete/Backspace in the
+  focused layer list deletes without asking. For a group the question covers the group and its contents ("group
+  only" is what Ungroup Layers does).
+- A group's locks apply to everything inside it. The Background's locks are fixed.
+- A New Layer / New Group from the dialog uses up the next number even when renamed, so later layers keep counting
+  up. Group dialogs default to Pass Through.
+- Renaming: double-click the name, Enter in the focused list, or Layer > Rename Layer…. (F2 is Cut in the default
+  keymap.) Double-clicking the Background's name converts it to a normal layer through the New Layer dialog.
+- The Essentials workspace now includes the Layers panel; panel layouts saved before this change are replaced by the
+  new default once.

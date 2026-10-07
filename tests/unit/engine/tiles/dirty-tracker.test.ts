@@ -51,6 +51,17 @@ describe('DirtyTracker', () => {
     expect(sorted(tracker.consume().tiles)).toEqual(['0,0', '2,0']);
   });
 
+  it('ignores changes that do not affect the picture (name, expanded, locks)', () => {
+    const { doc, layer, tracker } = setup();
+    layer.buffer.writeRegion({ x: 0, y: 0, w: 1, h: 1 }, new Uint8Array(4));
+    tracker.consume();
+    doc.updateLayer(layer.id, { name: 'Renamed', locks: { ...layer.locks, pixels: true } });
+    doc.updateLayer(doc.background!.id, { name: 'Paper' });
+    expect(tracker.isDirty).toBe(false);
+    doc.updateLayer(layer.id, { opacity: 0.5 });
+    expect(sorted(tracker.consume().tiles)).toEqual(['0,0']);
+  });
+
   it('dirties everything on structure, canvas or Background changes', () => {
     const { doc, tracker } = setup();
     doc.insertLayer(doc.createPixelLayer());

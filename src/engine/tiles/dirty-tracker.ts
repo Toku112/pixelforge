@@ -26,6 +26,8 @@ export interface DirtySet {
   tiles: [number, number][];
 }
 
+/** Layer properties that do not change what the composite looks like. */
+const NON_VISUAL_PROPS: ReadonlySet<string> = new Set(['name', 'expanded', 'locks']);
 export class DirtyTracker {
   readonly #doc: ImageDocument;
   readonly #tiles = new Set<number>();
@@ -94,6 +96,7 @@ export class DirtyTracker {
         break;
       }
       case 'layer': {
+        if (change.props.every((p) => NON_VISUAL_PROPS.has(p))) return;
         const layer = this.#doc.getLayer(change.layerId);
         if (!layer) return;
         const before = this.#bounds.get(layer.id) ?? EMPTY_RECT;

@@ -174,6 +174,11 @@ export class ImageDocument {
     return `Layer ${this.#nextLayerNumber++}`;
   }
 
+  /** The name `nextLayerName()` would return, without using it up (dialog defaults). */
+  peekLayerName(): string {
+    return `Layer ${this.#nextLayerNumber}`;
+  }
+
   createPixelLayer(name = this.nextLayerName()): PixelLayer {
     const buffer = new TiledBuffer(this.layerFormat(true), { memory: this.memory });
     return new PixelLayer(this.newLayerId(), name, buffer);
@@ -188,6 +193,11 @@ export class ImageDocument {
   /** Default name for the next new group: "Group 1", "Group 2", … */
   nextGroupName(): string {
     return `Group ${this.#nextGroupNumber++}`;
+  }
+
+  /** The name `nextGroupName()` would return, without using it up. */
+  peekGroupName(): string {
+    return `Group ${this.#nextGroupNumber}`;
   }
 
   createGroup(name = this.nextGroupName()): GroupLayer {

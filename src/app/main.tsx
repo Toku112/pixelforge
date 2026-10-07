@@ -2,8 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../ui/App';
 import { AppProvider } from '../ui/AppContext';
-import { isPanelOpen, togglePanel } from '../ui/dock/dock-model';
-import { resetDock, useUi } from '../ui/state/ui-store';
+import { isPanelOpen, openPanel, togglePanel } from '../ui/dock/dock-model';
+import { isRemembered, resetDock, useUi } from '../ui/state/ui-store';
 import { AppController, type UiBridge } from './controller';
 import { createServices } from './services';
 import '../ui/styles/global.css';
@@ -23,6 +23,15 @@ const bridge: UiBridge = {
   confirmSave: (documentName) =>
     new Promise((resolve) => ui().pushDialog({ kind: 'confirm-save', documentName, resolve })),
   about: () => new Promise((resolve) => ui().pushDialog({ kind: 'about', resolve })),
+  openPanel: (id) => ui().setDock(openPanel(ui().dock, id)),
+  layerOptions: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'layer-options', ...request, resolve })),
+  duplicateLayer: (source, name) =>
+    new Promise((resolve) => ui().pushDialog({ kind: 'duplicate-layer', source, name, resolve })),
+  confirm: (request) =>
+    request.rememberKey && isRemembered(request.rememberKey)
+      ? Promise.resolve(true)
+      : new Promise((resolve) => ui().pushDialog({ kind: 'confirm', ...request, resolve })),
+  startRename: (layerId) => ui().setRenamingLayer(layerId),
 };
 
 const controller = new AppController(await createServices(), bridge);

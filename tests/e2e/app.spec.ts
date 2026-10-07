@@ -216,8 +216,8 @@ test('panels dock, group, float, collapse to icons and toggle from the Window me
   await page.mouse.down();
   await page.mouse.move(target.x + target.width + 20, target.y + target.height / 2, { steps: 8 });
   await page.mouse.up();
-  await expect(page.locator('[data-dock-tabstrip]')).toHaveCount(1);
-  await expect(page.locator('[data-dock-tabstrip]').getByRole('tab')).toHaveText(['Navigator', 'History']);
+  await expect(page.locator('[data-dock-tabstrip]')).toHaveCount(2); // Navigator + History, and Layers
+  await expect(page.locator('[data-dock-tabstrip]').first().getByRole('tab')).toHaveText(['Navigator', 'History']);
 
   // Drag History out to float it.
   await page.getByRole('tab', { name: 'History' }).hover();
@@ -244,7 +244,7 @@ test('panels dock, group, float, collapse to icons and toggle from the Window me
   await page.getByRole('menuitem', { name: 'Window' }).click();
   await page.getByRole('menuitem', { name: 'Workspace' }).hover();
   await page.getByRole('menuitem', { name: 'Reset Essentials' }).click();
-  await expect(page.locator('[data-dock-tabstrip]')).toHaveCount(2);
+  await expect(page.locator('[data-dock-tabstrip]')).toHaveCount(3);
   await expect(page.locator('[data-floating]')).toHaveCount(0);
 });
 

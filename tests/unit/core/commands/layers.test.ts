@@ -50,6 +50,56 @@ describe('New Layer', () => {
   });
 });
 
+describe('New Layer and New Group options (dialogs)', () => {
+  it('creates layers and groups with a chosen name, blend mode and opacity', async () => {
+    const { doc, history, run } = setup();
+    await run('newLayer', { name: 'Shadows', blendMode: 'multiply', opacity: 0.4 });
+    const layer = doc.activeLayer!;
+    expect([layer.name, layer.blendMode, layer.opacity]).toEqual(['Shadows', 'multiply', 0.4]);
+    await run('newGroup', { name: 'Looks', blendMode: 'normal', opacity: 0.5 });
+    const group = doc.activeLayer!;
+    expect([group.kind, group.name, group.blendMode, group.opacity]).toEqual(['group', 'Looks', 'normal', 0.5]);
+    await history.undo();
+    await history.undo();
+    await history.redo();
+    expect(doc.activeLayer!.blendMode).toBe('multiply');
+  });
+
+  it('groups layers into a group with options, and rejects invalid options', async () => {
+    const { doc, run } = setup();
+    await run('newLayer');
+    await run('groupLayers', { name: 'Set', blendMode: 'screen', opacity: 0.75 });
+    expect([doc.activeLayer!.name, doc.activeLayer!.blendMode, doc.activeLayer!.opacity]).toEqual([
+      'Set',
+      'screen',
+      0.75,
+    ]);
+    // Invalid descriptors are refused when the command is created.
+    expect(() => run('newLayer', { blendMode: 'pass-through' })).toThrow('blend mode');
+    expect(() => run('newLayer', { opacity: 2 })).toThrow('opacity');
+  });
+
+  it('names a single duplicate as asked', async () => {
+    const { doc, run } = setup();
+    await run('newLayer', { name: 'Sky' });
+    await run('duplicateLayers', { name: 'Sky backup' });
+    expect(tree(doc)).toEqual(['Sky backup', 'Sky', 'Background']);
+    doc.selectLayers(doc.root.children.slice(1).map((l) => l.id));
+    await expect(run('duplicateLayers', { name: 'Two' })).rejects.toThrow('single layer');
+  });
+
+  it('a group locked with Lock All locks its contents', async () => {
+    const { doc, run } = setup();
+    await run('newGroup');
+    await run('newLayer');
+    const child = doc.activeLayer!;
+    const group = child.parent!;
+    doc.updateLayer(group.id, { locks: { ...group.locks, all: true } });
+    expect(() => doc.updateLayer(child.id, { opacity: 0.5 })).toThrow('is locked');
+    await expect(run('deleteLayers', { layerIds: [child.id] })).rejects.toThrow('is locked');
+  });
+});
+
 describe('Delete Layer', () => {
   it('deletes the selected layers, selects the layer below, and undo restores pixels and selection', async () => {
     const { doc, history, run } = setup();

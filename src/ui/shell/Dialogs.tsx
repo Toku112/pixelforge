@@ -1,7 +1,10 @@
 /** Modal dialogs requested through the UI store (alerts, unsaved-changes prompt, About). */
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { APP_NAME } from '../../app/brand';
-import { useUi, type DialogRequest } from '../state/ui-store';
+import { BLEND_MODE_LABELS } from '../../core/composite/blend';
+import type { BlendMode } from '../../core/document/layers';
+import { NumberField } from '../controls/NumberField';
+import { remember, useUi, type DialogRequest } from '../state/ui-store';
 
 function Modal({ title, children, onCancel }: { title: string; children: ReactNode; onCancel: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -15,7 +18,9 @@ function Modal({ title, children, onCancel }: { title: string; children: ReactNo
         onCancel();
       } else if (e.key === 'Tab' && el) {
         // Keep focus inside the dialog.
-        const focusable = [...el.querySelectorAll<HTMLElement>('button, [href], input')];
+        const focusable = [...el.querySelectorAll<HTMLElement>('button, [href], input, select')].filter(
+          (f) => !f.hasAttribute('disabled'),
+        );
         const first = focusable[0];
         const last = focusable.at(-1);
         if (e.shiftKey && document.activeElement === first) {
@@ -37,6 +42,149 @@ function Modal({ title, children, onCancel }: { title: string; children: ReactNo
         {children}
       </div>
     </div>
+  );
+}
+
+/** Blend-mode menu options, grouped like the reference app's menu (separators between families). */
+export function BlendModeOptions({ modes }: { modes: readonly BlendMode[] }) {
+  const families: BlendMode[][] = [
+    ['pass-through', 'normal', 'dissolve'],
+    ['darken', 'multiply', 'color-burn', 'linear-burn', 'darker-color'],
+    ['lighten', 'screen', 'color-dodge', 'linear-dodge', 'lighter-color'],
+    ['overlay', 'soft-light', 'hard-light', 'vivid-light', 'linear-light', 'pin-light', 'hard-mix'],
+    ['difference', 'exclusion', 'subtract', 'divide'],
+    ['hue', 'saturation', 'color', 'luminosity'],
+  ];
+  const groups = families.map((f) => f.filter((m) => modes.includes(m))).filter((f) => f.length > 0);
+  return (
+    <>
+      {groups.map((group, i) => [
+        i > 0 ? (
+          <option key={`sep-${i}`} disabled aria-hidden="true">
+            ──────────
+          </option>
+        ) : null,
+        ...group.map((mode) => (
+          <option key={mode} value={mode}>
+            {BLEND_MODE_LABELS[mode]}
+          </option>
+        )),
+      ])}
+    </>
+  );
+}
+
+function LayerOptionsDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'layer-options' }> }) {
+  const close = useUi((s) => s.closeDialog);
+  const [name, setName] = useState(dialog.name);
+  const [blendMode, setBlendMode] = useState(dialog.blendMode);
+  const [opacity, setOpacity] = useState(Math.round(dialog.opacity * 100));
+  const cancel = () => (close(dialog), dialog.resolve(null));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    close(dialog);
+    dialog.resolve({ name: name.trim() === '' ? dialog.name : name, blendMode, opacity: opacity / 100 });
+  };
+  return (
+    <Modal title={dialog.title} onCancel={cancel}>
+      <form className="dialog-form" onSubmit={submit}>
+        <label className="dialog-field">
+          <span>Name</span>
+          <input
+            type="text"
+            value={name}
+            data-autofocus
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <label className="dialog-field">
+          <span>Mode</span>
+          <select value={blendMode} onChange={(e) => setBlendMode(e.target.value as BlendMode)}>
+            <BlendModeOptions modes={dialog.blendModes} />
+          </select>
+        </label>
+        <div className="dialog-field">
+          <span aria-hidden="true" />
+          <NumberField label="Opacity" value={opacity} onChange={setOpacity} min={0} max={100} suffix="%" />
+        </div>
+        <div className="modal-buttons">
+          <button type="submit" className="primary-button">
+            OK
+          </button>
+          <button type="button" onClick={cancel}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function DuplicateLayerDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'duplicate-layer' }> }) {
+  const close = useUi((s) => s.closeDialog);
+  const [name, setName] = useState(dialog.name);
+  const cancel = () => (close(dialog), dialog.resolve(null));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    close(dialog);
+    dialog.resolve(dialog.source === null || name.trim() === '' ? {} : { name });
+  };
+  return (
+    <Modal title={dialog.source === null ? 'Duplicate Layers' : 'Duplicate Layer'} onCancel={cancel}>
+      <form className="dialog-form" onSubmit={submit}>
+        <p>Duplicate: {dialog.source ?? 'the selected layers'}</p>
+        {dialog.source !== null && (
+          <label className="dialog-field">
+            <span>As</span>
+            <input
+              type="text"
+              value={name}
+              data-autofocus
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+        )}
+        <div className="modal-buttons">
+          <button type="submit" className="primary-button" data-autofocus={dialog.source === null || undefined}>
+            OK
+          </button>
+          <button type="button" onClick={cancel}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ConfirmDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'confirm' }> }) {
+  const close = useUi((s) => s.closeDialog);
+  const [dontAsk, setDontAsk] = useState(false);
+  const answer = (ok: boolean) => {
+    if (ok && dontAsk && dialog.rememberKey) remember(dialog.rememberKey);
+    close(dialog);
+    dialog.resolve(ok);
+  };
+  return (
+    <Modal title={dialog.title} onCancel={() => answer(false)}>
+      <p>{dialog.message}</p>
+      {dialog.rememberKey && (
+        <label className="option-check">
+          <input type="checkbox" checked={dontAsk} onChange={(e) => setDontAsk(e.target.checked)} />
+          Don’t show again
+        </label>
+      )}
+      <div className="modal-buttons">
+        <button type="button" className="primary-button" data-autofocus onClick={() => answer(true)}>
+          {dialog.confirmLabel}
+        </button>
+        <button type="button" onClick={() => answer(false)}>
+          Cancel
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -75,6 +223,12 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
         </Modal>
       );
     }
+    case 'layer-options':
+      return <LayerOptionsDialog dialog={dialog} />;
+    case 'duplicate-layer':
+      return <DuplicateLayerDialog dialog={dialog} />;
+    case 'confirm':
+      return <ConfirmDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (

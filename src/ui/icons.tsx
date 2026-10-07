@@ -103,6 +103,68 @@ const icons = {
       <path d="m9 6 6 6-6 6" />
     </Svg>
   ),
+  eye: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </Svg>
+  ),
+  layers: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="m12 4 8.5 4.5L12 13 3.5 8.5Z" />
+      <path d="m3.5 12.5 8.5 4.5 8.5-4.5" />
+      <path d="m3.5 16 8.5 4.5 8.5-4.5" />
+    </Svg>
+  ),
+  lock: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="1.5" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+    </Svg>
+  ),
+  lockTransparency: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="1" />
+      <path d="M4.5 12h15M12 4.5v15" />
+      <path d="M4.5 4.5h7.5V12H4.5ZM12 12h7.5v7.5H12Z" fill="currentColor" stroke="none" />
+    </Svg>
+  ),
+  lockPixels: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M19.5 4.5 11 13" />
+      <path d="M10.8 12.7a2.6 2.6 0 0 1 .5 3.7c-1.3 1.7-3.6 2.6-6.8 2.6.9-1.3.8-2.7 1.5-4 .8-1.6 3.4-3.6 4.8-2.3Z" />
+    </Svg>
+  ),
+  lockPosition: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M12 3.5v17M3.5 12h17" />
+      <path d="m9.5 6 2.5-2.5L14.5 6M9.5 18l2.5 2.5 2.5-2.5M6 9.5 3.5 12 6 14.5M18 9.5l2.5 2.5-2.5 2.5" />
+    </Svg>
+  ),
+  folder: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M3.5 7V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5V9.5A1.5 1.5 0 0 0 19 8h-7l-2-2.5H5A1.5 1.5 0 0 0 3.5 7Z" />
+    </Svg>
+  ),
+  newLayer: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="1.5" />
+      <path d="M12 8.5v7M8.5 12h7" />
+    </Svg>
+  ),
+  newGroup: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M3.5 7V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5V9.5A1.5 1.5 0 0 0 19 8h-7l-2-2.5H5A1.5 1.5 0 0 0 3.5 7Z" />
+      <path d="M12 11v5.5M9.25 13.75h5.5" />
+    </Svg>
+  ),
+  trash: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M4.5 6.5h15M9.5 6.5V4.5h5v2" />
+      <path d="M6.5 6.5 7.5 20h9l1-13.5" />
+      <path d="M10.5 10v6.5M13.5 10v6.5" />
+    </Svg>
+  ),
 } as const;
 
 export type IconName = keyof typeof icons;

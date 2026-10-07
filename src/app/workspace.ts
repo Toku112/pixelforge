@@ -38,6 +38,8 @@ export class Workspace {
   readonly #sessions: DocumentSession[] = [];
   #activeId: string | null = null;
   #version = 0;
+  #preview: { session: DocumentSession; undo: () => void | Promise<void> } | null = null;
+  #queue: Promise<void> = Promise.resolve();
 
   constructor(options: WorkspaceOptions) {
     this.#options = options;
@@ -127,11 +129,57 @@ export class Workspace {
   }
 
   /** Runs a document command on the active document through its History. */
-  async execute(descriptor: CommandDescriptor): Promise<void> {
-    const session = this.active;
-    if (!session) throw new Error('No document is open');
-    const command = this.registry.create({ doc: session.doc, services: this.#options.services }, descriptor);
-    await session.history.execute(command);
+  execute(descriptor: CommandDescriptor): Promise<void> {
+    return this.#serial(async () => {
+      await this.#undoPreview();
+      const session = this.active;
+      if (!session) throw new Error('No document is open');
+      const command = this.registry.create({ doc: session.doc, services: this.#options.services }, descriptor);
+      await session.history.execute(command);
+    });
+  }
+
+  /**
+   * Live preview while a value is being dragged (e.g. a layer's opacity): runs the
+   * command on the active document without recording it, replacing the previous
+   * preview. `execute()` (or `cancelPreview()`) undoes the preview first, so the
+   * final value lands in the History as a single step from the original value.
+   */
+  preview(descriptor: CommandDescriptor): Promise<void> {
+    return this.#serial(async () => {
+      await this.#undoPreview();
+      const session = this.active;
+      if (!session || session.history.busy) return;
+      const command = this.registry.create({ doc: session.doc, services: this.#options.services }, descriptor);
+      await command.execute();
+      this.#preview = { session, undo: () => command.undo() };
+    });
+  }
+
+  /** Undoes a running preview (Escape, or before an undo/redo). */
+  cancelPreview(): Promise<void> {
+    return this.#serial(() => this.#undoPreview());
+  }
+
+  async #undoPreview(): Promise<void> {
+    const preview = this.#preview;
+    if (!preview) return;
+    this.#preview = null;
+    if (this.#sessions.includes(preview.session)) await preview.undo();
+  }
+
+  /** Runs tasks one after another, so previews and commands never interleave. */
+  #serial<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.#queue.then(task, task);
+    this.#queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  get previewing(): boolean {
+    return this.#preview !== null;
   }
 
   #changed(): void {

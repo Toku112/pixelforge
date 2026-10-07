@@ -3,7 +3,7 @@
  * to scrub the value, arrow keys step it (Shift = ×10), and typed math is accepted
  * ("+10", "*2", "90-15"). Enter or leaving the field applies; Escape reverts.
  */
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import { evaluateNumberInput } from './number-expr';
 
 export interface NumberFieldProps {
@@ -22,6 +22,12 @@ export interface NumberFieldProps {
   title?: string;
   /** Hide the label visually (still read by screen readers). */
   hideLabel?: boolean;
+  /**
+   * Live preview while the label is scrubbed: receives every intermediate value,
+   * and `onChange` receives only the final one on release (one undo step).
+   */
+  onPreview?: (value: number) => void;
+  disabled?: boolean;
 }
 
 export function NumberField({
@@ -37,11 +43,14 @@ export function NumberField({
   scrubRate = 1,
   title,
   hideLabel,
+  onPreview,
+  disabled = false,
 }: NumberFieldProps) {
   const format = (v: number) => `${Number(v.toFixed(precision))}${suffix}`;
   // Text being typed; null when not editing (the field then shows the current value).
   const [draft, setDraft] = useState<string | null>(null);
-  const scrub = useRef<{ x: number; start: number } | null>(null);
+  const scrub = useRef<{ x: number; start: number; last: number } | null>(null);
+  const scrubbed = useRef(false);
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
 
   const commit = () => {
@@ -67,25 +76,40 @@ export function NumberField({
   };
 
   const onLabelPointerDown = (e: PointerEvent<HTMLSpanElement>) => {
+    if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    scrub.current = { x: e.clientX, start: value };
+    scrub.current = { x: e.clientX, start: value, last: value };
   };
   const onLabelPointerMove = (e: PointerEvent<HTMLSpanElement>) => {
-    if (!scrub.current) return;
-    const delta = (e.clientX - scrub.current.x) * scrubRate * (e.shiftKey ? 10 : 1);
-    onChange(clamp(Number((scrub.current.start + delta).toFixed(precision))));
+    const s = scrub.current;
+    if (!s) return;
+    const delta = (e.clientX - s.x) * scrubRate * (e.shiftKey ? 10 : 1);
+    const next = clamp(Number((s.start + delta).toFixed(precision)));
+    if (next === s.last) return;
+    s.last = next;
+    (onPreview ?? onChange)(next);
   };
   const onLabelPointerUp = () => {
+    const s = scrub.current;
     scrub.current = null;
+    scrubbed.current = !!s && s.last !== s.start;
+    if (s && onPreview && s.last !== s.start) onChange(s.last);
+  };
+  // A click on a label normally focuses its field; not after a scrub (so shortcuts like Undo still work).
+  const onLabelClick = (e: MouseEvent<HTMLSpanElement>) => {
+    if (scrubbed.current) e.preventDefault();
+    scrubbed.current = false;
   };
 
   return (
-    <label className="number-field" title={title}>
+    <label className={`number-field${disabled ? ' disabled' : ''}`} title={title}>
       <span
         className={hideLabel ? 'visually-hidden' : 'number-field-label'}
         onPointerDown={onLabelPointerDown}
         onPointerMove={onLabelPointerMove}
         onPointerUp={onLabelPointerUp}
+        onPointerCancel={onLabelPointerUp}
+        onClick={onLabelClick}
       >
         {label}
       </span>
@@ -93,6 +117,7 @@ export function NumberField({
         type="text"
         inputMode="decimal"
         value={draft ?? format(value)}
+        disabled={disabled}
         style={{ width }}
         onFocus={(e) => {
           setDraft(format(value));

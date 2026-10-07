@@ -5,7 +5,16 @@
  */
 import { APP_NAME } from './brand';
 import { BLEND_MODE_LABELS, availableBlendModes, blendModeMenu, cycleBlendMode } from '../core/composite/blend';
-import { LAYER_BLEND_MODES, layerCapabilities, type BlendMode, type LayerNode } from '../core/document/layers';
+import { suggestedCopyName } from '../core/commands/builtin/layers';
+import type { JsonObject } from '../core/commands/command';
+import type { LayerPropChanges } from '../core/commands/builtin/set-layer-props';
+import {
+  LAYER_BLEND_MODES,
+  layerCapabilities,
+  type BlendMode,
+  type GroupLayer,
+  type LayerNode,
+} from '../core/document/layers';
 import { AppCommandRegistry } from './commands/app-commands';
 import { detectPlatform, type Platform } from './keymap/chord';
 import { KeyboardService } from './keymap/keyboard-service';
@@ -15,6 +24,7 @@ import type { DocumentSession } from './workspace';
 import { viewActions } from '../tools/hand/hand-tool';
 import { createTools, type ToolSet } from '../tools/registry';
 import type { CanvasView } from '../ui/canvas/canvas-view';
+import type { ConfirmRequest, LayerOptionsRequest, LayerOptionsResult } from '../ui/state/ui-store';
 import { formatById, openAcceptTypes, withExtension } from '../io/formats';
 import { pickFiles, saveFileAs, writeToHandle, type PickedFile } from '../io/file-access';
 import { openImage } from '../io/open-image';
@@ -25,10 +35,20 @@ export interface UiBridge {
   setActiveTool(id: string, groupId: string): void;
   isPanelOpen(id: string): boolean;
   togglePanel(id: string): void;
+  /** Shows a panel (opening it if closed). */
+  openPanel(id: string): void;
   resetWorkspace(): void;
   alert(title: string, message: string): Promise<void>;
   confirmSave(documentName: string): Promise<'save' | 'discard' | 'cancel'>;
   about(): Promise<void>;
+  /** New Layer / New Group dialog; null when cancelled. */
+  layerOptions(request: LayerOptionsRequest): Promise<LayerOptionsResult | null>;
+  /** Duplicate Layer dialog (`source` null for several layers); null when cancelled. */
+  duplicateLayer(source: string | null, name: string): Promise<{ name?: string } | null>;
+  /** A yes/no question; resolves true without asking when "Don't show again" was ticked before. */
+  confirm(request: ConfirmRequest): Promise<boolean>;
+  /** Starts editing a layer's name in the Layers panel. */
+  startRename(layerId: string): void;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -149,6 +169,125 @@ export class AppController {
     }
   }
 
+  // --- Layers (Layers panel and Layer menu) ----------------------------------
+
+  /** Selects layers in the active document (not a history step, as in the reference app). */
+  selectLayers(ids: readonly string[], activeId?: string | null): void {
+    this.workspace.active?.doc.selectLayers(ids, activeId);
+  }
+
+  /**
+   * Expands or collapses a group in the Layers panel (view state: not a history
+   * step); with `nested`, the groups inside it too.
+   */
+  setGroupExpanded(id: string, expanded: boolean, nested = false): void {
+    const doc = this.workspace.active?.doc;
+    const group = doc?.getLayer(id);
+    if (!doc || group?.kind !== 'group') return;
+    const apply = (g: GroupLayer) => {
+      if (g.expanded !== expanded) doc.updateLayer(g.id, { expanded });
+      if (nested) for (const child of g.children) if (child.kind === 'group') apply(child);
+    };
+    apply(group);
+  }
+
+  /**
+   * Changes the selected layers that allow it (the Background and locked layers
+   * are skipped) as one history step. With `preview`, shows the change live
+   * without recording it (while a value is dragged).
+   */
+  setSelectedLayerProps(props: LayerPropChanges, preview = false): Promise<void> {
+    const doc = this.workspace.active?.doc;
+    if (!doc) return Promise.resolve();
+    const ids = doc.selectedLayerIds.filter((id) => {
+      const layer = doc.getLayer(id);
+      if (!layer) return false;
+      const can = layerCapabilities(layer);
+      if (
+        'blendMode' in props &&
+        (!can.changeBlendMode || (props.blendMode === 'pass-through' && layer.kind !== 'group'))
+      )
+        return false;
+      if (('opacity' in props || 'fillOpacity' in props) && !can.changeOpacity) return false;
+      if ('locks' in props && layer.kind === 'pixel' && layer.isBackground) return false;
+      return true;
+    });
+    if (ids.length === 0) return Promise.resolve();
+    const descriptor = { name: 'setLayerProps', params: { layerIds: ids, props: props as JsonObject } };
+    return preview ? this.workspace.preview(descriptor) : this.workspace.execute(descriptor);
+  }
+
+  /** Changes properties of individual layers as one history step (visibility clicks, renaming). */
+  setLayerProps(changes: { layerId: string; props: LayerPropChanges }[]): Promise<void> {
+    if (changes.length === 0) return Promise.resolve();
+    const params: JsonObject =
+      changes.length === 1
+        ? { layerId: changes[0]!.layerId, props: changes[0]!.props as JsonObject }
+        : { changes: changes.map((c) => ({ layerId: c.layerId, props: c.props as JsonObject })) };
+    return this.workspace.execute({ name: 'setLayerProps', params });
+  }
+
+  /** Drops layers at a position in the stack (dragging in the Layers panel). */
+  moveLayers(layerIds: readonly string[], parentId: string, index: number): Promise<void> {
+    return this.workspace.execute({ name: 'moveLayers', params: { layerIds: [...layerIds], parentId, index } });
+  }
+
+  /** Deletes the selected layers, asking first unless `ask` is false (Alt/Option-click). */
+  async deleteSelectedLayers(ask = true): Promise<void> {
+    const doc = this.workspace.active?.doc;
+    if (!doc || !this.workspace.canExecute('deleteLayers')) return;
+    const selected = doc.selectedLayerIds.map((id) => doc.requireLayer(id));
+    const only = selected.length === 1 ? selected[0]! : null;
+    const message = !only
+      ? 'Delete the selected layers?'
+      : only.kind === 'group'
+        ? `Delete the group “${only.name}” and its contents?`
+        : `Delete the layer “${only.name}”?`;
+    if (
+      ask &&
+      !(await this.#ui.confirm({ title: 'Delete', message, confirmLabel: 'Delete', rememberKey: 'deleteLayer' }))
+    )
+      return;
+    await this.workspace.execute({ name: 'deleteLayers', params: {} });
+  }
+
+  async #newLayerDialog(kind: 'layer' | 'group' | 'groupFromLayers' | 'fromBackground'): Promise<void> {
+    const doc = this.workspace.active?.doc;
+    if (!doc) return;
+    const group = kind === 'group' || kind === 'groupFromLayers';
+    const titles = {
+      layer: 'New Layer',
+      group: 'New Group',
+      groupFromLayers: 'New Group from Layers',
+      fromBackground: 'New Layer',
+    };
+    const result = await this.#ui.layerOptions({
+      title: titles[kind],
+      name: kind === 'fromBackground' ? 'Layer 0' : group ? doc.peekGroupName() : doc.peekLayerName(),
+      blendModes: blendModeMenu(group ? 'group' : 'pixel', doc.mode, doc.depth),
+      blendMode: group ? 'pass-through' : 'normal',
+      opacity: 1,
+    });
+    if (!result || this.workspace.active?.doc !== doc) return;
+    const commands = {
+      layer: 'newLayer',
+      group: 'newGroup',
+      groupFromLayers: 'groupLayers',
+      fromBackground: 'layerFromBackground',
+    };
+    await this.workspace.execute({ name: commands[kind], params: { ...result } });
+  }
+
+  async #duplicateDialog(): Promise<void> {
+    const doc = this.workspace.active?.doc;
+    if (!doc || !this.workspace.canExecute('duplicateLayers')) return;
+    const selected = doc.selectedLayerIds;
+    const source = selected.length === 1 ? doc.requireLayer(selected[0]!).name : null;
+    const result = await this.#ui.duplicateLayer(source, source === null ? '' : suggestedCopyName(doc, source));
+    if (!result || this.workspace.active?.doc !== doc) return;
+    await this.workspace.execute({ name: 'duplicateLayers', params: result });
+  }
+
   // --- Commands -------------------------------------------------------------
 
   #registerCommands(): void {
@@ -191,8 +330,18 @@ export class AppController {
     });
 
     // Edit
-    add({ id: 'edit.undo', label: 'Undo', enabled: () => !!history()?.canUndo, run: () => history()?.undo() });
-    add({ id: 'edit.redo', label: 'Redo', enabled: () => !!history()?.canRedo, run: () => history()?.redo() });
+    add({
+      id: 'edit.undo',
+      label: 'Undo',
+      enabled: () => !!history()?.canUndo,
+      run: async () => (await ws.cancelPreview(), history()?.undo()),
+    });
+    add({
+      id: 'edit.redo',
+      label: 'Redo',
+      enabled: () => !!history()?.canRedo,
+      run: async () => (await ws.cancelPreview(), history()?.redo()),
+    });
     add({
       id: 'edit.toggleLastState',
       label: 'Toggle Last State',
@@ -216,17 +365,65 @@ export class AppController {
       () =>
         ws.execute({ name, params });
     add({
+      id: 'layer.new',
+      label: 'New Layer…',
+      enabled: () => ws.canExecute('newLayer'),
+      run: () => this.#newLayerDialog('layer'),
+    });
+    add({
       id: 'layer.newNoDialog',
       label: 'New Layer',
       enabled: () => ws.canExecute('newLayer'),
       run: exec('newLayer'),
     });
-    add({ id: 'layer.newGroup', label: 'Group', enabled: () => ws.canExecute('newGroup'), run: exec('newGroup') });
+    add({
+      id: 'layer.newGroup',
+      label: 'Group…',
+      enabled: () => ws.canExecute('newGroup'),
+      run: () => this.#newLayerDialog('group'),
+    });
+    add({
+      id: 'layer.newGroupNoDialog',
+      label: 'New Group',
+      enabled: () => ws.canExecute('newGroup'),
+      run: exec('newGroup'),
+    });
+    add({
+      id: 'layer.groupFromLayers',
+      label: 'Group from Layers…',
+      enabled: () => ws.canExecute('groupLayers'),
+      run: () => this.#newLayerDialog('groupFromLayers'),
+    });
     add({
       id: 'layer.fromBackground',
-      label: 'Layer from Background',
+      label: 'Layer from Background…',
       enabled: () => ws.canExecute('layerFromBackground'),
-      run: exec('layerFromBackground'),
+      run: () => this.#newLayerDialog('fromBackground'),
+    });
+    add({
+      id: 'layer.duplicate',
+      label: 'Duplicate Layer…',
+      enabled: () => ws.canExecute('duplicateLayers'),
+      run: () => this.#duplicateDialog(),
+    });
+    add({
+      id: 'layer.rename',
+      label: 'Rename Layer…',
+      enabled: () => !!doc()?.activeLayer && selected().length === 1,
+      run: () => {
+        const id = doc()?.activeLayerId;
+        if (!id) return;
+        this.#ui.openPanel('layers');
+        this.#ui.startRename(id);
+      },
+    });
+    add({
+      id: 'layers.collapseAll',
+      label: 'Collapse All Groups',
+      enabled: () => [...(doc()?.layers() ?? [])].some((l) => l.kind === 'group' && l.expanded),
+      run: () => {
+        for (const l of doc()?.layers() ?? []) if (l.kind === 'group') this.setGroupExpanded(l.id, false);
+      },
     });
     add({
       id: 'layer.viaCopy',
@@ -236,9 +433,9 @@ export class AppController {
     });
     add({
       id: 'layer.delete',
-      label: 'Layer',
+      label: 'Delete Layer',
       enabled: () => ws.canExecute('deleteLayers'),
-      run: exec('deleteLayers'),
+      run: () => this.deleteSelectedLayers(),
     });
     const hiddenLayers = () => [...(doc()?.layers() ?? [])].filter((l) => !l.visible).map((l) => l.id);
     add({
@@ -365,6 +562,7 @@ export class AppController {
     // Window
     for (const [id, panel, label] of [
       ['window.panel.history', 'history', 'History'],
+      ['window.layers', 'layers', 'Layers'],
       ['window.panel.navigator', 'navigator', 'Navigator'],
     ] as const) {
       add({ id, label, checked: () => this.#ui.isPanelOpen(panel), run: () => this.#ui.togglePanel(panel) });

@@ -15,6 +15,7 @@ export function HistoryPanel() {
           aria-selected={entry.status === 'current'}
           className={`history-row ${entry.status}`}
           onClick={() => void controller.workspace.active?.history.goTo(i)}
+          ref={entry.status === 'current' ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
         >
           <span className="history-icon">{entry.snapshot ? <Icon name="history" size={14} /> : null}</span>
           <span>{entry.label}</span>

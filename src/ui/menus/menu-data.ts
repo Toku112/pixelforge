@@ -234,7 +234,7 @@ export const MENUS: readonly TopMenu[] = [
     items: [
       sub('New', [
         item('layer.new', 'Layer…'),
-        item('layer.fromBackground', 'Layer from Background'),
+        item('layer.fromBackground', 'Layer from Background…'),
         item('layer.backgroundFromLayer', 'Background from Layer'),
         item('layer.newGroup', 'Group…'),
         item('layer.groupFromLayers', 'Group from Layers…'),

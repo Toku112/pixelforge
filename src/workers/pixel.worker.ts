@@ -7,6 +7,8 @@
  * single-threaded SIMD build.
  */
 import { convertAlphaTile } from '../core/commands/alpha';
+import { renderThumbnail, type Thumbnail, type ThumbnailSource } from '../core/composite/thumbnail';
+import type { Rect } from '../core/document/geometry';
 import { createSampleArray, samplesPerPixel, type PixelFormat, type SampleArray } from '../core/document/pixel-format';
 import { exposeApi, transfer } from './rpc';
 import type * as PixelOpsSt from '../wasm/pkg/pixel-ops-st/pixel_ops.js';
@@ -103,6 +105,12 @@ const conversions = {
       out,
       out.filter((t) => !(t.buffer instanceof SharedArrayBuffer)).map((t) => t.buffer as ArrayBuffer),
     );
+  },
+
+  /** A Layers-panel thumbnail of one layer over `area` (see core/composite/thumbnail.ts). */
+  layerThumbnail(source: ThumbnailSource, area: Rect, width: number, height: number): Thumbnail {
+    const thumbnail = renderThumbnail(source, area, width, height);
+    return transfer(thumbnail, [thumbnail.data.buffer as ArrayBuffer]);
   },
 };
 Object.assign(api, conversions);
