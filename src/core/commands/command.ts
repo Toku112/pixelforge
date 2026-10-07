@@ -6,6 +6,7 @@
  */
 import type { CompositeTile } from '../composite/composite-tiles';
 import type { Dab } from '../paint/brush';
+import type { FillSpec } from '../paint/fill';
 import type { StrokeSetup } from '../paint/stroke';
 import type { MaskedTarget } from '../selection/masked-edits';
 import type { SelectionMode, SelectionShape } from '../selection/mask-ops';
@@ -80,6 +81,8 @@ export interface PixelOps {
   ): Promise<MaskData | null>;
   /** Select > Inverse; null when nothing is left selected. */
   invertSelection(current: MaskData, canvas: Rect): Promise<MaskData | null>;
+  /** Edit > Fill into layer tiles through a selection (see core/paint/fill.ts). */
+  fill(tiles: SampleArray[], format: PixelFormat, through: MaskedTarget, spec: FillSpec, hdr: boolean): Promise<void>;
   /** Paints a whole brush/eraser stroke into layer tiles (`coords`: their layer tile coordinates). */
   paintStroke(setup: StrokeSetup, tiles: SampleArray[], coords: [number, number][], dabs: Dab[]): Promise<void>;
   /**

@@ -1,5 +1,5 @@
 /** The modal dialog frame: title, focus kept inside, Escape cancels. */
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 export function Modal({
   title,
@@ -13,6 +13,7 @@ export function Modal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId(); // unique, so stacked dialogs each have their own name
   // The latest onCancel, so the keyboard handler (installed once) never calls a stale one.
   const cancel = useRef(onCancel);
   useEffect(() => {
@@ -22,6 +23,9 @@ export function Modal({
     const el = ref.current;
     el?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     const onKey = (e: KeyboardEvent) => {
+      // With dialogs stacked (e.g. the Color Picker over Fill), only the topmost one listens.
+      const all = document.querySelectorAll('.modal');
+      if (all[all.length - 1] !== el) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
@@ -51,10 +55,10 @@ export function Modal({
         className={className ? `modal ${className}` : 'modal'}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby={titleId}
         ref={ref}
       >
-        <h2 id="modal-title">{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         {children}
       </div>
     </div>

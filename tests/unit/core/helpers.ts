@@ -4,6 +4,7 @@ import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { ImageDocument, type DocumentInit } from '../../../src/core/document/document';
 import { convertAlphaTile } from '../../../src/core/commands/alpha';
 import { compositeTiles } from '../../../src/core/composite/composite-tiles';
+import { fillTiles } from '../../../src/core/paint/fill';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
 import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
 import { invertSelection, selectShape } from '../../../src/core/selection/mask-ops';
@@ -37,6 +38,10 @@ export const referencePixelOps: PixelOps = {
   },
   invertSelection(current, canvas) {
     return Promise.resolve(invertSelection(current, canvas));
+  },
+  fill(tiles, format, through, spec, hdr) {
+    fillTiles(tiles, format, through, spec, hdr);
+    return Promise.resolve();
   },
   paintStroke(setup, tiles, coords, dabs) {
     const renderer = new StrokeRenderer(setup);

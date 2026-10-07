@@ -25,6 +25,7 @@ import {
   LAYER_BLEND_MODES,
   layerCapabilities,
   type BlendMode,
+  type LayerBlendMode,
   type GroupLayer,
   type LayerNode,
 } from '../core/document/layers';
@@ -37,7 +38,14 @@ import type { DocumentSession } from './workspace';
 import { viewActions } from '../tools/hand/hand-tool';
 import { createTools, type ToolSet } from '../tools/registry';
 import type { CanvasView } from '../ui/canvas/canvas-view';
-import type { ConfirmRequest, LayerOptionsRequest, LayerOptionsResult } from '../ui/state/ui-store';
+import type {
+  ConfirmRequest,
+  FillContents,
+  FillRequest,
+  FillResult,
+  LayerOptionsRequest,
+  LayerOptionsResult,
+} from '../ui/state/ui-store';
 import { formatById, openAcceptTypes, withExtension } from '../io/formats';
 import { pickFiles, saveFileAs, writeToHandle, type PickedFile } from '../io/file-access';
 import { openImage } from '../io/open-image';
@@ -68,6 +76,8 @@ export interface UiBridge {
   pickColor(title: string, color: RGB): Promise<RGB | null>;
   /** A tool's options changed outside the options bar (e.g. [ ] keys): refresh it. */
   toolOptionsChanged(): void;
+  /** The Fill dialog; null when cancelled. */
+  fill(request: FillRequest): Promise<FillResult | null>;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -253,6 +263,44 @@ export class AppController {
     const value = percent / 100;
     if (this.#paintTool()) this.#setPaintOptions(shift ? { flow: value } : { opacity: value });
     else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });
+  }
+
+  /** Edit > Fill: asks how to fill, then fills the selection (or canvas) of the active layer. */
+  async fillWithDialog(contents: FillContents = 'foreground'): Promise<void> {
+    const ws = this.workspace;
+    const doc = ws.active?.doc;
+    if (!doc || !ws.canExecute('fill')) return;
+    const layer = doc.activeLayer;
+    const canPreserve = layer?.kind === 'pixel' && layer.buffer.format.hasAlpha;
+    const result = await this.#ui.fill({
+      contents,
+      foreground: this.colors.foreground,
+      background: this.colors.background,
+      blendModes: availableBlendModes(doc.mode, doc.depth),
+      canPreserve: !!canPreserve,
+      preserve: false,
+    });
+    if (!result || ws.active?.doc !== doc) return;
+    await this.#fill(result.color, result.mode, result.opacity, result.preserveTransparency);
+  }
+
+  /** Fills with a colour (Alt/Ctrl+Backspace and the dialog). */
+  async #fill(color: RGB, mode: LayerBlendMode, opacity: number, preserve: boolean): Promise<void> {
+    const doc = this.workspace.active?.doc;
+    if (!doc) return;
+    let samples: number[];
+    try {
+      samples = colorToSamples(color, doc.mode, doc.depth);
+    } catch (error) {
+      await this.#ui.alert('Could not fill', error instanceof Error ? error.message : String(error));
+      return;
+    }
+    const layer = doc.activeLayer;
+    const canPreserve = layer?.kind === 'pixel' && layer.buffer.format.hasAlpha;
+    await this.workspace.execute({
+      name: 'fill',
+      params: { color: samples, mode, opacity, preserveTransparency: preserve && !!canPreserve },
+    });
   }
 
   /** Runs a document command for a tool, reporting problems (cancelling is not one). */
@@ -520,11 +568,34 @@ export class AppController {
       label: 'Clear',
       enabled: () => !toolBusy() && (ws.active?.doc.selection ? ws.canExecute('clear') : ws.canExecute('deleteLayers')),
       run: () => {
-        if (!ws.active?.doc.selection) return ws.execute({ name: 'deleteLayers', params: {} });
+        const doc = ws.active?.doc;
+        // On the Background (no transparency to clear to) Delete opens Fill, as in the reference app.
+        if (doc?.activeLayer?.kind === 'pixel' && doc.activeLayer.isBackground)
+          return this.fillWithDialog('background');
+        if (!doc?.selection) return ws.execute({ name: 'deleteLayers', params: {} });
         const color = this.#backgroundSamples();
         return ws.execute({ name: 'clear', params: color ? { color } : {} });
       },
     });
+    add({
+      id: 'edit.fill',
+      label: 'Fill…',
+      enabled: () => !toolBusy() && ws.canExecute('fill'),
+      run: () => this.fillWithDialog(),
+    });
+    for (const [id, label, which, preserve] of [
+      ['edit.fillForeground', 'Fill with Foreground Color', 'foreground', false],
+      ['edit.fillBackground', 'Fill with Background Color', 'background', false],
+      ['edit.fillForegroundPreserve', 'Fill with Foreground Color (Preserve Transparency)', 'foreground', true],
+      ['edit.fillBackgroundPreserve', 'Fill with Background Color (Preserve Transparency)', 'background', true],
+    ] as const) {
+      add({
+        id,
+        label,
+        enabled: () => !toolBusy() && ws.canExecute('fill'),
+        run: () => this.#fill(this.colors[which], 'normal', 1, preserve),
+      });
+    }
 
     // Image
     add({

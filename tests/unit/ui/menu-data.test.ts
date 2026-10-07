@@ -30,13 +30,18 @@ describe('menu bar data', () => {
 
   it('gives every default menu shortcut a home in the menus or the tools', () => {
     const inMenus = new Set(MENUS.flatMap((m) => commands(m.items)));
+    // Commands that only have a shortcut, as in the reference app.
+    const keyboardOnly = new Set([
+      'layer.newNoDialog',
+      'layer.stampVisible',
+      'select.feather',
+      'edit.fillForeground',
+      'edit.fillBackground',
+      'edit.fillForegroundPreserve',
+      'edit.fillBackgroundPreserve',
+    ]);
     const orphaned = DEFAULT_KEYMAP.map((b) => b.command).filter(
-      (c) =>
-        /^(file|edit|image|layer|select|filter)\./.test(c) &&
-        !inMenus.has(c) &&
-        c !== 'layer.newNoDialog' &&
-        c !== 'layer.stampVisible' &&
-        c !== 'select.feather',
+      (c) => /^(file|edit|image|layer|select|filter)\./.test(c) && !inMenus.has(c) && !keyboardOnly.has(c),
     );
     expect(orphaned).toEqual([]);
   });

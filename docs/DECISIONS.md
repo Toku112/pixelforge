@@ -371,3 +371,18 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   (Shift: fill) with other tools; two digits within 0.4 s make one value.
 - Undo/redo and Delete wait while a stroke or a polygonal lasso is in progress.
 - `Workspace.whenIdle()` also waits for strokes being finished (used by tests).
+
+## D-029 — 2026-10-07 — Edit > Fill
+
+**Decision:**
+
+- Fill blends a solid colour into the active layer through the selection, or over the whole canvas area when
+  nothing is selected (also where a transparent layer has no pixels yet), with the compositing formula of
+  FORMAT_NOTES §3.2 — the colour as a layer with the chosen mode and opacity over each pixel.
+- Preserve Transparency keeps every pixel's alpha and moves only its colour; fully transparent pixels are left as they
+  are. It is greyed out on the Background.
+- 50 % Gray is 128/255 in each channel; Black and White are the extremes; colours convert to the document as in D-027.
+- Delete/Backspace on the Background opens Fill with Background Color chosen (the reference app opens Fill there,
+  defaulting to Content-Aware, which arrives later).
+- Dialogs can stack (Fill opens the Color Picker); only the topmost reacts to Escape/Tab, and each dialog has its own
+  title id (with a shared id, screen readers announced the picker as "Fill").

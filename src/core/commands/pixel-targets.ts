@@ -55,3 +55,13 @@ export function selectedLayerTiles(
     through: { mask: selection.data, canvas: doc.canvasRect, offsetX: layer.offsetX, offsetY: layer.offsetY, coords },
   };
 }
+
+/** Layer tiles (layer tile coordinates) covering the canvas, e.g. for a fill without a selection. */
+export function canvasLayerTiles(doc: ImageDocument, layer: PixelLayer): [number, number][] {
+  const coords: [number, number][] = [];
+  const x0 = -layer.offsetX;
+  const y0 = -layer.offsetY;
+  for (let ty = tileIndex(y0); ty <= tileIndex(y0 + doc.height - 1); ty++)
+    for (let tx = tileIndex(x0); tx <= tileIndex(x0 + doc.width - 1); tx++) coords.push([tx, ty]);
+  return coords;
+}

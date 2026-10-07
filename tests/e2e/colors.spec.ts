@@ -71,7 +71,7 @@ test('Color Picker: hex, hue and the colour field set the colour; Cancel keeps t
   await expect(bg(page)).toHaveAttribute('data-color', '#FFFFFF');
 });
 
-test('Delete on the Background fills the selection with the background colour', async ({ page }) => {
+test('Delete on the Background opens Fill with the background colour', async ({ page }) => {
   const chooser = page.waitForEvent('filechooser');
   await page.keyboard.press('ControlOrMeta+O');
   await (await chooser).setFiles(join(FIXTURES, 'photo.jpg'));
@@ -83,6 +83,9 @@ test('Delete on the Background fills the selection with the background colour', 
   await dialog.getByRole('button', { name: 'OK' }).click();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.press('Delete');
+  const fill = page.getByRole('dialog', { name: 'Fill' });
+  await expect(fill.getByLabel('Contents')).toHaveValue('background');
+  await fill.getByRole('button', { name: 'OK' }).click();
   const pixel = await page.evaluate(async () => {
     const ws = (window as unknown as AppWindow).__pixelforge.workspace;
     await ws.whenIdle();

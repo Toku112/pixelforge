@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import type { RGB } from '../../core/color/color';
-import type { BlendMode } from '../../core/document/layers';
+import type { BlendMode, LayerBlendMode } from '../../core/document/layers';
 import type { ViewportState } from '../../engine/viewport/viewport';
 import { sanitizeLayout, type DockLayout } from '../dock/dock-model';
 import { essentialsLayout } from '../dock/workspaces';
@@ -48,7 +48,27 @@ export type DialogRequest =
       resolve: (result: { name?: string } | null) => void;
     }
   | ({ kind: 'confirm'; resolve: (ok: boolean) => void } & ConfirmRequest)
-  | { kind: 'color-picker'; title: string; color: RGB; resolve: (color: RGB | null) => void };
+  | { kind: 'color-picker'; title: string; color: RGB; resolve: (color: RGB | null) => void }
+  | ({ kind: 'fill'; resolve: (result: FillResult | null) => void } & FillRequest);
+
+export type FillContents = 'foreground' | 'background' | 'color' | 'black' | 'gray' | 'white';
+
+export interface FillRequest {
+  contents: FillContents;
+  foreground: RGB;
+  background: RGB;
+  blendModes: readonly LayerBlendMode[];
+  /** Preserve Transparency is offered (not on the Background). */
+  canPreserve: boolean;
+  preserve: boolean;
+}
+
+export interface FillResult {
+  color: RGB;
+  mode: LayerBlendMode;
+  opacity: number;
+  preserveTransparency: boolean;
+}
 
 export type StatusInfo = 'sizes' | 'dimensions' | 'profile' | 'scratch' | 'tool';
 

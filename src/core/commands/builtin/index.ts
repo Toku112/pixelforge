@@ -1,5 +1,6 @@
 import type { CommandRegistry } from '../registry';
 import { clearCommand } from './clear';
+import { fillCommand } from './fill';
 import { invertCommand } from './invert';
 import { layerCommands } from './layers';
 import { mergeCommands } from './merge';
@@ -11,6 +12,7 @@ import { setLayerPropsCommand } from './set-layer-props';
 export function registerBuiltinCommands(registry: CommandRegistry): void {
   registry.register(invertCommand);
   registry.register(clearCommand);
+  registry.register(fillCommand);
   registry.register(paintStrokeCommand);
   registry.register(setLayerPropsCommand);
   for (const definition of layerCommands) registry.register(definition);

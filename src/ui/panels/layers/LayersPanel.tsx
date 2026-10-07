@@ -27,7 +27,7 @@ import { layerCapabilities, type BlendMode, type LayerLocks, type LayerNode } fr
 import { useController, useWorkspace } from '../../AppContext';
 import { NumberField } from '../../controls/NumberField';
 import { Icon, type IconName } from '../../icons';
-import { BlendModeOptions } from '../../shell/Dialogs';
+import { BlendModeOptions } from '../../controls/BlendModeOptions';
 import { useUi } from '../../state/ui-store';
 import {
   dropPlacement,

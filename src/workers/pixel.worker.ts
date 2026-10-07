@@ -11,6 +11,7 @@ import { compositeTiles, type CompositeTile } from '../core/composite/composite-
 import { clearMasked, invertMasked, type MaskedTarget } from '../core/selection/masked-edits';
 import { invertSelection, selectShape, type SelectionMode, type SelectionShape } from '../core/selection/mask-ops';
 import type { Dab } from '../core/paint/brush';
+import { fillTiles, type FillSpec } from '../core/paint/fill';
 import { StrokeRenderer, type StrokeSetup } from '../core/paint/stroke';
 import { selectionOutline } from '../core/selection/outline';
 import type { MaskData } from '../core/selection/selection';
@@ -179,6 +180,18 @@ const conversions = {
       tiles,
       tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
     );
+  },
+
+  /** See PixelOps.fill; same return convention as invertTiles. */
+  fillTiles(
+    tiles: SampleArray[],
+    format: PixelFormat,
+    through: MaskedTarget,
+    spec: FillSpec,
+    hdr: boolean,
+  ): (SampleArray | null)[] {
+    fillTiles(tiles, format, through, spec, hdr);
+    return returnUnshared(tiles);
   },
 
   /** See PixelOps.paintStroke (a whole recorded stroke at once); same return convention as invertTiles. */

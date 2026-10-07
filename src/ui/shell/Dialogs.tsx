@@ -1,41 +1,13 @@
 /** Modal dialogs requested through the UI store (alerts, prompts, layer dialogs, Color Picker, About). */
 import { useState, type FormEvent } from 'react';
 import { APP_NAME } from '../../app/brand';
-import { BLEND_MODE_LABELS } from '../../core/composite/blend';
 import type { BlendMode } from '../../core/document/layers';
+import { BlendModeOptions } from '../controls/BlendModeOptions';
 import { NumberField } from '../controls/NumberField';
 import { ColorPickerDialog } from './ColorPicker';
+import { FillDialog } from './FillDialog';
 import { Modal } from './Modal';
 import { remember, useUi, type DialogRequest } from '../state/ui-store';
-
-/** Blend-mode menu options, grouped like the reference app's menu (separators between families). */
-export function BlendModeOptions({ modes }: { modes: readonly BlendMode[] }) {
-  const families: BlendMode[][] = [
-    ['pass-through', 'normal', 'dissolve'],
-    ['darken', 'multiply', 'color-burn', 'linear-burn', 'darker-color'],
-    ['lighten', 'screen', 'color-dodge', 'linear-dodge', 'lighter-color'],
-    ['overlay', 'soft-light', 'hard-light', 'vivid-light', 'linear-light', 'pin-light', 'hard-mix'],
-    ['difference', 'exclusion', 'subtract', 'divide'],
-    ['hue', 'saturation', 'color', 'luminosity'],
-  ];
-  const groups = families.map((f) => f.filter((m) => modes.includes(m))).filter((f) => f.length > 0);
-  return (
-    <>
-      {groups.map((group, i) => [
-        i > 0 ? (
-          <option key={`sep-${i}`} disabled aria-hidden="true">
-            ──────────
-          </option>
-        ) : null,
-        ...group.map((mode) => (
-          <option key={mode} value={mode}>
-            {BLEND_MODE_LABELS[mode]}
-          </option>
-        )),
-      ])}
-    </>
-  );
-}
 
 function LayerOptionsDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'layer-options' }> }) {
   const close = useUi((s) => s.closeDialog);
@@ -194,6 +166,8 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <ConfirmDialog dialog={dialog} />;
     case 'color-picker':
       return <ColorPickerDialog dialog={dialog} />;
+    case 'fill':
+      return <FillDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (
@@ -217,7 +191,19 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
   }
 }
 
+const dialogKeys = new WeakMap<DialogRequest, number>();
+let nextDialogKey = 1;
+
+/** All open dialogs, stacked (a dialog can open another, e.g. Fill → Color Picker). */
 export function Dialogs() {
-  const dialog = useUi((s) => s.dialogs[0]);
-  return dialog ? <DialogView dialog={dialog} /> : null;
+  const dialogs = useUi((s) => s.dialogs);
+  return (
+    <>
+      {dialogs.map((dialog) => {
+        let key = dialogKeys.get(dialog);
+        if (key === undefined) dialogKeys.set(dialog, (key = nextDialogKey++));
+        return <DialogView key={key} dialog={dialog} />;
+      })}
+    </>
+  );
 }

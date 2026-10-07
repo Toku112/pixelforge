@@ -34,6 +34,7 @@ const bridge: UiBridge = {
   startRename: (layerId) => ui().setRenamingLayer(layerId),
   groupTool: (groupId) => ui().groupTool[groupId],
   toolOptionsChanged: () => ui().bumpToolOptions(),
+  fill: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'fill', ...request, resolve })),
   pickColor: (title, color) =>
     new Promise((resolve) => ui().pushDialog({ kind: 'color-picker', title, color, resolve })),
 };
