@@ -12,20 +12,25 @@ export interface DocumentState {
   /** Detached copies of the top-level layers (bottom → top). */
   readonly layers: readonly LayerNode[];
   readonly activeLayerId: string | null;
+  readonly selectedLayerIds: readonly string[];
 }
 
-function cloneLayer(layer: LayerNode): LayerNode {
+/**
+ * A detached copy of a layer (and its children) sharing frozen tiles. Ids are kept,
+ * or replaced via `idFor` (for duplicates).
+ */
+export function cloneLayer(layer: LayerNode, idFor: (oldId: string) => string = (id) => id): LayerNode {
   let copy: LayerNode;
   if (layer.kind === 'pixel') {
-    const pixel = new PixelLayer(layer.id, layer.name, layer.buffer.clone(), layer.isBackground);
+    const pixel = new PixelLayer(idFor(layer.id), layer.name, layer.buffer.clone(), layer.isBackground);
     pixel.offsetX = layer.offsetX;
     pixel.offsetY = layer.offsetY;
     copy = pixel;
   } else {
-    const group = new GroupLayer(layer.id, layer.name);
+    const group = new GroupLayer(idFor(layer.id), layer.name);
     group.expanded = layer.expanded;
     for (const child of layer.children) {
-      const childCopy = cloneLayer(child);
+      const childCopy = cloneLayer(child, idFor);
       childCopy.parent = group;
       group.children.push(childCopy);
     }
@@ -39,7 +44,13 @@ function cloneLayer(layer: LayerNode): LayerNode {
   return copy;
 }
 
-function detach(layer: LayerNode): LayerNode {
+/** Every tile held by a layer tree (for residency management). */
+export function* layerTreeTiles(layer: LayerNode): IterableIterator<Tile> {
+  if (layer.kind === 'pixel') for (const [, , tile] of layer.buffer.tiles()) yield tile;
+  else for (const child of layer.children) yield* layerTreeTiles(child);
+}
+
+export function detach(layer: LayerNode): LayerNode {
   layer.parent = null;
   return layer;
 }
@@ -49,6 +60,7 @@ export function captureDocumentState(doc: ImageDocument): DocumentState {
     canvas: doc.canvasProps(),
     layers: doc.root.children.map((l) => detach(cloneLayer(l))),
     activeLayerId: doc.activeLayerId,
+    selectedLayerIds: [...doc.selectedLayerIds],
   };
 }
 
@@ -57,14 +69,15 @@ export function restoreDocumentState(doc: ImageDocument, state: DocumentState): 
   for (const layer of [...doc.root.children].reverse()) doc.removeLayer(layer.id);
   doc.setCanvasProps(state.canvas);
   for (const layer of state.layers) doc.insertLayer(detach(cloneLayer(layer)));
-  doc.setActiveLayer(state.activeLayerId !== null && doc.getLayer(state.activeLayerId) ? state.activeLayerId : null);
+  const selected = state.selectedLayerIds.filter((id) => doc.getLayer(id));
+  const active =
+    state.activeLayerId !== null && selected.includes(state.activeLayerId)
+      ? state.activeLayerId
+      : (selected.at(-1) ?? null);
+  doc.selectLayers(selected, active);
 }
 
 /** Every tile a snapshot holds (for residency management). */
 export function* stateTiles(state: DocumentState): IterableIterator<Tile> {
-  const visit = function* (layer: LayerNode): IterableIterator<Tile> {
-    if (layer.kind === 'pixel') for (const [, , tile] of layer.buffer.tiles()) yield tile;
-    else for (const child of layer.children) yield* visit(child);
-  };
-  for (const layer of state.layers) yield* visit(layer);
+  for (const layer of state.layers) yield* layerTreeTiles(layer);
 }

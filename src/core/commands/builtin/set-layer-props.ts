@@ -57,38 +57,54 @@ function labelFor(props: LayerPropChanges): string {
 
 class SetLayerPropsCommand implements Command {
   readonly label: string;
-  readonly descriptor;
+  readonly descriptor: { name: string; params: JsonObject };
   readonly undoBytes = 0;
   readonly #ctx: CommandContext;
-  readonly #layerId: string;
+  readonly #layerIds: string[];
   readonly #props: LayerPropChanges;
-  #previous: LayerPropChanges | undefined;
+  #previous: LayerPropChanges[] = [];
 
-  constructor(ctx: CommandContext, layerId: string, props: LayerPropChanges) {
+  constructor(ctx: CommandContext, layerIds: string[], props: LayerPropChanges, single: boolean) {
     this.#ctx = ctx;
-    this.#layerId = layerId;
+    this.#layerIds = layerIds;
     this.#props = props;
     this.label = labelFor(props);
-    this.descriptor = { name: 'setLayerProps', params: { layerId, props: props as unknown as JsonObject } };
+    const target: JsonObject = single ? { layerId: layerIds[0]! } : { layerIds };
+    this.descriptor = { name: 'setLayerProps', params: { ...target, props: props as unknown as JsonObject } };
   }
 
   execute(): void {
-    this.#previous = this.#ctx.doc.updateLayer(this.#layerId, this.#props);
+    const doc = this.#ctx.doc;
+    // Check every layer first so a refusal leaves nothing half-changed.
+    for (const id of this.#layerIds) doc.requireLayer(id);
+    this.#previous = [];
+    try {
+      for (const id of this.#layerIds) this.#previous.push(doc.updateLayer(id, this.#props));
+    } catch (error) {
+      this.#previous.forEach((prev, i) => doc.updateLayer(this.#layerIds[i]!, prev));
+      throw error;
+    }
   }
 
   undo(): void {
-    if (this.#previous) this.#ctx.doc.updateLayer(this.#layerId, this.#previous);
+    this.#previous.forEach((prev, i) => this.#ctx.doc.updateLayer(this.#layerIds[i]!, prev));
   }
 
   redo(): void {
-    this.#ctx.doc.updateLayer(this.#layerId, this.#props);
+    for (const id of this.#layerIds) this.#ctx.doc.updateLayer(id, this.#props);
   }
 }
 
+/** Changes properties of one layer (`layerId`) or several at once (`layerIds`), as one history step. */
 export const setLayerPropsCommand: CommandDefinition = {
   name: 'setLayerProps',
   create: (ctx, params) => {
-    if (typeof params['layerId'] !== 'string') throw new Error('setLayerProps: layerId must be a string');
-    return new SetLayerPropsCommand(ctx, params['layerId'], parseProps(params['props']));
+    const single = params['layerId'];
+    const many = params['layerIds'];
+    if (typeof single === 'string') return new SetLayerPropsCommand(ctx, [single], parseProps(params['props']), true);
+    if (Array.isArray(many) && many.length > 0 && many.every((v) => typeof v === 'string')) {
+      return new SetLayerPropsCommand(ctx, many, parseProps(params['props']), false);
+    }
+    throw new Error('setLayerProps: layerId must be a string (or layerIds a list of layer ids)');
   },
 };

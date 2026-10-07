@@ -206,6 +206,76 @@ export class AppController {
       run: () => ws.execute({ name: 'invert', params: {} }),
     });
 
+    // Layer
+    const doc = () => ws.active?.doc;
+    const selected = () => [...(doc()?.selectedLayerIds ?? [])];
+    const exec =
+      (name: string, params: Record<string, string> = {}) =>
+      () =>
+        ws.execute({ name, params });
+    add({
+      id: 'layer.newNoDialog',
+      label: 'New Layer',
+      enabled: () => ws.canExecute('newLayer'),
+      run: exec('newLayer'),
+    });
+    add({ id: 'layer.newGroup', label: 'Group', enabled: () => ws.canExecute('newGroup'), run: exec('newGroup') });
+    add({
+      id: 'layer.fromBackground',
+      label: 'Layer from Background',
+      enabled: () => ws.canExecute('layerFromBackground'),
+      run: exec('layerFromBackground'),
+    });
+    add({
+      id: 'layer.viaCopy',
+      label: 'Layer via Copy',
+      enabled: () => ws.canExecute('duplicateLayers'),
+      run: exec('duplicateLayers'),
+    });
+    add({
+      id: 'layer.delete',
+      label: 'Layer',
+      enabled: () => ws.canExecute('deleteLayers'),
+      run: exec('deleteLayers'),
+    });
+    const hiddenLayers = () => [...(doc()?.layers() ?? [])].filter((l) => !l.visible).map((l) => l.id);
+    add({
+      id: 'layer.deleteHidden',
+      label: 'Hidden Layers',
+      enabled: () => hiddenLayers().length > 0 && !!doc()?.root.children.some((l) => l.visible),
+      run: () => ws.execute({ name: 'deleteLayers', params: { layerIds: hiddenLayers() } }),
+    });
+    add({
+      id: 'layer.group',
+      label: 'Group Layers',
+      enabled: () => ws.canExecute('groupLayers'),
+      run: exec('groupLayers'),
+    });
+    add({
+      id: 'layer.ungroup',
+      label: 'Ungroup Layers',
+      enabled: () => ws.canExecute('ungroup'),
+      run: exec('ungroup'),
+    });
+    for (const [id, mode, label] of [
+      ['layer.bringToFront', 'front', 'Bring to Front'],
+      ['layer.bringForward', 'forward', 'Bring Forward'],
+      ['layer.sendBackward', 'backward', 'Send Backward'],
+      ['layer.sendToBack', 'back', 'Send to Back'],
+    ] as const) {
+      add({ id, label, enabled: () => ws.canExecute('arrangeLayers'), run: exec('arrangeLayers', { mode }) });
+    }
+    add({
+      id: 'layer.hide',
+      label: 'Hide Layers',
+      enabled: () => selected().length > 0,
+      run: () => {
+        const ids = selected();
+        const anyVisible = ids.some((id) => doc()?.getLayer(id)?.visible);
+        return ws.execute({ name: 'setLayerProps', params: { layerIds: ids, props: { visible: !anyVisible } } });
+      },
+    });
+
     // View
     add({
       id: 'view.zoomIn',

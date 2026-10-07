@@ -82,6 +82,7 @@ describe('Invert command', () => {
         tiles[0]!.fill(7); // partial write before failing
         return Promise.reject(new Error('worker crashed'));
       },
+      convertAlpha: () => Promise.reject(new Error('not used')),
     };
     const { doc, ctx, registry } = withBackground(createContext({}, failing));
     const layer = doc.background!;

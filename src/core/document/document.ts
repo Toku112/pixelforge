@@ -29,6 +29,7 @@ export type DocumentChange =
   | { kind: 'structure' }
   /** Canvas size, resolution, colour mode or bit depth changed. */
   | { kind: 'canvas' }
+  /** The active layer or the set of selected layers changed. */
   | { kind: 'active-layer'; layerId: string | null };
 
 /** Canvas-level properties (changed by Image Size, Canvas Size, Mode conversions…). */
@@ -100,6 +101,9 @@ export class ImageDocument {
   readonly changes = new Emitter<DocumentChange>();
 
   #activeLayerId: string | null = null;
+  /** Selected layers in selection order (the active layer is one of them). */
+  #selectedIds: string[] = [];
+  #nextGroupNumber = 1;
   #nextLayerId = 1;
   #nextLayerNumber = 1;
   readonly #layersById = new Map<string, LayerNode>();
@@ -181,7 +185,12 @@ export class ImageDocument {
     return new PixelLayer(this.newLayerId(), 'Background', buffer, true);
   }
 
-  createGroup(name = 'Group'): GroupLayer {
+  /** Default name for the next new group: "Group 1", "Group 2", … */
+  nextGroupName(): string {
+    return `Group ${this.#nextGroupNumber++}`;
+  }
+
+  createGroup(name = this.nextGroupName()): GroupLayer {
     return new GroupLayer(this.newLayerId(), name);
   }
 
@@ -230,6 +239,33 @@ export class ImageDocument {
     return this.#activeLayerId ? this.getLayer(this.#activeLayerId) : undefined;
   }
 
+  /** Selected layers, in the order they were selected. */
+  get selectedLayerIds(): readonly string[] {
+    return this.#selectedIds;
+  }
+
+  /** Where a layer sits: its parent and index (bottom → top). */
+  positionOf(id: string): { parentId: string; index: number } {
+    const layer = this.requireLayer(id);
+    if (!layer.parent) throw new Error(`Layer ${id} has no parent`);
+    return { parentId: layer.parent.id, index: layer.parent.children.indexOf(layer) };
+  }
+
+  /** True when `id` is `ancestorId` or inside it. */
+  isWithin(id: string, ancestorId: string): boolean {
+    let node: LayerNode | GroupLayer | null | undefined = this.getLayer(id);
+    while (node) {
+      if (node.id === ancestorId) return true;
+      node = node.parent;
+    }
+    return false;
+  }
+
+  /** Bottom → top stacking order of all layers (depth first), as ids. */
+  stackOrder(): string[] {
+    return [...this.layers()].map((l) => l.id);
+  }
+
   // ---------------------------------------------------------------------------
   // Primitives for commands
   // ---------------------------------------------------------------------------
@@ -265,9 +301,41 @@ export class ImageDocument {
     parent.children.splice(index, 1);
     layer.parent = null;
     this.#unregister(layer);
-    if (this.#activeLayerId && !this.#layersById.has(this.#activeLayerId)) this.setActiveLayer(null);
     this.changes.emit({ kind: 'structure' });
+    const remaining = this.#selectedIds.filter((s) => this.#layersById.has(s));
+    if (
+      remaining.length !== this.#selectedIds.length ||
+      (this.#activeLayerId && !this.#layersById.has(this.#activeLayerId))
+    ) {
+      this.selectLayers(remaining, remaining.at(-1) ?? null);
+    }
     return { parentId: parent.id, index, layer };
+  }
+
+  /**
+   * Moves a layer (with its children) to `index` in group `parentId`, where `index`
+   * counts the target's children without the moving layer. Returns where it was.
+   */
+  moveLayer(id: string, parentId: string, index: number): { parentId: string; index: number } {
+    const layer = this.requireLayer(id);
+    if (layer.kind === 'pixel' && layer.isBackground) throw new Error('The Background layer cannot be moved');
+    const target = parentId === this.root.id ? this.root : this.requireLayer(parentId);
+    if (target.kind !== 'group') throw new Error(`Layer ${parentId} is not a group`);
+    if (target !== this.root && this.isWithin(target.id, id)) throw new Error('A group cannot be moved into itself');
+    const from = this.positionOf(id);
+    const source = layer.parent!;
+    source.children.splice(from.index, 1);
+    const at = Math.max(0, Math.min(index, target.children.length));
+    try {
+      this.#checkPlacement(layer, target, at);
+    } catch (error) {
+      source.children.splice(from.index, 0, layer); // put it back
+      throw error;
+    }
+    target.children.splice(at, 0, layer);
+    layer.parent = target;
+    this.changes.emit({ kind: 'structure' });
+    return from;
   }
 
   /**
@@ -323,11 +391,27 @@ export class ImageDocument {
     return previous;
   }
 
+  /** Selects exactly one layer (or none), making it active. */
   setActiveLayer(id: string | null): void {
-    if (id !== null) this.requireLayer(id);
-    if (id === this.#activeLayerId) return;
-    this.#activeLayerId = id;
-    this.changes.emit({ kind: 'active-layer', layerId: id });
+    this.selectLayers(id === null ? [] : [id], id);
+  }
+
+  /**
+   * Sets the selected layers and the active one (which must be among them; by
+   * default the last). Layer selection is not a history step, as in the reference app.
+   */
+  selectLayers(ids: readonly string[], activeId: string | null = ids.at(-1) ?? null): void {
+    for (const id of ids) this.requireLayer(id);
+    const unique = [...new Set(ids)];
+    if (activeId !== null && !unique.includes(activeId)) throw new Error(`Active layer ${activeId} is not selected`);
+    const same =
+      activeId === this.#activeLayerId &&
+      unique.length === this.#selectedIds.length &&
+      unique.every((v, i) => v === this.#selectedIds[i]);
+    if (same) return;
+    this.#selectedIds = unique;
+    this.#activeLayerId = activeId;
+    this.changes.emit({ kind: 'active-layer', layerId: activeId });
   }
 
   // ---------------------------------------------------------------------------

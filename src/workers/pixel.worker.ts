@@ -6,6 +6,8 @@
  * core); otherwise — or when started as "pixel-single-thread" — it uses the
  * single-threaded SIMD build.
  */
+import { convertAlphaTile } from '../core/commands/alpha';
+import { createSampleArray, samplesPerPixel, type PixelFormat, type SampleArray } from '../core/document/pixel-format';
 import { exposeApi, transfer } from './rpc';
 import type * as PixelOpsSt from '../wasm/pkg/pixel-ops-st/pixel_ops.js';
 
@@ -84,6 +86,27 @@ const api = {
   },
 };
 
-export type PixelWorkerApi = typeof api;
+/** New tile arrays: shared memory when the page is cross-origin isolated. */
+function newSamples(format: PixelFormat, length: number): SampleArray {
+  const bytes = length * (format.depth === 8 ? 1 : format.depth === 16 ? 2 : 4);
+  const shared = self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined';
+  return createSampleArray(format.depth, length, shared ? new SharedArrayBuffer(bytes) : new ArrayBuffer(bytes));
+}
+
+const conversions = {
+  /** See PixelOps.convertAlpha. */
+  convertAlpha(tiles: SampleArray[], from: PixelFormat, to: PixelFormat, matte: number[]): SampleArray[] {
+    const out = tiles.map((t) =>
+      convertAlphaTile(t, from, to, matte, newSamples(to, (t.length / samplesPerPixel(from)) * samplesPerPixel(to))),
+    );
+    return transfer(
+      out,
+      out.filter((t) => !(t.buffer instanceof SharedArrayBuffer)).map((t) => t.buffer as ArrayBuffer),
+    );
+  },
+};
+Object.assign(api, conversions);
+
+export type PixelWorkerApi = typeof api & typeof conversions;
 
 exposeApi(api);

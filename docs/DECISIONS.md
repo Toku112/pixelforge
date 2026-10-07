@@ -225,3 +225,19 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   Essentials restores the default.
 - Store actions and component callbacks are declared as function-typed properties so they can be passed around
   safely; text fields show the live value except while the user is typing (no state syncing effects).
+
+## D-022 — 2026-10-07 — Layer structure commands
+
+**Decision:**
+
+- Layer selection (which layers are selected/active) is not a history step, as in the reference app; structure
+  commands remember the selection and restore it on undo.
+- New layers go directly above the active layer, or at the top inside the active group when that group is expanded
+  (above it when collapsed) — the most common expectation; logged because the reference app's exact rule for groups
+  could not be confirmed.
+- Deleting selects the layer below the lowest deleted one; a document always keeps at least one layer; layers with
+  "lock all" cannot be deleted.
+- Undo data for structure changes are detached copies of the affected layers sharing frozen tiles (no pixel copies),
+  re-inserted by id, so undo/redo stays correct after history snapshot restores.
+- Converting the Background (Layer from Background, duplicating it) runs in the pixel worker: every allocated tile and
+  every canvas tile gets an opaque alpha channel.

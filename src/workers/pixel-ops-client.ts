@@ -24,5 +24,8 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
         if (result) copySamples(tiles[i]!, result);
       });
     },
+    convertAlpha(tiles, from, to, matte) {
+      return worker.convertAlpha(tiles, from, to, [...matte]);
+    },
   };
 }

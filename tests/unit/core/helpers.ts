@@ -2,6 +2,7 @@ import type { CommandContext, PixelOps } from '../../../src/core/commands/comman
 import { CommandRegistry } from '../../../src/core/commands/registry';
 import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { ImageDocument, type DocumentInit } from '../../../src/core/document/document';
+import { convertAlphaTile } from '../../../src/core/commands/alpha';
 import { maxSampleValue, type PixelFormat, type SampleArray } from '../../../src/core/document/pixel-format';
 
 /** Straightforward TypeScript implementation of PixelOps (the app uses WebAssembly in a worker). */
@@ -15,6 +16,9 @@ export const referencePixelOps: PixelOps = {
       }
     }
     return Promise.resolve();
+  },
+  convertAlpha(tiles, from, to, matte) {
+    return Promise.resolve(tiles.map((t) => convertAlphaTile(t, from, to, matte)));
   },
 };
 

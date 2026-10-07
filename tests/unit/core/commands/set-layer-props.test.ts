@@ -39,6 +39,7 @@ describe('setLayerProps command', () => {
     const create = (params: Record<string, unknown>) =>
       registry.create(ctx, { name: 'setLayerProps', params: params as never });
     expect(() => create({ props: { opacity: 1 } })).toThrow('layerId');
+    expect(() => create({ layerIds: [], props: { opacity: 1 } })).toThrow('layerId');
     expect(() => create({ layerId: layer.id, props: {} })).toThrow('no properties');
     expect(() => create({ layerId: layer.id, props: { colour: 'red' } })).toThrow('unknown property "colour"');
     expect(() => create({ layerId: layer.id, props: { blendMode: 'glow' } })).toThrow('invalid value');
@@ -52,5 +53,28 @@ describe('setLayerProps command', () => {
       params: { layerId: doc.background!.id, props: { opacity: 0.5 } },
     });
     await expect(async () => cmd.execute()).rejects.toThrow('fully opaque');
+  });
+});
+
+describe('setLayerProps on several layers', () => {
+  it('changes them in one step and undoes them together; a refusal changes nothing', async () => {
+    const { doc, ctx, registry, layer } = setup();
+    const other = doc.createPixelLayer();
+    doc.insertLayer(other);
+    const cmd = registry.create(ctx, {
+      name: 'setLayerProps',
+      params: { layerIds: [layer.id, other.id], props: { visible: false } },
+    });
+    expect(cmd.label).toBe('Hide Layer');
+    await cmd.execute();
+    expect([layer.visible, other.visible]).toEqual([false, false]);
+    cmd.undo();
+    expect([layer.visible, other.visible]).toEqual([true, true]);
+    const bad = registry.create(ctx, {
+      name: 'setLayerProps',
+      params: { layerIds: [layer.id, doc.background!.id], props: { opacity: 0.5 } },
+    });
+    await expect(async () => bad.execute()).rejects.toThrow('fully opaque');
+    expect(layer.opacity).toBe(1);
   });
 });

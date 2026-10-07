@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Phase 0 (exit criteria pass)
-- Next up: Part D, first item (layer model and commands)
+- Last completed: Part D item 1 (layer model and commands)
+- Next up: Part D item 2 (Layers panel)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -579,10 +579,11 @@ Goal: edit a layered composition and round-trip a simple PSD with real Photoshop
 Definition of Done (CLAUDE.md §5) holds for the scope stated; the matching Part B items stay unticked until their full
 scope (all modes, masks, etc.) is complete.
 
-- [ ] Layer model and commands: multi-layer selection; New/Delete/Duplicate/Rename layer; New Group, Group/Ungroup; reorder and Arrange (bring forward/to front, send backward/to back); visibility, locks, opacity, fill, blend mode; Layer from Background / Background from Layer
+- [x] Layer model and commands: multi-layer selection; New/Delete/Duplicate/Rename layer; New Group, Group/Ungroup; reorder and Arrange (bring forward/to front, send backward/to back); visibility, locks, opacity, fill, blend mode; Layer from Background
+  ↳ note: Background from Layer moved to the merge/flatten item (it needs the same compositing step); the New Layer / Duplicate Layer dialogs come with the Layers panel.
 - [ ] Layers panel: thumbnails, visibility (Alt-click solo), rename, blend mode menu, Opacity/Fill fields, lock buttons, new/delete/group buttons, drag to reorder, multi-select, group expand/collapse
 - [ ] All 27 blend modes with Photoshop math in the CPU and GPU compositors (incl. Dissolve, Darker/Lighter Color, Hue/Saturation/Color/Luminosity, Fill vs Opacity for the "special eight"); Shift+/− and Alt+Shift+letter blend-mode shortcuts
-- [ ] Merge Down, Merge Visible, Stamp Visible, Flatten Image (composited off the main thread)
+- [ ] Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer (composited off the main thread)
 - [ ] Selections: selection mask model; Select All/Deselect/Reselect/Inverse; Rectangular, Elliptical, Single Row/Column Marquee; Lasso and Polygonal Lasso (new/add/subtract/intersect, feather, anti-alias); marching ants; selection-aware Invert and Delete
 - [ ] Foreground/background colours in the toolbar (X swap, D default) and a Color Picker dialog
 - [ ] Brush and Eraser (simple round brush: size, hardness, opacity, flow, spacing, pen pressure; [ ] { } and number-key shortcuts), painting off the main thread with tile-diff undo

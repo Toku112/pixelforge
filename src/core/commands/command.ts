@@ -48,6 +48,17 @@ export interface Command {
 export interface PixelOps {
   /** Inverts colour samples (max − value), leaving alpha unchanged. 8/16-bit only. */
   invert(tiles: SampleArray[], format: PixelFormat): Promise<void>;
+  /**
+   * Converts whole tiles to a format that differs only in alpha: adds a fully
+   * opaque alpha channel, or removes alpha by compositing over `matte` (colour
+   * samples). Returns new arrays; the inputs are not modified.
+   */
+  convertAlpha(
+    tiles: SampleArray[],
+    from: PixelFormat,
+    to: PixelFormat,
+    matte: readonly number[],
+  ): Promise<SampleArray[]>;
 }
 
 export interface CommandServices {

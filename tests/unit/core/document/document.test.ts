@@ -188,3 +188,36 @@ describe('ImageDocument tile attachment', () => {
     expect(doc.root.children).toHaveLength(0);
   });
 });
+
+describe('ImageDocument layer selection and moves', () => {
+  it('selects several layers with an active one; removing layers updates the selection', () => {
+    const doc = docWithBackground();
+    const a = doc.createPixelLayer();
+    const b = doc.createPixelLayer();
+    doc.insertLayer(a);
+    doc.insertLayer(b);
+    doc.selectLayers([a.id, b.id], a.id);
+    expect(doc.selectedLayerIds).toEqual([a.id, b.id]);
+    expect(doc.activeLayerId).toBe(a.id);
+    expect(() => doc.selectLayers([a.id], b.id)).toThrow('not selected');
+    expect(() => doc.selectLayers(['nope'])).toThrow('No layer');
+    doc.removeLayer(a.id);
+    expect(doc.selectedLayerIds).toEqual([b.id]);
+    expect(doc.activeLayerId).toBe(b.id);
+  });
+
+  it('moves layers, refusing the Background, moving a group into itself, or going below the Background', () => {
+    const doc = docWithBackground();
+    const g = doc.createGroup();
+    const a = doc.createPixelLayer();
+    doc.insertLayer(g);
+    doc.insertLayer(a);
+    expect(doc.moveLayer(a.id, g.id, 0)).toEqual({ parentId: 'root', index: 2 });
+    expect(doc.positionOf(a.id)).toEqual({ parentId: g.id, index: 0 });
+    expect(() => doc.moveLayer(doc.background!.id, 'root', 1)).toThrow('cannot be moved');
+    expect(() => doc.moveLayer(g.id, g.id, 0)).toThrow('into itself');
+    expect(() => doc.moveLayer(g.id, 'root', 0)).toThrow('below the Background');
+    expect(doc.positionOf(g.id)).toEqual({ parentId: 'root', index: 1 }); // unchanged after the failed move
+    expect(doc.isWithin(a.id, g.id)).toBe(true);
+  });
+});
