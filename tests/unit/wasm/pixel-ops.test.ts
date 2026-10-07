@@ -34,7 +34,8 @@ describe('pixel-ops WebAssembly (single-threaded build)', () => {
     const copy = px.slice();
     ops.invertU8(px, 4, true);
     ops.invertU8(px, 4, true);
-    expect(px).toEqual(copy);
+    // Every byte compared, without the generic deep equality (seconds for 4 MB, which made this test flaky).
+    expect(Buffer.compare(px, copy)).toBe(0);
   });
 
   it('throws a readable error for invalid layouts', () => {
