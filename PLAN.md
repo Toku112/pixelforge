@@ -10,9 +10,9 @@
 
 _Update this section at the end of every session._
 
-- Phase: 0 complete — exit criteria pass (`tests/e2e/app.spec.ts`, Phase 0 exit-criteria test). Waiting for the owner before starting Phase 1.
-- Last completed: all Phase 0 tasks; CI workflow written and verified locally (still marked partial until its first run on GitHub)
-- Next up: Phase 1 — Core editor MVP, starting with the Layers panel and layer commands (new/delete/duplicate/reorder/visibility/opacity/blend mode), then the 27 blend modes in the CPU and GPU compositors
+- Phase: 1 — Core editor MVP (task list in Part D)
+- Last completed: Phase 0 (exit criteria pass)
+- Next up: Part D, first item (layer model and commands)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -570,3 +570,25 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
   ↳ note: connected to menus and tools in the app-shell task; the Keyboard Shortcuts editor UI is PLAN B4.
 - [x] Golden-image test harness with ΔE2000 comparison and diff image output
 - [x] `docs/` files created: THIRD_PARTY.md, DECISIONS.md, FORMAT_NOTES.md, KNOWN_GAPS.md
+
+---
+
+# PART D — PHASE 1 TASK BREAKDOWN
+
+Goal: edit a layered composition and round-trip a simple PSD with real Photoshop. Each item ticks only when its
+Definition of Done (CLAUDE.md §5) holds for the scope stated; the matching Part B items stay unticked until their full
+scope (all modes, masks, etc.) is complete.
+
+- [ ] Layer model and commands: multi-layer selection; New/Delete/Duplicate/Rename layer; New Group, Group/Ungroup; reorder and Arrange (bring forward/to front, send backward/to back); visibility, locks, opacity, fill, blend mode; Layer from Background / Background from Layer
+- [ ] Layers panel: thumbnails, visibility (Alt-click solo), rename, blend mode menu, Opacity/Fill fields, lock buttons, new/delete/group buttons, drag to reorder, multi-select, group expand/collapse
+- [ ] All 27 blend modes with Photoshop math in the CPU and GPU compositors (incl. Dissolve, Darker/Lighter Color, Hue/Saturation/Color/Luminosity, Fill vs Opacity for the "special eight"); Shift+/− and Alt+Shift+letter blend-mode shortcuts
+- [ ] Merge Down, Merge Visible, Stamp Visible, Flatten Image (composited off the main thread)
+- [ ] Selections: selection mask model; Select All/Deselect/Reselect/Inverse; Rectangular, Elliptical, Single Row/Column Marquee; Lasso and Polygonal Lasso (new/add/subtract/intersect, feather, anti-alias); marching ants; selection-aware Invert and Delete
+- [ ] Foreground/background colours in the toolbar (X swap, D default) and a Color Picker dialog
+- [ ] Brush and Eraser (simple round brush: size, hardness, opacity, flow, spacing, pen pressure; [ ] { } and number-key shortcuts), painting off the main thread with tile-diff undo
+- [ ] Edit > Fill (foreground/background/colour/black/white/50% gray, mode, opacity, preserve transparency) and Delete/Backspace fills
+- [ ] Move tool: move layers (and selected pixels), auto-select, arrow nudge (Shift = 10 px), Alt-drag duplicate
+- [ ] Crop tool and Image > Crop; Image Size (resample methods); Canvas Size (anchor, relative); Image Rotation (180°, 90° CW/CCW, Flip Canvas)
+- [ ] Free Transform (Ctrl/Cmd+T): scale, rotate, skew, distort, perspective, numeric fields, reference point, interpolation
+- [ ] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd
+- [ ] Phase 1 exit test: edit a layered composition and round-trip it as PSD (automated), plus owner check with real Photoshop
