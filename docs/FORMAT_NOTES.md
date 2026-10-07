@@ -184,9 +184,25 @@ one 8-bit step, except at a few pixels sitting exactly on a mode's threshold (Da
 Dissolve) or near a division by almost zero (burns, dodges, Divide, Saturation), where the half-float backdrop can
 tip the result: fewer than 0.25 % of values for threshold modes and 0.1 % for dividing modes in the tests.
 
-## 4. File formats
+## 4. Selections
 
-### 4.1 Opening (PNG, JPEG, WebP)
+A selection is an 8-bit mask over the document (0 = not selected, 255 = fully selected), stored as sparse
+256 × 256 tiles plus a fill value (0 or 255) for everything else, on a grid with an integer offset (moving an
+outline only changes the offset). Only the canvas counts: outside it nothing is selected.
+
+- **Shapes** are filled with the even-odd rule. With anti-aliasing, a pixel's value is its coverage, measured on 4
+  sub-rows per pixel with exact horizontal coverage on each; without it, a pixel is in when its centre is.
+  Ellipses are polygons with segments about one pixel long.
+- **Feather** blurs the new shape (before combining) with a Gaussian of standard deviation σ = the feather radius,
+  approximated by three box blurs (box widths after Kovesi); outside the canvas counts as 0.
+- **Combining** soft masks: Add `max(a, b)`, Intersect `min(a, b)`, Subtract `min(a, 255 − b)`; Inverse `255 − a`.
+- **Selection-limited edits** move each pixel from its value `v` towards the edited value `e` by the mask:
+  `v + (e − v)·m/255` (Invert); Clear multiplies alpha by `1 − m/255`, or moves colour towards the fill colour.
+- **Marching ants** follow the edge between pixels with `m ≥ 128` and the rest, along pixel boundaries.
+
+## 5. File formats
+
+### 5.1 Opening (PNG, JPEG, WebP)
 
 - Opaque images open as a locked **Background** layer; images with transparency open as a normal layer named
   **Layer 0**. Grayscale files open in Grayscale mode, colour files in RGB; 16-bit PNGs open as 16-bit documents.
@@ -197,7 +213,7 @@ tip the result: fewer than 0.25 % of values for threshold modes and 0.1 % for di
 - Palette PNGs are expanded to RGB(A) until Indexed Color mode exists; `tRNS` transparency becomes alpha.
 - Decoding and tiling happen in the codec worker; fully transparent tiles are not stored.
 
-### 4.2 Saving PNG
+### 5.2 Saving PNG
 
 - Visible layers are flattened (§3) in the codec worker. The PNG has an alpha channel only if the flattened result has
   any transparency; otherwise it is RGB/Gray. 8- and 16-bit documents save at their own depth.

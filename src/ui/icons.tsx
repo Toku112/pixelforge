@@ -158,6 +158,65 @@ const icons = {
       <path d="M12 11v5.5M9.25 13.75h5.5" />
     </Svg>
   ),
+  marqueeRect: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="4.5" y="5.5" width="15" height="13" strokeDasharray="2.5 2" />
+    </Svg>
+  ),
+  marqueeEllipse: (p: IconProps) => (
+    <Svg {...p}>
+      <ellipse cx="12" cy="12" rx="8" ry="6.5" strokeDasharray="2.5 2" />
+    </Svg>
+  ),
+  marqueeRow: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M3.5 12h17" strokeDasharray="2.5 2" />
+      <path d="M3.5 8v8M20.5 8v8" />
+    </Svg>
+  ),
+  marqueeColumn: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M12 3.5v17" strokeDasharray="2.5 2" />
+      <path d="M8 3.5h8M8 20.5h8" />
+    </Svg>
+  ),
+  lasso: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M8.5 15.5C5.6 14.6 4 12.9 4 10.8 4 7.6 7.6 5 12 5s8 2.6 8 5.8-3.6 5.7-8 5.7c-.9 0-1.8-.1-2.6-.3" />
+      <path d="M9.5 15.6c-1.5.4-2.3 1.4-1.8 2.5.4 1 1.8 1.4 2.8.6 1-.7.6-2.2-1-3.1Z" />
+      <path d="M9.4 18.6 8 21" />
+    </Svg>
+  ),
+  polygonalLasso: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M8.5 15.5 4 9l7-4.5 9 3.5-2 7.5-7.5.5" />
+      <path d="M9.5 15.6c-1.5.4-2.3 1.4-1.8 2.5.4 1 1.8 1.4 2.8.6 1-.7.6-2.2-1-3.1Z" />
+      <path d="M9.4 18.6 8 21" />
+    </Svg>
+  ),
+  selectionNew: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="5" y="5" width="14" height="14" rx="1" fill="currentColor" fillOpacity="0.35" />
+    </Svg>
+  ),
+  selectionAdd: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M3.5 3.5h11v6h6v11h-11v-6h-6Z" fill="currentColor" fillOpacity="0.35" />
+    </Svg>
+  ),
+  selectionSubtract: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M3.5 3.5h11v6h-5v5h-6Z" fill="currentColor" fillOpacity="0.35" />
+      <rect x="9.5" y="9.5" width="11" height="11" />
+    </Svg>
+  ),
+  selectionIntersect: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="3.5" width="11" height="11" />
+      <rect x="9.5" y="9.5" width="11" height="11" />
+      <rect x="9.5" y="9.5" width="5" height="5" fill="currentColor" fillOpacity="0.5" stroke="none" />
+    </Svg>
+  ),
   trash: (p: IconProps) => (
     <Svg {...p}>
       <path d="M4.5 6.5h15M9.5 6.5V4.5h5v2" />

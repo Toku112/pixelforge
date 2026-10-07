@@ -224,6 +224,11 @@ export class Workspace {
     if (this.#sessions.includes(preview.session)) await preview.undo();
   }
 
+  /** Resolves once every command and preview started so far has finished (also when they failed). */
+  whenIdle(): Promise<void> {
+    return this.#queue;
+  }
+
   /** Runs tasks one after another, so previews and commands never interleave. */
   #serial<T>(task: () => Promise<T>): Promise<T> {
     const run = this.#queue.then(task, task);

@@ -84,6 +84,9 @@ describe('Invert command', () => {
       },
       convertAlpha: () => Promise.reject(new Error('not used')),
       composite: () => Promise.reject(new Error('not used')),
+      clear: () => Promise.reject(new Error('not used')),
+      selectShape: () => Promise.reject(new Error('not used')),
+      invertSelection: () => Promise.reject(new Error('not used')),
     };
     const { doc, ctx, registry } = withBackground(createContext({}, failing));
     const layer = doc.background!;

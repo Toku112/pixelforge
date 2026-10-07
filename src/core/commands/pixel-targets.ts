@@ -1,6 +1,9 @@
 import type { ImageDocument } from '../document/document';
+import { intersectRects, isEmptyRect } from '../document/geometry';
 import type { PixelLayer } from '../document/layers';
-import { tileIndex, tileKey } from '../document/tile';
+import { TILE_SIZE, tileIndex, tileKey } from '../document/tile';
+import type { MaskedTarget } from '../selection/masked-edits';
+import type { Selection } from '../selection/selection';
 
 /**
  * Tiles a whole-layer pixel operation must process, as [tx, ty] in layer tile space:
@@ -24,4 +27,31 @@ export function wholeLayerTiles(doc: ImageDocument, layer: PixelLayer): [number,
     }
   }
   return [...coords.values()].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+}
+
+/**
+ * The layer tiles a selection-limited edit touches (those of `wholeLayerTiles`
+ * meeting the selection's bounds), with the selection data for the worker.
+ */
+export function selectedLayerTiles(
+  doc: ImageDocument,
+  layer: PixelLayer,
+  selection: Selection,
+): { coords: [number, number][]; through: MaskedTarget } {
+  const bounds = selection.bounds(doc.canvasRect);
+  const coords = wholeLayerTiles(doc, layer).filter(
+    ([tx, ty]) =>
+      !isEmptyRect(
+        intersectRects(bounds, {
+          x: tx * TILE_SIZE + layer.offsetX,
+          y: ty * TILE_SIZE + layer.offsetY,
+          w: TILE_SIZE,
+          h: TILE_SIZE,
+        }),
+      ),
+  );
+  return {
+    coords,
+    through: { mask: selection.data, canvas: doc.canvasRect, offsetX: layer.offsetX, offsetY: layer.offsetY, coords },
+  };
 }

@@ -6,10 +6,10 @@
 import { useRef, useState } from 'react';
 import { viewActions } from '../../tools/hand/hand-tool';
 import { useController } from '../AppContext';
-import { Icon, type IconName } from '../icons';
+import { Icon } from '../icons';
 import { useUi } from '../state/ui-store';
+import { toolIcon } from '../tool-icons';
 
-const TOOL_ICONS: Record<string, IconName> = { hand: 'hand', 'rotate-view': 'rotateView', zoom: 'zoom' };
 const LONG_PRESS_MS = 450;
 
 export function Toolbar() {
@@ -41,7 +41,7 @@ export function Toolbar() {
               className={`tool-button${active ? ' active' : ''}`}
               aria-pressed={active}
               aria-label={current.name}
-              title={`${current.name} (${current.key})`}
+              title={current.key ? `${current.name} (${current.key})` : current.name}
               data-tool={current.id}
               onClick={() => select(current.id, group.id)}
               onDoubleClick={() => {
@@ -61,7 +61,7 @@ export function Toolbar() {
               onPointerUp={() => pressTimer.current !== null && window.clearTimeout(pressTimer.current)}
               onPointerLeave={() => pressTimer.current !== null && window.clearTimeout(pressTimer.current)}
             >
-              <Icon name={TOOL_ICONS[current.id] ?? 'hand'} size={20} />
+              <Icon name={toolIcon(current.id)} size={20} />
               {multiple && <span className="tool-group-mark" aria-hidden="true" />}
             </button>
             {flyout === group.id && (
@@ -75,7 +75,7 @@ export function Toolbar() {
                     className="tool-flyout-row"
                     onClick={() => select(tool.id, group.id)}
                   >
-                    <Icon name={TOOL_ICONS[tool.id] ?? 'hand'} size={16} />
+                    <Icon name={toolIcon(tool.id)} size={16} />
                     <span>{tool.name}</span>
                     <span className="menu-shortcut">{tool.key}</span>
                   </button>

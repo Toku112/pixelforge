@@ -99,8 +99,8 @@ test('Rotate View tool rotates with the drag; Shift snaps to 15°', async ({ pag
   expect((await state(page)).rotation).toBeCloseTo(90, 0);
   await page.keyboard.down('Shift');
   await page.mouse.move(600, 357, { steps: 4 }); // ≈ 16° → snaps to 15°
-  await page.keyboard.up('Shift');
   await page.mouse.up();
+  await page.keyboard.up('Shift');
   expect((await state(page)).rotation).toBe(15);
 });
 

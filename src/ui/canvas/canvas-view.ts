@@ -4,12 +4,15 @@
  * pixel density), and connects pointer input to the tools. React mounts it but
  * never renders the canvas itself (CLAUDE.md §2).
  */
+import type { OutlineTracer } from '../../app/services';
+import type { CommandDescriptor } from '../../core/commands/command';
 import type { ImageDocument } from '../../core/document/document';
 import { Renderer, type RendererOptions } from '../../engine/gl/renderer';
 import type { ViewportState } from '../../engine/viewport/viewport';
 import type { ToolSet } from '../../tools/registry';
 import type { ToolContext, ViewRect } from '../../tools/types';
 import { CanvasInput } from './canvas-input';
+import { SelectionOverlay } from './selection-overlay';
 
 export interface CanvasViewOptions {
   tools: ToolSet;
@@ -20,6 +23,10 @@ export interface CanvasViewOptions {
   onViewChange?(state: ViewportState): void;
   /** Called when a drag starts on the canvas. */
   onGestureStart?(): void;
+  /** Runs a document command for a tool (e.g. a selection tool's result). */
+  execute?(descriptor: CommandDescriptor): void;
+  /** Marching ants: a 2D canvas stacked above the document canvas, and the outline tracer. */
+  ants?: { canvas: HTMLCanvasElement; trace: OutlineTracer };
   renderer?: RendererOptions;
 }
 
@@ -33,6 +40,7 @@ export class CanvasView {
   readonly #overlay: HTMLElement;
   readonly #options: CanvasViewOptions;
   readonly #input: CanvasInput;
+  readonly #ants: SelectionOverlay | null;
   readonly #resizeObserver: ResizeObserver;
   #dprQuery: MediaQueryList | null = null;
   #cssSize = { w: 1, h: 1 };
@@ -44,6 +52,7 @@ export class CanvasView {
     this.#options = options;
     this.renderer = new Renderer(canvas, options.renderer);
     const renderer = this.renderer;
+    this.#ants = options.ants ? new SelectionOverlay(options.ants.canvas, renderer, options.ants.trace) : null;
     this.context = {
       get viewport() {
         return renderer.viewport;
@@ -56,6 +65,8 @@ export class CanvasView {
       },
       viewChanged: () => this.#viewChanged(),
       setOverlayRect: (rect) => this.#showOverlay(rect),
+      setSelectionPreview: (preview) => this.#ants?.setPreview(preview),
+      execute: (descriptor) => options.execute?.(descriptor),
     };
     canvas.tabIndex = 0; // focusable, so keyboard tools work after clicking the canvas
     this.#input = new CanvasInput({
@@ -78,7 +89,9 @@ export class CanvasView {
 
   /** Shows a document, restoring a saved view or fitting it on screen. */
   setDocument(doc: ImageDocument | null, view?: ViewportState): void {
+    if (doc !== this.renderer.document) this.#input.cancelTool(); // e.g. a half-drawn polygon
     this.renderer.setDocument(doc);
+    this.#ants?.setDocument(doc);
     if (doc && view) {
       Object.assign(this.renderer.viewport, {
         zoom: view.zoom,
@@ -120,8 +133,14 @@ export class CanvasView {
     this.#input.refresh();
   }
 
+  /** The marching-ants overlay (for diagnostics and tests). */
+  get selectionOverlay(): SelectionOverlay | null {
+    return this.#ants;
+  }
+
   dispose(): void {
     this.#input.dispose();
+    this.#ants?.dispose();
     this.#resizeObserver.disconnect();
     this.#dprQuery?.removeEventListener('change', this.#onPixelRatioChange);
     this.renderer.dispose();

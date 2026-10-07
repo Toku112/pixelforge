@@ -5,6 +5,9 @@
  * journal stores; `CommandRegistry` turns a descriptor back into a command.
  */
 import type { CompositeTile } from '../composite/composite-tiles';
+import type { MaskedTarget } from '../selection/masked-edits';
+import type { SelectionMode, SelectionShape } from '../selection/mask-ops';
+import type { MaskData } from '../selection/selection';
 import type { FlattenPlan } from '../composite/flatten';
 import type { ImageDocument } from '../document/document';
 import type { Rect } from '../document/geometry';
@@ -49,8 +52,32 @@ export interface Command {
  * tile sample arrays in place.
  */
 export interface PixelOps {
-  /** Inverts colour samples (max − value), leaving alpha unchanged. 8/16-bit only. */
-  invert(tiles: SampleArray[], format: PixelFormat): Promise<void>;
+  /**
+   * Inverts colour samples (max − value), leaving alpha unchanged. 8/16-bit only.
+   * With `through`, only as much as the selection covers each pixel.
+   */
+  invert(tiles: SampleArray[], format: PixelFormat, through?: MaskedTarget): Promise<void>;
+  /**
+   * Edit > Clear through a selection: makes pixels transparent, or moves them
+   * towards `fill` (colour samples) for layers without (editable) transparency.
+   */
+  clear(
+    tiles: SampleArray[],
+    format: PixelFormat,
+    through: MaskedTarget,
+    fill: readonly number[] | null,
+  ): Promise<void>;
+  /** The selection after drawing a shape (see core/selection/mask-ops.ts); null when nothing is left selected. */
+  selectShape(
+    current: MaskData | null,
+    shape: SelectionShape,
+    mode: SelectionMode,
+    feather: number,
+    antiAlias: boolean,
+    canvas: Rect,
+  ): Promise<MaskData | null>;
+  /** Select > Inverse; null when nothing is left selected. */
+  invertSelection(current: MaskData, canvas: Rect): Promise<MaskData | null>;
   /**
    * Converts whole tiles to a format that differs only in alpha: adds a fully
    * opaque alpha channel, or removes alpha by compositing over `matte` (colour

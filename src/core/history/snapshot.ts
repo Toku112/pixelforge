@@ -3,6 +3,7 @@
  * snapshots). Capturing is cheap: layer buffers are cloned by sharing frozen
  * tiles, so a snapshot only costs memory for tiles that later change.
  */
+import type { Selection } from '../selection/selection';
 import type { CanvasProps, ImageDocument } from '../document/document';
 import { GroupLayer, PixelLayer, type LayerNode } from '../document/layers';
 import type { Tile } from '../document/tile';
@@ -13,6 +14,9 @@ export interface DocumentState {
   readonly layers: readonly LayerNode[];
   readonly activeLayerId: string | null;
   readonly selectedLayerIds: readonly string[];
+  /** Selections never change, so the snapshot keeps the same objects. */
+  readonly selection: Selection | null;
+  readonly reselect: Selection | null;
 }
 
 /**
@@ -61,6 +65,8 @@ export function captureDocumentState(doc: ImageDocument): DocumentState {
     layers: doc.root.children.map((l) => detach(cloneLayer(l))),
     activeLayerId: doc.activeLayerId,
     selectedLayerIds: [...doc.selectedLayerIds],
+    selection: doc.selection,
+    reselect: doc.reselectable,
   };
 }
 
@@ -75,6 +81,7 @@ export function restoreDocumentState(doc: ImageDocument, state: DocumentState): 
       ? state.activeLayerId
       : (selected.at(-1) ?? null);
   doc.selectLayers(selected, active);
+  doc.setSelection(state.selection, state.reselect);
 }
 
 /** Every tile a snapshot holds (for residency management). */

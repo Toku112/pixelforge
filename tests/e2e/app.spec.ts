@@ -136,7 +136,7 @@ test('menu bar: all top-level menus, only working items, keyboard navigation', a
     'Window',
     'Help',
   ]);
-  for (const empty of ['Type', 'Select', 'Filter', 'Plugins'])
+  for (const empty of ['Type', 'Filter', 'Plugins'])
     await expect(bar.getByRole('menuitem', { name: empty })).toHaveAttribute('aria-disabled', 'true');
   await expect(bar.getByRole('menuitem', { name: 'Layer' })).toHaveAttribute('aria-disabled', 'false');
 

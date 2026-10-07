@@ -19,6 +19,7 @@ export function CanvasArea() {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const antsRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<CanvasView | null>(null);
   const shownRef = useRef<DocumentSession | null>(null);
 
@@ -29,6 +30,8 @@ export function CanvasArea() {
       tools: controller.tools,
       getActiveToolId: () => useUi.getState().activeToolId,
       onGestureStart: () => controller.keyboard.pointerUsed(),
+      execute: (descriptor) => void controller.runDocumentCommand(descriptor),
+      ants: { canvas: antsRef.current!, trace: controller.services.traceOutline },
       onViewChange: (state) => {
         // Publish view changes to panels and the status bar at most once per frame.
         if (frame) return;
@@ -76,6 +79,7 @@ export function CanvasArea() {
   return (
     <div className="canvas-area" ref={hostRef} data-testid="canvas-area">
       <canvas ref={canvasRef} className="document-canvas" aria-label="Document canvas" />
+      <canvas ref={antsRef} className="selection-overlay" aria-hidden="true" />
       <div ref={overlayRef} className="zoom-marquee" />
       {!activeId && (
         <div className="empty-state">

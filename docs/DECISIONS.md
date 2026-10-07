@@ -313,3 +313,25 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
 - Long operations: commands get a task control; heavy work runs in chunks (rows of tiles) in the worker, reporting
   progress after each chunk and stopping at the next chunk boundary on Esc. The status bar shows the operation
   and a progress bar once it has run for 250 ms. A cancelled command leaves the document and the History unchanged.
+
+## D-026 — 2026-10-07 — Selections
+
+**Decision:**
+
+- Selection masks are 8-bit in every document (as CLAUDE.md §3.1 allows); 16-bit precision for selections in 16-bit
+  documents can come with channels (Phase 3) if banding in very soft feathers shows up.
+- Feather radius r is a Gaussian blur with σ = r (the reference app's 10 px feather matches a 10 px Gaussian Blur of
+  the mask, whose radius behaves like σ).
+- Shapes use the even-odd fill rule (self-overlapping lassos leave holes) — the more common expectation; logged
+  because the reference app's rule for crossing lassos could not be confirmed.
+- Soft masks combine as fuzzy sets: Add = max, Intersect = min, Subtract = min(a, 255 − b).
+- Every selection change is a history step named after the tool or command; a click that draws nothing (including
+  inside the selection) deselects with New; pressing inside the selection with New and dragging moves the outline.
+- Delete/Backspace is Edit > Clear: with a selection it clears the pixels (transparent, or the background colour on
+  the Background or with locked transparency); without one it deletes the selected layers. The reference app opens
+  the Fill dialog for Delete on the Background; that arrives with Edit > Fill.
+- Modifier keys pressed or released during any drag take effect at once (no need to move the pointer).
+- The marching-ants outline is traced in the worker and drawn on a 2D overlay above the WebGL canvas; the ants stand
+  still when the user prefers reduced motion.
+- Not in this item: Alt/Option temporarily switching the Lasso to straight segments (later, with the Magnetic Lasso in
+  Phase 3), Select > Modify / Transform Selection (Phase 3), Hide Extras (View menu work).

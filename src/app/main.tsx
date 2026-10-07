@@ -32,6 +32,7 @@ const bridge: UiBridge = {
       ? Promise.resolve(true)
       : new Promise((resolve) => ui().pushDialog({ kind: 'confirm', ...request, resolve })),
   startRename: (layerId) => ui().setRenamingLayer(layerId),
+  groupTool: (groupId) => ui().groupTool[groupId],
 };
 
 const controller = new AppController(await createServices(), bridge);

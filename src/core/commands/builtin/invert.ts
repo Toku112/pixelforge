@@ -9,13 +9,14 @@
  * Availability: 8- and 16-bit RGB, CMYK and Grayscale documents with an editable
  * pixel layer active. Greyed out in 32-bit documents, where the reference app does not
  * offer it. Lab, Indexed, Bitmap, Duotone and Multichannel behaviour will be verified
- * and enabled with the adjustments work (Phase 4), together with selections,
- * mask/channel targets and the Invert adjustment layer.
+ * and enabled with the adjustments work (Phase 4), together with mask/channel
+ * targets and the Invert adjustment layer. With a selection, only the selected
+ * pixels change (in proportion to the selection at feathered edges).
  */
 import { layerCapabilities, type PixelLayer } from '../../document/layers';
 import type { Tile } from '../../document/tile';
 import { CommandUnavailableError, type Command, type CommandContext } from '../command';
-import { wholeLayerTiles } from '../pixel-targets';
+import { selectedLayerTiles, wholeLayerTiles } from '../pixel-targets';
 import type { CommandDefinition } from '../registry';
 import { LayerTileDiff } from '../tile-diff';
 
@@ -51,12 +52,14 @@ class InvertCommand implements Command {
         'Invert needs an editable pixel layer in an 8- or 16-bit RGB, CMYK or Grayscale document',
       );
     }
-    const coords = wholeLayerTiles(doc, layer);
+    // With a selection, only the selected part changes (partly where it is feathered).
+    const selected = doc.selection ? selectedLayerTiles(doc, layer, doc.selection) : null;
+    const coords = selected?.coords ?? wholeLayerTiles(doc, layer);
     const diff = new LayerTileDiff(layer.id);
     for (const [tx, ty] of coords) diff.captureBefore(doc, tx, ty);
     const tiles = coords.map(([tx, ty]) => layer.buffer.writableTile(tx, ty).data);
     try {
-      await services.pixelOps.invert(tiles, layer.buffer.format);
+      await services.pixelOps.invert(tiles, layer.buffer.format, selected?.through);
     } catch (error) {
       diff.undo(doc);
       throw error;

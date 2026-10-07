@@ -8,6 +8,10 @@
  */
 import { convertAlphaTile } from '../core/commands/alpha';
 import { compositeTiles, type CompositeTile } from '../core/composite/composite-tiles';
+import { clearMasked, invertMasked, type MaskedTarget } from '../core/selection/masked-edits';
+import { invertSelection, selectShape, type SelectionMode, type SelectionShape } from '../core/selection/mask-ops';
+import { selectionOutline } from '../core/selection/outline';
+import type { MaskData } from '../core/selection/selection';
 import type { FlattenPlan } from '../core/composite/flatten';
 import { renderThumbnail, type Thumbnail, type ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
@@ -97,6 +101,23 @@ function newSamples(format: PixelFormat, length: number): SampleArray {
   return createSampleArray(format.depth, length, shared ? new SharedArrayBuffer(bytes) : new ArrayBuffer(bytes));
 }
 
+/** Tiles in shared memory were edited in place (null); others go back to be copied over. */
+function returnUnshared(tiles: SampleArray[]): (SampleArray | null)[] {
+  const results = tiles.map((t) => (t.buffer instanceof SharedArrayBuffer ? null : t));
+  return transfer(
+    results,
+    results.filter((t): t is SampleArray => t !== null).map((t) => t.buffer as ArrayBuffer),
+  );
+}
+
+function transferMask(mask: MaskData | null): MaskData | null {
+  if (!mask) return null;
+  return transfer(
+    mask,
+    mask.tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
+  );
+}
+
 const conversions = {
   /** See PixelOps.convertAlpha. */
   convertAlpha(tiles: SampleArray[], from: PixelFormat, to: PixelFormat, matte: number[]): SampleArray[] {
@@ -109,6 +130,40 @@ const conversions = {
     );
   },
 
+  /** Selection-limited Invert; same return convention as invertTiles. */
+  invertTilesMasked(tiles: SampleArray[], format: PixelFormat, through: MaskedTarget): (SampleArray | null)[] {
+    invertMasked(tiles, format, through);
+    return returnUnshared(tiles);
+  },
+
+  /** Edit > Clear through a selection; same return convention as invertTiles. */
+  clearTiles(
+    tiles: SampleArray[],
+    format: PixelFormat,
+    through: MaskedTarget,
+    fill: number[] | null,
+  ): (SampleArray | null)[] {
+    clearMasked(tiles, format, through, fill);
+    return returnUnshared(tiles);
+  },
+
+  /** See PixelOps.selectShape. */
+  selectShape(
+    current: MaskData | null,
+    shape: SelectionShape,
+    mode: SelectionMode,
+    feather: number,
+    antiAlias: boolean,
+    canvas: Rect,
+  ): MaskData | null {
+    return transferMask(selectShape(current, shape, mode, feather, antiAlias, canvas));
+  },
+
+  /** See PixelOps.invertSelection. */
+  invertSelection(current: MaskData, canvas: Rect): MaskData | null {
+    return transferMask(invertSelection(current, canvas));
+  },
+
   /** See PixelOps.composite. */
   composite(plan: FlattenPlan, rect: Rect, format: PixelFormat, matte: number[] | null): CompositeTile[] {
     const shared = self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined';
@@ -118,6 +173,15 @@ const conversions = {
     return transfer(
       tiles,
       tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
+    );
+  },
+
+  /** Marching-ants outline of a selection (see core/selection/outline.ts). */
+  selectionOutline(mask: MaskData, canvas: Rect): Float32Array[] {
+    const loops = selectionOutline(mask, canvas);
+    return transfer(
+      loops,
+      loops.map((l) => l.buffer as ArrayBuffer),
     );
   },
 

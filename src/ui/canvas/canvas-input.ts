@@ -5,7 +5,10 @@
  *   tool; Ctrl/Cmd+Space to the Zoom tool (add Alt/Option to zoom out).
  * - Wheel / two-finger scroll pans (Shift: horizontal). Alt/Option+wheel and
  *   pinch (wheel events with Ctrl) zoom around the pointer.
- * - Escape abandons the current drag.
+ * - Escape abandons the current drag. Enter, Escape and Backspace/Delete go to the
+ *   active tool first when it is in the middle of something (polygonal lasso).
+ * - Pressing or releasing Shift, Alt/Option or Space during a drag updates the
+ *   tool at once (e.g. a marquee becomes a square), without moving the pointer.
  */
 import type { Tool, ToolContext, ToolPointerEvent } from '../../tools/types';
 import type { ToolSet } from '../../tools/registry';
@@ -23,6 +26,8 @@ export interface CanvasInputOptions {
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 /** Zoom factor per CSS pixel of wheel delta (a mouse-wheel notch of 100 px ≈ ×0.82). */
 const WHEEL_ZOOM_RATE = 0.002;
+/** Keys offered to the active tool before anything else handles them. */
+const TOOL_KEYS = new Set(['Enter', 'Escape', 'Backspace', 'Delete']);
 
 function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -36,6 +41,9 @@ export class CanvasInput {
   #space = false;
   #alt = false;
   #primary = false;
+  /** Last pointer position during a drag (re-sent when modifier keys change). */
+  #lastMove: ToolPointerEvent | null = null;
+  #activeTool: Tool | null = null;
   readonly #cleanup: (() => void)[] = [];
 
   constructor(options: CanvasInputOptions) {
@@ -59,9 +67,18 @@ export class CanvasInput {
     return tools.byId.get(this.#o.getActiveToolId()) ?? tools.hand;
   }
 
-  /** Call when the active tool changes. */
+  /** Call when the active tool or the document changes (abandons a tool's unfinished work). */
   refresh(): void {
+    const active = this.#o.tools.byId.get(this.#o.getActiveToolId()) ?? null;
+    if (this.#activeTool && this.#activeTool !== active) this.#activeTool.cancel?.(this.#o.context);
+    this.#activeTool = active;
     this.#updateCursor();
+  }
+
+  /** Abandons whatever the active tool is in the middle of (e.g. the document changed). */
+  cancelTool(): void {
+    this.#cancelDrag();
+    this.#activeTool?.cancel?.(this.#o.context);
   }
 
   dispose(): void {
@@ -89,6 +106,7 @@ export class CanvasInput {
       shiftKey: e.shiftKey,
       altKey: e.altKey,
       primaryKey: isMac ? e.metaKey : e.ctrlKey,
+      spaceKey: this.#space,
     };
   }
 
@@ -107,8 +125,12 @@ export class CanvasInput {
   readonly #onPointerMove = (e: PointerEvent) => {
     if (this.#dragTool && e.pointerId === this.#pointerId) {
       // Coalesced events give every intermediate position for smooth drags.
-      for (const ev of e.getCoalescedEvents?.() ?? [e])
-        this.#dragTool.onPointerMove?.(this.#toolEvent(ev), this.#o.context);
+      for (const ev of e.getCoalescedEvents?.() ?? [e]) {
+        this.#lastMove = this.#toolEvent(ev);
+        this.#dragTool.onPointerMove?.(this.#lastMove, this.#o.context);
+      }
+    } else if (!this.#dragTool && this.#o.context.document) {
+      this.currentTool.onPointerHover?.(this.#toolEvent(e), this.#o.context);
     }
     this.#syncModifiers(e);
   };
@@ -118,6 +140,7 @@ export class CanvasInput {
     const tool = this.#dragTool;
     this.#dragTool = null;
     this.#pointerId = null;
+    this.#lastMove = null;
     tool.onPointerUp?.(this.#toolEvent(e), this.#o.context);
     this.#updateCursor();
   };
@@ -150,6 +173,11 @@ export class CanvasInput {
   readonly #onKeyDown = (e: KeyboardEvent) => {
     this.#syncModifiers(e);
     if (isEditable(e.target)) return;
+    // Keys a tool may use mid-task (e.g. the polygonal lasso: Enter closes, Backspace removes a corner).
+    if (TOOL_KEYS.has(e.key) && (this.#dragTool ?? this.currentTool).onKeyDown?.(e.key, this.#o.context)) {
+      e.preventDefault();
+      return;
+    }
     if (e.code === 'Space') {
       e.preventDefault(); // no page scrolling
       if (!this.#space) {
@@ -159,6 +187,7 @@ export class CanvasInput {
     } else if (e.key === 'Escape') {
       this.#cancelDrag();
     }
+    this.#resendModifiers(e);
   };
 
   readonly #onKeyUp = (e: KeyboardEvent) => {
@@ -167,7 +196,22 @@ export class CanvasInput {
       this.#space = false;
       this.#updateCursor();
     }
+    this.#resendModifiers(e);
   };
+
+  /** During a drag, pressing or releasing Shift, Alt/Option or Space takes effect at once. */
+  #resendModifiers(e: KeyboardEvent): void {
+    const last = this.#lastMove;
+    if (!this.#dragTool || !last || !['Shift', 'Alt', 'Meta', 'Control', ' '].includes(e.key)) return;
+    this.#lastMove = {
+      ...last,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      primaryKey: isMac ? e.metaKey : e.ctrlKey,
+      spaceKey: this.#space,
+    };
+    this.#dragTool.onPointerMove?.(this.#lastMove, this.#o.context);
+  }
 
   readonly #onBlur = () => {
     this.#space = this.#alt = this.#primary = false;

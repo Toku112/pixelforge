@@ -7,7 +7,12 @@ import { APP_NAME } from './brand';
 import { BLEND_MODE_LABELS, availableBlendModes, blendModeMenu, cycleBlendMode } from '../core/composite/blend';
 import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
-import { CommandCancelledError, type JsonObject } from '../core/commands/command';
+import {
+  CommandCancelledError,
+  CommandUnavailableError,
+  type CommandDescriptor,
+  type JsonObject,
+} from '../core/commands/command';
 import type { LayerPropChanges } from '../core/commands/builtin/set-layer-props';
 import {
   LAYER_BLEND_MODES,
@@ -50,12 +55,20 @@ export interface UiBridge {
   confirm(request: ConfirmRequest): Promise<boolean>;
   /** Starts editing a layer's name in the Layers panel. */
   startRename(layerId: string): void;
+  /** The tool a toolbar group currently shows (last used in it), if any. */
+  groupTool(groupId: string): string | undefined;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
   'tool.hand': 'hand',
   'tool.rotateView': 'rotate-view',
   'tool.zoom': 'zoom',
+};
+
+/** Tool letters that pick a toolbar group's current tool (Shift + letter cycles the group). */
+const GROUP_COMMANDS: Record<string, string> = {
+  'tool.marquee': 'marquee-group',
+  'tool.lasso': 'lasso-group',
 };
 
 export class AppController {
@@ -78,8 +91,8 @@ export class AppController {
       tools: {
         activeToolId: () => ui.activeToolId(),
         setActiveTool: (id) => ui.setActiveTool(id, this.groupOf(id)),
-        toolForCommand: (c) => TOOL_COMMANDS[c],
-        nextToolForCommand: (c) => TOOL_COMMANDS[c],
+        toolForCommand: (c) => TOOL_COMMANDS[c] ?? this.#groupCurrentTool(GROUP_COMMANDS[c]),
+        nextToolForCommand: (c) => TOOL_COMMANDS[c] ?? this.#groupNextTool(GROUP_COMMANDS[c]),
       },
     });
     this.commands.onError((_id, error) => {
@@ -112,6 +125,34 @@ export class AppController {
 
   groupOf(toolId: string): string {
     return this.tools.groups.find((g) => g.tools.some((t) => t.id === toolId))?.id ?? '';
+  }
+
+  #groupCurrentTool(groupId: string | undefined): string | undefined {
+    const group = this.tools.groups.find((g) => g.id === groupId);
+    if (!group) return undefined;
+    const remembered = this.#ui.groupTool(group.id);
+    return group.tools.some((t) => t.id === remembered) ? remembered : group.tools[0]?.id;
+  }
+
+  /** Shift + a group's letter: the next tool in the group's cycle. */
+  #groupNextTool(groupId: string | undefined): string | undefined {
+    const group = this.tools.groups.find((g) => g.id === groupId);
+    if (!group) return undefined;
+    const cycle = group.cycle ?? group.tools.map((t) => t.id);
+    const active = this.#ui.activeToolId();
+    const current = cycle.includes(active) ? active : this.#groupCurrentTool(group.id);
+    const i = cycle.indexOf(current ?? '');
+    return cycle[(i + 1) % cycle.length];
+  }
+
+  /** Runs a document command for a tool, reporting problems (cancelling is not one). */
+  async runDocumentCommand(descriptor: CommandDescriptor): Promise<void> {
+    try {
+      await this.workspace.execute(descriptor);
+    } catch (error) {
+      if (error instanceof CommandCancelledError || error instanceof CommandUnavailableError) return;
+      await this.#ui.alert('Something went wrong', error instanceof Error ? error.message : String(error));
+    }
   }
 
   // --- Files ----------------------------------------------------------------
@@ -360,6 +401,19 @@ export class AppController {
       run: () => history()?.toggleLastState(),
     });
 
+    // Delete/Backspace: clears the selected pixels; with nothing selected it deletes the
+    // selected layers (as in the reference app). Not while a tool uses the key itself.
+    const toolBusy = () => this.tools.byId.get(this.#ui.activeToolId())?.busy?.() ?? false;
+    add({
+      id: 'edit.clear',
+      label: 'Clear',
+      enabled: () => !toolBusy() && (ws.active?.doc.selection ? ws.canExecute('clear') : ws.canExecute('deleteLayers')),
+      run: () =>
+        ws.active?.doc.selection
+          ? ws.execute({ name: 'clear', params: {} })
+          : ws.execute({ name: 'deleteLayers', params: {} }),
+    });
+
     // Image
     add({
       id: 'image.adjustments.invert',
@@ -367,6 +421,16 @@ export class AppController {
       enabled: () => ws.canExecute('invert'),
       run: () => ws.execute({ name: 'invert', params: {} }),
     });
+
+    // Select
+    for (const [id, label, command] of [
+      ['select.all', 'All', 'selectAll'],
+      ['select.deselect', 'Deselect', 'deselect'],
+      ['select.reselect', 'Reselect', 'reselect'],
+      ['select.inverse', 'Inverse', 'inverseSelection'],
+    ] as const) {
+      add({ id, label, enabled: () => ws.canExecute(command), run: () => ws.execute({ name: command, params: {} }) });
+    }
 
     // Layer
     const doc = () => ws.active?.doc;

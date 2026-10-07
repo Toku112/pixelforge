@@ -6,6 +6,7 @@
  * is undoable, recordable and journaled. Every primitive emits a change event that
  * the renderer and panels use to update.
  */
+import type { Selection } from '../selection/selection';
 import { Emitter } from './events';
 import { isEmptyRect, type Rect } from './geometry';
 import {
@@ -30,7 +31,9 @@ export type DocumentChange =
   /** Canvas size, resolution, colour mode or bit depth changed. */
   | { kind: 'canvas' }
   /** The active layer or the set of selected layers changed. */
-  | { kind: 'active-layer'; layerId: string | null };
+  | { kind: 'active-layer'; layerId: string | null }
+  /** The pixel selection (marching ants) changed. */
+  | { kind: 'selection' };
 
 /** Canvas-level properties (changed by Image Size, Canvas Size, Mode conversions…). */
 export interface CanvasProps {
@@ -103,6 +106,8 @@ export class ImageDocument {
   #activeLayerId: string | null = null;
   /** Selected layers in selection order (the active layer is one of them). */
   #selectedIds: string[] = [];
+  #selection: Selection | null = null;
+  #reselect: Selection | null = null;
   #nextGroupNumber = 1;
   #nextLayerId = 1;
   #nextLayerNumber = 1;
@@ -129,6 +134,28 @@ export class ImageDocument {
 
   get canvasRect(): Rect {
     return { x: 0, y: 0, w: this.width, h: this.height };
+  }
+
+  /** The pixel selection, or null when nothing is selected (the whole layer is the target). */
+  get selection(): Selection | null {
+    return this.#selection;
+  }
+
+  /** The selection Select > Reselect brings back (the last one removed by Deselect). */
+  get reselectable(): Selection | null {
+    return this.#reselect;
+  }
+
+  /** Replaces the selection (and the Reselect memory); returns the previous values for undo. */
+  setSelection(
+    selection: Selection | null,
+    reselect: Selection | null = this.#reselect,
+  ): { selection: Selection | null; reselect: Selection | null } {
+    const previous = { selection: this.#selection, reselect: this.#reselect };
+    this.#selection = selection;
+    this.#reselect = reselect;
+    if (previous.selection !== selection) this.changes.emit({ kind: 'selection' });
+    return previous;
   }
 
   get colorChannels(): number {

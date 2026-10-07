@@ -14,9 +14,13 @@ import type { PixelWorkerClient } from './pixel-client';
 
 export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
   return {
-    async invert(tiles: SampleArray[], format) {
+    async invert(tiles: SampleArray[], format, through) {
       if (format.depth === 32) throw new Error('Invert is not available for 32-bit data');
       if (tiles.length === 0) return;
+      if (through) {
+        copyBack(tiles, await worker.invertTilesMasked(tiles, format, through));
+        return;
+      }
       const results = await worker.invertTiles(
         tiles as (Uint8Array | Uint16Array)[],
         samplesPerPixel(format),
@@ -25,6 +29,16 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
       results.forEach((result, i) => {
         if (result) copySamples(tiles[i]!, result);
       });
+    },
+    async clear(tiles, format, through, fill) {
+      if (tiles.length === 0) return;
+      copyBack(tiles, await worker.clearTiles(tiles, format, through, fill ? [...fill] : null));
+    },
+    selectShape(current, shape, mode, feather, antiAlias, canvas) {
+      return worker.selectShape(current, shape, mode, feather, antiAlias, canvas);
+    },
+    invertSelection(current, canvas) {
+      return worker.invertSelection(current, canvas);
     },
     convertAlpha(tiles, from, to, matte) {
       return worker.convertAlpha(tiles, from, to, [...matte]);
@@ -45,4 +59,11 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
       return tiles;
     },
   };
+}
+
+/** Copies worker results into the caller's arrays (shared-memory tiles came back as null: edited in place). */
+function copyBack(tiles: SampleArray[], results: (SampleArray | null)[]): void {
+  results.forEach((result, i) => {
+    if (result) copySamples(tiles[i]!, result);
+  });
 }

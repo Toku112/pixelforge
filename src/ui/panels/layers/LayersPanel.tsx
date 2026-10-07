@@ -8,7 +8,8 @@
  * to reorder (onto the middle of a group row to put layers inside it); Alt-click a
  * group's triangle opens or closes the groups inside it too.
  * Keyboard (list focused): ↑/↓ select (Shift extends), ←/→ collapse/expand a group,
- * Enter renames, Delete/Backspace deletes, Space shows/hides.
+ * Enter renames, Space shows/hides. (Delete/Backspace is Edit > Clear, which deletes
+ * the selected layers when nothing is selected on the canvas.)
  */
 import {
   useEffect,
@@ -251,11 +252,6 @@ function LayersView({ doc }: { doc: ImageDocument }) {
           e.preventDefault();
           void controller.setLayerProps([{ layerId: row.layer.id, props: { visible: !row.layer.visible } }]);
         }
-        break;
-      case 'Delete':
-      case 'Backspace':
-        e.preventDefault();
-        void controller.deleteSelectedLayers(false);
         break;
     }
   };

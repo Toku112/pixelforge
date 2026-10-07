@@ -43,6 +43,7 @@ const MENU: DefaultBinding[] = [
   { command: 'edit.paste', keys: ['Mod+V', 'F4'] },
   { command: 'edit.pasteInPlace', keys: ['Mod+Shift+V'] },
   { command: 'edit.pasteInto', keys: ['Mod+Alt+Shift+V'] },
+  { command: 'edit.clear', keys: ['Delete', 'Backspace'] },
   { command: 'edit.search', keys: ['Mod+F'] },
   { command: 'edit.fill', keys: ['Shift+F5', 'Shift+Backspace'] },
   { command: 'edit.contentAwareScale', keys: ['Mod+Alt+Shift+C'] },

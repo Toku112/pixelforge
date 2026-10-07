@@ -4,11 +4,17 @@ import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { ImageDocument, type DocumentInit } from '../../../src/core/document/document';
 import { convertAlphaTile } from '../../../src/core/commands/alpha';
 import { compositeTiles } from '../../../src/core/composite/composite-tiles';
+import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
+import { invertSelection, selectShape } from '../../../src/core/selection/mask-ops';
 import { maxSampleValue, type PixelFormat, type SampleArray } from '../../../src/core/document/pixel-format';
 
 /** Straightforward TypeScript implementation of PixelOps (the app uses WebAssembly in a worker). */
 export const referencePixelOps: PixelOps = {
-  invert(tiles: SampleArray[], format: PixelFormat) {
+  invert(tiles: SampleArray[], format: PixelFormat, through) {
+    if (through) {
+      invertMasked(tiles, format, through);
+      return Promise.resolve();
+    }
     const max = maxSampleValue(format.depth);
     const spp = format.colorChannels + (format.hasAlpha ? 1 : 0);
     for (const t of tiles) {
@@ -20,6 +26,16 @@ export const referencePixelOps: PixelOps = {
   },
   convertAlpha(tiles, from, to, matte) {
     return Promise.resolve(tiles.map((t) => convertAlphaTile(t, from, to, matte)));
+  },
+  clear(tiles, format, through, fill) {
+    clearMasked(tiles, format, through, fill);
+    return Promise.resolve();
+  },
+  selectShape(current, shape, mode, feather, antiAlias, canvas) {
+    return Promise.resolve(selectShape(current, shape, mode, feather, antiAlias, canvas));
+  },
+  invertSelection(current, canvas) {
+    return Promise.resolve(invertSelection(current, canvas));
   },
   composite(plan, rect, format, matte, task) {
     if (task?.cancelled) return Promise.reject(new CommandCancelledError());

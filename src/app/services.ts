@@ -6,6 +6,7 @@ import { registerBuiltinCommands } from '../core/commands/builtin';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
+import type { MaskData } from '../core/selection/selection';
 import { OpfsSwapBackend } from '../engine/tiles/opfs-swap';
 import { TileStore, defaultMemoryBudget } from '../engine/tiles/tile-store';
 import { createCodecWorker, type CodecWorkerClient } from '../workers/codec-client';
@@ -21,11 +22,15 @@ export type ThumbnailRenderer = (
   height: number,
 ) => Promise<Thumbnail>;
 
+/** Traces a selection's marching-ants outline off the main thread (closed loops, document coordinates). */
+export type OutlineTracer = (mask: MaskData, canvas: Rect) => Promise<Float32Array[]>;
+
 export interface AppServices {
   tileStore: TileStore;
   codec: CodecWorkerClient;
   workspace: Workspace;
   renderThumbnail: ThumbnailRenderer;
+  traceOutline: OutlineTracer;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -42,5 +47,6 @@ export async function createServices(): Promise<AppServices> {
     codec: createCodecWorker(),
     workspace,
     renderThumbnail: (source, area, width, height) => pixelWorker.layerThumbnail(source, area, width, height),
+    traceOutline: (mask, canvas) => pixelWorker.selectionOutline(mask, canvas),
   };
 }
