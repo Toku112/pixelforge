@@ -223,6 +223,18 @@ const icons = {
       <path d="M2.5 7H17v14.5" />
     </Svg>
   ),
+  transform: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M6 6h12v12H6Z" />
+      <path d="M4 4h4v4H4ZM16 4h4v4h-4ZM16 16h4v4h-4ZM4 16h4v4H4Z" fill="currentColor" strokeWidth={1} />
+    </Svg>
+  ),
+  link: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+      <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+    </Svg>
+  ),
   cancelCircle: (p: IconProps) => (
     <Svg {...p}>
       <circle cx="12" cy="12" r="8" />

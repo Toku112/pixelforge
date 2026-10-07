@@ -21,6 +21,7 @@ function setup(zoom = 1) {
     paint: null,
     setBrushOutline: () => {},
     setCropBox: () => {},
+    setTransformBox: () => {},
     preview: () => {},
     selectLayers: () => {},
     report: () => {},

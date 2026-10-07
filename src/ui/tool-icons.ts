@@ -13,6 +13,7 @@ export const TOOL_ICONS: Readonly<Record<string, IconName>> = {
   lasso: 'lasso',
   'polygonal-lasso': 'polygonalLasso',
   crop: 'crop',
+  transform: 'transform',
   brush: 'brush',
   eraser: 'eraser',
 };

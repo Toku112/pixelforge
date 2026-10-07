@@ -215,7 +215,43 @@ vec4 compositeOver(vec4 back, vec3 cs, float ap) {
 export type BlendSource =
   | { kind: 'tile'; depth: 8 | 16 | 32; spp: number; colorChannels: number }
   | { kind: 'premultiplied' }
-  | { kind: 'solid' };
+  | { kind: 'solid' }
+  /** A Free Transform preview: a picture of the layer seen through a transform. */
+  | { kind: 'transformed' };
+
+/**
+ * Reads a Free Transform preview picture (premultiplied sRGB) at target pixel `p`:
+ * the document point goes back through the inverse transform into the picture.
+ */
+const TRANSFORMED_FETCH_DECL = `uniform sampler2D u_image;
+uniform mat3 u_inverse;  // document point after → before
+uniform vec4 u_area;     // document area the picture covers (x, y, w, h)
+uniform vec2 u_origin;   // document position of target pixel (0, 0)
+uniform bool u_linear;   // 32-bit documents composite in linear light
+vec4 transformedFetch(ivec2 p) {
+  vec3 s = u_inverse * vec3(u_origin + vec2(p) + 0.5, 1.0);
+  if (s.z <= 0.0) return vec4(0.0);
+  vec2 uv = (s.xy / s.z - u_area.xy) / u_area.zw;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+  vec4 t = texture(u_image, uv);
+  if (u_linear && t.a > 0.0) {
+    vec3 c = t.rgb / t.a;
+    c = mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+    t.rgb = c * t.a;
+  }
+  return t;
+}`;
+
+/** Normal (and Dissolve, previewed as Normal): a transformed picture, premultiplied for hardware blending. */
+export const TRANSFORMED_FS = `${HEADER}
+${TRANSFORMED_FETCH_DECL}
+uniform float u_opacity;
+out vec4 outColor;
+void main() {
+  vec4 t = transformedFetch(ivec2(gl_FragCoord.xy));
+  if (t.a <= 0.0) discard;
+  outColor = t * u_opacity;
+}`;
 
 /**
  * Blend pass for every mode other than Normal/Dissolve: reads the backdrop (the
@@ -231,6 +267,9 @@ export function blendFS(source: BlendSource): string {
     const alpha = hasAlpha ? (source.colorChannels === 1 ? 't.g' : 't.a') : '1.0';
     decl = `uniform ${sampler} u_tile;\nuniform ivec2 u_srcOffset;\nuniform float u_scale;`;
     fetch = `vec4 t = vec4(texelFetch(u_tile, p + u_srcOffset, 0)) * u_scale;\n  vec3 cs = ${rgb};\n  float ap = ${alpha};`;
+  } else if (source.kind === 'transformed') {
+    decl = TRANSFORMED_FETCH_DECL;
+    fetch = 'vec4 t = transformedFetch(p);\n  float ap = t.a;\n  vec3 cs = ap > 0.0 ? t.rgb / ap : vec3(0.0);';
   } else if (source.kind === 'premultiplied') {
     decl = 'uniform sampler2D u_src;';
     fetch = 'vec4 t = texelFetch(u_src, p, 0);\n  float ap = t.a;\n  vec3 cs = ap > 0.0 ? t.rgb / ap : vec3(0.0);';

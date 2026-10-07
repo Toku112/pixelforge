@@ -3,6 +3,7 @@
  * workers, the document command registry and the workspace.
  */
 import { registerBuiltinCommands } from '../core/commands/builtin';
+import type { PixelOps } from '../core/commands/command';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
@@ -34,6 +35,8 @@ export interface AppServices {
   traceOutline: OutlineTracer;
   /** Live brush/eraser strokes in the pixel worker. */
   strokes: StrokeEngine;
+  /** Pixel operations in the worker (also used by the commands). */
+  pixelOps: PixelOps;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -52,5 +55,6 @@ export async function createServices(): Promise<AppServices> {
     renderThumbnail: (source, area, width, height) => pixelWorker.layerThumbnail(source, area, width, height),
     traceOutline: (mask, canvas) => pixelWorker.selectionOutline(mask, canvas),
     strokes: createStrokeEngine(pixelWorker),
+    pixelOps,
   };
 }

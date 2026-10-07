@@ -4,7 +4,8 @@
  */
 import type { ImageDocument } from '../../document/document';
 import { LAYER_BLEND_MODES, type BlendMode, type LayerNode, type PixelLayer } from '../../document/layers';
-import { adoptTile, allocateTile, type Tile } from '../../document/tile';
+import { intersectRects, isEmptyRect, translateRect } from '../../document/geometry';
+import { adoptTile, allocateTile, TILE_SIZE, type Tile } from '../../document/tile';
 import { TiledBuffer } from '../../document/tiled-buffer';
 import { layerTreeTiles } from '../../history/snapshot';
 import type { Command, CommandContext, CommandServices, JsonObject } from '../command';
@@ -136,8 +137,8 @@ export function uniqueCopyName(doc: ImageDocument, base: string, taken: Set<stri
 }
 
 /**
- * A normal-layer buffer (with alpha) holding the Background's pixels: every
- * allocated tile and every tile of the canvas, converted off the main thread.
+ * A normal-layer buffer (with alpha) holding the Background's pixels: the canvas
+ * part of every tile (transparent past the canvas edge), converted off the main thread.
  */
 export async function backgroundToLayerBuffer(
   doc: ImageDocument,
@@ -146,13 +147,22 @@ export async function backgroundToLayerBuffer(
 ): Promise<TiledBuffer> {
   const from = background.buffer.format;
   const to = { ...from, hasAlpha: true };
-  const coords = wholeLayerTiles(doc, background);
+  // Only the canvas part of the Background shows: pixels past its edge become transparent.
+  const canvas = translateRect(doc.canvasRect, -background.offsetX, -background.offsetY);
+  const tileRect = (tx: number, ty: number) => ({ x: tx * TILE_SIZE, y: ty * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE });
+  const coords = wholeLayerTiles(doc, background).filter(
+    ([tx, ty]) => !isEmptyRect(intersectRects(canvas, tileRect(tx, ty))),
+  );
   const sources = coords.map(
     ([tx, ty]) =>
       background.buffer.getTile(tx, ty)?.data ??
       allocateTile(from, { allocate: (n) => new ArrayBuffer(n) }, background.buffer.defaultPixel).data,
   );
-  const converted = await services.pixelOps.convertAlpha(sources, from, to, []);
+  const keep = coords.map(([tx, ty]) => {
+    const r = intersectRects(canvas, tileRect(tx, ty));
+    return r.w === TILE_SIZE && r.h === TILE_SIZE ? null : translateRect(r, -tx * TILE_SIZE, -ty * TILE_SIZE);
+  });
+  const converted = await services.pixelOps.convertAlpha(sources, from, to, [], keep);
   const buffer = new TiledBuffer(to, { memory: doc.memory });
   coords.forEach(([tx, ty], i) => buffer.setTile(tx, ty, adoptTile(converted[i]!, to, doc.memory)));
   return buffer;

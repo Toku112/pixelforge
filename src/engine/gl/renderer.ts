@@ -46,10 +46,29 @@ import {
   MIX_FS,
   SOLID_FS,
   TARGET_RECT_VS,
+  TRANSFORMED_FS,
   blendFS,
   dissolveTileFS,
   layerTileFS,
 } from './shaders';
+
+/**
+ * Free Transform's live preview: these layers are drawn from a picture of their
+ * pixels seen through the transform, instead of from their tiles.
+ */
+export interface TransformPreview {
+  layers: ReadonlyMap<
+    string,
+    {
+      /** RGBA, 8-bit sRGB, straight alpha. */
+      image: { width: number; height: number; data: Uint8ClampedArray };
+      /** The document area the picture shows. */
+      area: Rect;
+    }
+  >;
+  /** Document point after → document point before, row-major 3 × 3. */
+  inverse: readonly number[];
+}
 
 export interface RendererOptions {
   /** Transparency checkerboard square size, CSS pixels. */
@@ -139,6 +158,9 @@ export class Renderer {
   readonly #tempPool: WebGLTexture[] = [];
   #sharedUploadsSupported = true;
 
+  #transformPreview: TransformPreview | null = null;
+  readonly #previewTextures = new Map<string, WebGLTexture>();
+
   #frame = 0;
   #rafId: number | null = null;
   readonly #frameListeners = new Set<(stats: RendererStats) => void>();
@@ -204,6 +226,80 @@ export class Renderer {
     this.#tracker = doc ? new DirtyTracker(doc) : null;
     this.#stopTracking = this.#tracker?.onDirty(() => this.requestRender()) ?? null;
     this.requestRender();
+  }
+
+  /** Free Transform's live preview, if one is showing (for diagnostics and tests). */
+  get transformPreview(): TransformPreview | null {
+    return this.#transformPreview;
+  }
+
+  /** Shows (or with null, ends) Free Transform's live preview of whole layers. */
+  setTransformPreview(preview: TransformPreview | null): void {
+    if (preview?.layers !== this.#transformPreview?.layers) this.#deletePreviewTextures();
+    this.#transformPreview = preview;
+    // Every tile the layers cover may change: composite again.
+    this.#clearComposites();
+    this.requestRender();
+  }
+
+  #deletePreviewTextures(): void {
+    for (const tex of this.#previewTextures.values()) this.#gl.deleteTexture(tex);
+    this.#previewTextures.clear();
+  }
+
+  /** The preview picture of a layer as a premultiplied, mipmapped texture (uploaded once). */
+  #previewTexture(layerId: string): WebGLTexture | null {
+    const entry = this.#transformPreview?.layers.get(layerId);
+    if (!entry) return null;
+    let tex = this.#previewTextures.get(layerId);
+    if (tex) return tex;
+    const gl = this.#gl;
+    tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA8,
+      entry.image.width,
+      entry.image.height,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array(entry.image.data.buffer, entry.image.data.byteOffset, entry.image.data.byteLength),
+    );
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    this.#previewTextures.set(layerId, tex);
+    return tex;
+  }
+
+  /** Sets the uniforms of a transformed-picture program for a composite tile. */
+  #setPreviewUniforms(program: Program, layerId: string, tileRect: Rect, hdr: boolean): void {
+    const gl = this.#gl;
+    const preview = this.#transformPreview!;
+    const { area } = preview.layers.get(layerId)!;
+    const m = preview.inverse;
+    // GLSL matrices are column-major.
+    gl.uniformMatrix3fv(program.loc('u_inverse'), false, [
+      m[0]!,
+      m[3]!,
+      m[6]!,
+      m[1]!,
+      m[4]!,
+      m[7]!,
+      m[2]!,
+      m[5]!,
+      m[8]!,
+    ]);
+    gl.uniform4f(program.loc('u_area'), area.x, area.y, area.w, area.h);
+    gl.uniform2f(program.loc('u_origin'), tileRect.x, tileRect.y);
+    gl.uniform1i(program.loc('u_linear'), hdr ? 1 : 0);
   }
 
   /** Sets the drawing-buffer size from a CSS size and device pixel ratio. */
@@ -401,6 +497,7 @@ export class Renderer {
   #deleteResources(): void {
     const gl = this.#gl;
     this.#clearComposites();
+    this.#deletePreviewTextures();
     for (const t of this.#layerTextures.values()) gl.deleteTexture(t.tex);
     this.#layerTextures.clear();
     this.#layerTextureBytes = 0;
@@ -420,6 +517,7 @@ export class Renderer {
     if (this.#rafId !== null) cancelAnimationFrame(this.#rafId);
     this.#rafId = null;
     // GPU objects are gone with the context; forget them.
+    this.#previewTextures.clear();
     this.#layerTextures.clear();
     this.#layerTextureBytes = 0;
     this.#composites.clear();
@@ -588,6 +686,31 @@ export class Renderer {
     let current = target;
     for (const node of nodes) {
       if (!node.visible || node.opacity === 0) continue;
+      const preview = node.kind === 'pixel' ? this.#previewTexture(node.id) : null;
+      if (preview) {
+        // Free Transform's live preview: the layer's picture through the transform.
+        const hdr = doc.depth === 32;
+        if (node.blendMode === 'normal' || node.blendMode === 'dissolve') {
+          this.#bindTarget(current);
+          gl.enable(gl.BLEND);
+          const program = this.#program('transformed', () => TRANSFORMED_FS).use();
+          this.#bindSampler(0, preview, program, 'u_image');
+          this.#setPreviewUniforms(program, node.id, tileRect, hdr);
+          gl.uniform1f(program.loc('u_opacity'), node.opacity * node.fillOpacity);
+          this.#drawRect(program, 0, 0, TILE_SIZE, TILE_SIZE);
+          this.#unbindSamplers(1);
+        } else {
+          current = this.#blendPass(current, (backdrop) => {
+            const program = this.#program('blend:transformed', () => blendFS({ kind: 'transformed' })).use();
+            this.#bindSampler(0, preview, program, 'u_image');
+            this.#bindSampler(1, backdrop, program, 'u_backdrop');
+            this.#setPreviewUniforms(program, node.id, tileRect, hdr);
+            this.#setBlendUniforms(program, node.blendMode, node.opacity, node.fillOpacity, hdr);
+            this.#drawRect(program, 0, 0, TILE_SIZE, TILE_SIZE);
+          });
+        }
+        continue;
+      }
       if (node.kind === 'pixel') {
         if (node.blendMode === 'normal' || node.blendMode === 'dissolve' || node.blendMode === 'pass-through') {
           this.#bindTarget(current);

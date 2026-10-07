@@ -428,3 +428,32 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   (other layers get transparency), as in the reference app.
 - After any change of canvas size the view shows the image centred at the same zoom.
 - Number fields: Enter applies the value and, in a dialog, presses OK; leaving a field unchanged is not a change.
+
+## D-032 — 2026-10-07 — Free Transform
+
+**Decision:**
+
+- The transform is a projective matrix in document coordinates, recorded as `freeTransform { matrix, interpolation }`
+  (one step, "Free Transform"). Replayed Actions therefore transform at the same document position; transforms
+  relative to the current layer come with the Actions work (Phase 11).
+- Handles scale with proportions kept by default (corners and sides; the link button in the options bar), Shift
+  frees them, Alt/Option scales about the reference point. Outside the box rotates (Shift: 15° steps); inside moves
+  (Shift: one axis). Ctrl/Cmd + corner distorts, Ctrl/Cmd + side skews (with Alt, the opposite side moves the other
+  way), Ctrl/Cmd+Alt+Shift + corner sets perspective. The reference point is hidden by default and can be shown and
+  dragged, or placed with the 3 × 3 locator.
+- Without a selection, every selected layer (and the layers in selected groups) is transformed; the Background is
+  refused (as in the reference app), as are layers with locked position or pixels. With a selection, the selected
+  pixels of the active layer move, and the selection with them; on the Background the old place gets the
+  background colour.
+- Live preview: whole layers are drawn on the GPU from a picture of each (8-bit sRGB, at most 4096 px a side,
+  mipmapped) seen through the transform, with their blend mode and opacity, so dragging stays smooth on large
+  documents; HDR values above 1 show clipped in the preview only. Transforming selected pixels previews through the
+  command itself, computed only for the visible area at about one sample per screen pixel. Applying always
+  resamples the full-resolution pixels in the worker.
+- While the box is open, Undo/Redo and other edits are unavailable (the reference app lets Ctrl/Cmd+Z step back
+  through the box's changes; not yet). Choosing another tool applies the transform (the reference app's default
+  answer); switching documents applies it to the document it was started on.
+- Not in this item (Part B Edit menu): Warp, Transform Again, the Edit > Transform submenu and the right-click menu,
+  Edit > Transform's Rotate 90°/Flip, transforming several layers' selections at once.
+- Fix: turning the Background into a normal layer (Layer from Background, duplicating it) carried the white past the
+  canvas edge (inside its tiles) as visible pixels; that area is now transparent.

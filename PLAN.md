@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D items 1–10 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool, crop/canvas size/image size/rotation)
-- Next up: Part D item 11 (Free Transform)
+- Last completed: Part D items 1–11 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool, crop/canvas size/image size/rotation, Free Transform)
+- Next up: Part D item 12 (Save As JPEG and WebP with options; basic PSD open/save via ag-psd)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -173,6 +173,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Puppet Warp: mesh (rigid/normal/distort), density, expansion, pins, pin depth, rotate pins
 - [ ] Perspective Warp: layout planes, warp mode, auto straighten
 - [ ] Free Transform (Ctrl/Cmd+T): reference point, numeric X/Y/W/H/angle/skew, link aspect (proportional by default, Shift toggles), interpolation choice, Ctrl-drag corner distort
+  ↳ partial: everything listed works (Part D item 11, D-032). Missing: stepping back through the box's changes with Ctrl/Cmd+Z while it is open, the right-click menu.
 - [ ] Transform submenu: Again, Scale, Rotate, Skew, Distort, Perspective, Warp (presets: arc, arc lower/upper, arch, bulge, shell lower/upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist, cylinder; custom grid 3×3/4×4/5×5/custom; split warp horizontal/vertical/cross), Rotate 180°, 90° CW, 90° CCW, Flip Horizontal, Flip Vertical
 - [ ] Rotate object into new perspective/orientation with on-canvas controls **(AI)**
 - [ ] Auto-Align Layers (auto, perspective, collage, cylindrical, spherical, reposition; geometric distortion, vignette removal)
@@ -604,6 +605,7 @@ scope (all modes, masks, etc.) is complete.
   ↳ note: also Shift-constrained drags, live preview, arrows moving the selection outline with selection tools (D-030). Not in this item (Part B): transform controls, align/distribute buttons, moving between documents.
 - [x] Crop tool and Image > Crop; Image Size (resample methods); Canvas Size (anchor, relative); Image Rotation (180°, 90° CW/CCW, Flip Canvas)
   ↳ note: one snapshot-based command per change, pixel work in the worker with progress, 8/16/32-bit (D-031, FORMAT_NOTES §6); the view re-centres after a size change. Part B items above list what the full features still need (Crop tool straighten/overlays, Preserve Details, Arbitrary rotation, Trim, Reveal All).
-- [ ] Free Transform (Ctrl/Cmd+T): scale, rotate, skew, distort, perspective, numeric fields, reference point, interpolation
+- [x] Free Transform (Ctrl/Cmd+T): scale, rotate, skew, distort, perspective, numeric fields, reference point, interpolation
+  ↳ note: layers (GPU live preview) and selected pixels (the selection moves too), proportional by default, 8/16/32-bit (D-032, FORMAT_NOTES §6.1). Ctrl/Cmd+T is browser-reserved in a normal tab (KNOWN_GAPS); the Edit menu works everywhere. Undo inside an open box, Warp and Transform Again are Part B.
 - [ ] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd
 - [ ] Phase 1 exit test: edit a layered composition and round-trip it as PSD (automated), plus owner check with real Photoshop

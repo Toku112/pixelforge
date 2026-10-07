@@ -46,6 +46,22 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
     transformLayer(source, geometry, fill) {
       return worker.transformLayer(source, geometry, fill ? [...fill] : null);
     },
+    contentBounds(source) {
+      return worker.contentBounds(source);
+    },
+    transformLayerPixels(setup, sources, area) {
+      return worker.transformLayerPixels(setup, sources, area);
+    },
+    async transformSelectedPixels(setup, sources, outputs) {
+      if (outputs.length === 0) return;
+      copyBack(
+        outputs.map((o) => o.data),
+        await worker.transformSelectedPixels(setup, sources, outputs),
+      );
+    },
+    transformMask(mask, inverse, area, canvas) {
+      return worker.transformMask(mask, inverse, area, canvas);
+    },
     async movePixels(setup, sources, outputs) {
       if (outputs.length === 0) return;
       copyBack(
@@ -61,8 +77,8 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
       if (tiles.length === 0) return;
       copyBack(tiles, await worker.paintStroke(setup, tiles, coords, dabs));
     },
-    convertAlpha(tiles, from, to, matte) {
-      return worker.convertAlpha(tiles, from, to, [...matte]);
+    convertAlpha(tiles, from, to, matte, keep) {
+      return worker.convertAlpha(tiles, from, to, [...matte], keep);
     },
     async composite(plan, rect, format, matte, task) {
       // In bands of tile rows, so progress can be shown and Esc can stop between bands.

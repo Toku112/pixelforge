@@ -250,3 +250,18 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
 - Past the old canvas edge the Background **repeats its edge pixels**, so its borders keep their colour; layers
   with transparency read transparency there.
 - Image > Crop uses the exact bounds of the pixels the selection touches at all (any value above 0).
+
+### 6.1 Free Transform
+
+- A transform is a projective 3 × 3 matrix in document coordinates (`core/geometry/transform.ts`); the box is the
+  transformed layer bounds, and the matrix is the one sending the original rectangle's corners to the box's corners.
+- Each output pixel centre goes back through the inverse matrix into the source and is sampled there (premultiplied,
+  as in §6). Nearest Neighbor takes the source pixel; Bilinear and the bicubics use their kernels on 2 × 2 or 4 × 4
+  source pixels. Where the output pixel covers more than one source pixel along a source axis (shrinking), the
+  filter widens by that amount (up to 6×), so detail averages instead of aliasing.
+- Bicubic Automatic: Smoother when enlarging, Sharper when shrinking, and plain Bicubic (Catmull-Rom, which passes
+  exactly through the pixels) at the same size, so moves by whole pixels and quarter turns stay exact.
+- The numbers in the options bar describe the affine part: width/height as a percentage of the original box
+  (negative when flipped), the angle of its top edge, and the horizontal skew; the vertical skew is the typed value.
+- With a selection, the selected pixels are lifted with their selection value (soft edges lift partly), and the
+  selection itself is moved by the same transform (bilinear, so its edge stays smooth).

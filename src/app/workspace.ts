@@ -143,14 +143,17 @@ export class Workspace {
   }
 
   /**
-   * Runs a document command on the active document through its History. Long runs
-   * report progress (see `task`) and can be cancelled with `cancelTask()`.
+   * Runs a document command on the active document (or on `doc`) through its History.
+   * Long runs report progress (see `task`) and can be cancelled with `cancelTask()`.
    */
-  execute(descriptor: CommandDescriptor): Promise<void> {
+  execute(descriptor: CommandDescriptor, doc?: ImageDocument): Promise<void> {
     return this.#serial(async () => {
       await this.#undoPreview();
-      const session = this.active;
-      if (!session) throw new Error('No document is open');
+      const session = doc ? this.#sessions.find((s) => s.doc === doc) : this.active;
+      if (!session) {
+        if (doc) return; // closed meanwhile
+        throw new Error('No document is open');
+      }
       const control = { cancelled: false, progress: (f: number) => this.#reportProgress(f) };
       const command = this.registry.create(
         { doc: session.doc, services: this.#options.services, task: control },

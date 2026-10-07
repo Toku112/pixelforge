@@ -21,6 +21,7 @@ function setup() {
     paint: null,
     setBrushOutline: () => {},
     setCropBox: (box) => shown.push(box),
+    setTransformBox: () => {},
     preview: () => {},
     selectLayers: () => {},
     report: () => {},

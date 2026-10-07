@@ -1,8 +1,11 @@
 /**
  * Reference implementation of alpha conversion (used by tests and by the worker).
- * Adding alpha copies the colour samples and sets alpha to fully opaque; removing
+ * Adding alpha copies the colour samples and sets alpha to fully opaque (only
+ * inside `keep`, tile pixel coordinates, when given; transparent elsewhere); removing
  * alpha composites the colour over the matte: c' = c·a + m·(1 − a).
  */
+import type { Rect } from '../document/geometry';
+import { TILE_SIZE } from '../document/tile';
 import {
   createSampleArray,
   maxSampleValue,
@@ -17,6 +20,7 @@ export function convertAlphaTile(
   to: PixelFormat,
   matte: readonly number[],
   out?: SampleArray,
+  keep?: Rect | null,
 ): SampleArray {
   if (from.depth !== to.depth || from.colorChannels !== to.colorChannels)
     throw new Error('convertAlpha: only alpha may differ');
@@ -32,7 +36,12 @@ export function convertAlphaTile(
     const o = p * sOut;
     if (!from.hasAlpha) {
       for (let c = 0; c < cc; c++) dst[o + c] = src[i + c]!;
-      if (to.hasAlpha) dst[o + cc] = max;
+      if (to.hasAlpha) {
+        const x = p % TILE_SIZE;
+        const y = Math.floor(p / TILE_SIZE);
+        const inside = !keep || (x >= keep.x && y >= keep.y && x < keep.x + keep.w && y < keep.y + keep.h);
+        dst[o + cc] = inside ? max : 0;
+      }
     } else if (to.hasAlpha) {
       for (let c = 0; c < sIn; c++) dst[o + c] = src[i + c]!;
     } else {

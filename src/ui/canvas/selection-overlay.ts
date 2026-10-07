@@ -10,7 +10,7 @@ import type { ImageDocument } from '../../core/document/document';
 import { shapePoints } from '../../core/selection/mask-ops';
 import type { Selection } from '../../core/selection/selection';
 import type { Renderer } from '../../engine/gl/renderer';
-import type { CropBoxOverlay, SelectionPreview } from '../../tools/types';
+import type { CropBoxOverlay, SelectionPreview, TransformBoxOverlay } from '../../tools/types';
 
 /** Dash length, CSS pixels. */
 const DASH = 4;
@@ -28,6 +28,7 @@ export class SelectionOverlay {
   #preview: SelectionPreview | null = null;
   #brush: { x: number; y: number; size: number } | null = null;
   #crop: CropBoxOverlay | null = null;
+  #transform: TransformBoxOverlay | null = null;
   #phase = 0;
   #timer: ReturnType<typeof setInterval> | null = null;
   readonly #still: boolean;
@@ -70,6 +71,12 @@ export class SelectionOverlay {
     this.draw();
   }
 
+  /** Free Transform's box, or none. */
+  setTransformBox(box: TransformBoxOverlay | null): void {
+    this.#transform = box;
+    this.draw();
+  }
+
   /** The traced outline of the current selection, or null while it is being traced. */
   get outline(): Float32Array[] | null {
     const sel = this.#doc?.selection;
@@ -98,6 +105,7 @@ export class SelectionOverlay {
     const loops = this.#loopsToDraw(doc);
     this.#animate(loops.length > 0);
     if (doc && this.#crop) this.#drawCrop(ctx, doc, this.#crop);
+    if (doc && this.#transform) this.#drawTransform(ctx, this.#transform);
     if (doc && this.#brush) this.#drawBrush(ctx, this.#brush);
     if (!doc || loops.length === 0) return;
 
@@ -184,6 +192,52 @@ export class SelectionOverlay {
       const p = v.docToView({ x: box.x + box.w * fx, y: box.y + box.h * fy });
       ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
       ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
+    }
+  }
+
+  #drawTransform(ctx: CanvasRenderingContext2D, box: TransformBoxOverlay): void {
+    const v = this.#renderer.viewport;
+    const dpr = this.#renderer.devicePixelRatio;
+    const line = Math.max(1, Math.round(dpr));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    box.quad.forEach((c, i) => {
+      const p = v.docToView(c);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.lineWidth = line * 3;
+    ctx.strokeStyle = 'rgb(0 0 0 / 35%)';
+    ctx.stroke();
+    ctx.lineWidth = line;
+    ctx.strokeStyle = '#3d8bf2';
+    ctx.stroke();
+    const size = 7 * dpr;
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#3d8bf2';
+    for (const h of box.handles) {
+      const p = v.docToView(h);
+      ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+      ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
+    }
+    if (box.reference) {
+      // The reference point: a small target.
+      const p = v.docToView(box.reference);
+      const r = 5 * dpr;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, 2 * Math.PI);
+      ctx.moveTo(p.x - r * 1.6, p.y);
+      ctx.lineTo(p.x + r * 1.6, p.y);
+      ctx.moveTo(p.x, p.y - r * 1.6);
+      ctx.lineTo(p.x, p.y + r * 1.6);
+      ctx.lineWidth = line * 3;
+      ctx.strokeStyle = 'rgb(255 255 255 / 80%)';
+      ctx.stroke();
+      ctx.lineWidth = line;
+      ctx.strokeStyle = '#000';
+      ctx.stroke();
     }
   }
 

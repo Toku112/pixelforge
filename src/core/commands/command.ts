@@ -6,6 +6,8 @@
  */
 import type { CompositeTile } from '../composite/composite-tiles';
 import type { LayerSource, LayerTile } from '../geometry/layer-geometry';
+import type { Mat3 } from '../geometry/transform';
+import type { TransformPixelsSetup } from '../geometry/transform-pixels';
 import type { LayerGeometry } from './builtin/geometry';
 import type { Dab } from '../paint/brush';
 import type { FillSpec } from '../paint/fill';
@@ -95,6 +97,22 @@ export interface PixelOps {
     geometry: Exclude<LayerGeometry, { kind: 'offset' }>,
     fill: readonly number[] | null,
   ): Promise<LayerTile[]>;
+  /** The exact area of a layer's visible pixels (the Free Transform box); null when it is empty. */
+  contentBounds(source: LayerSource): Promise<Rect | null>;
+  /** Free Transform of a whole layer: its new tiles (offset 0, 0) over `area` (see core/geometry/transform-pixels.ts). */
+  transformLayerPixels(
+    setup: TransformPixelsSetup,
+    sources: { tx: number; ty: number; data: SampleArray }[],
+    area: Rect,
+  ): Promise<LayerTile[]>;
+  /** Free Transform of the selected pixels: reads `sources`, writes `outputs` (layer tile coordinates). */
+  transformSelectedPixels(
+    setup: TransformPixelsSetup,
+    sources: { tx: number; ty: number; data: SampleArray }[],
+    outputs: { tx: number; ty: number; data: SampleArray }[],
+  ): Promise<void>;
+  /** The selection after a Free Transform (`inverse`: after → before); null when nothing stays selected. */
+  transformMask(mask: MaskData, inverse: Mat3, area: Rect, canvas: Rect): Promise<MaskData | null>;
   /** Moves selected pixels (see core/paint/move-pixels.ts): reads `sources`, writes `outputs`. */
   movePixels(
     setup: MovePixelsSetup,
@@ -108,13 +126,15 @@ export interface PixelOps {
   /**
    * Converts whole tiles to a format that differs only in alpha: adds a fully
    * opaque alpha channel, or removes alpha by compositing over `matte` (colour
-   * samples). Returns new arrays; the inputs are not modified.
+   * samples). Returns new arrays; the inputs are not modified. When adding alpha,
+   * `keep[i]` (pixels within tile i) limits what becomes opaque: the rest turns transparent.
    */
   convertAlpha(
     tiles: SampleArray[],
     from: PixelFormat,
     to: PixelFormat,
     matte: readonly number[],
+    keep?: readonly (Rect | null)[],
   ): Promise<SampleArray[]>;
   /**
    * Composites a flatten plan over `rect` (document coordinates) into tiles of

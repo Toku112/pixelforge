@@ -17,7 +17,20 @@ import {
   type SelectionShape,
 } from '../core/selection/mask-ops';
 import type { LayerGeometry } from '../core/commands/builtin/geometry';
-import { mapLayer, resampleLayer, type LayerSource, type LayerTile } from '../core/geometry/layer-geometry';
+import {
+  contentBounds,
+  mapLayer,
+  resampleLayer,
+  type LayerSource,
+  type LayerTile,
+} from '../core/geometry/layer-geometry';
+import type { Mat3 } from '../core/geometry/transform';
+import {
+  transformLayerPixels,
+  transformMask,
+  transformSelectedPixels,
+  type TransformPixelsSetup,
+} from '../core/geometry/transform-pixels';
 import type { Dab } from '../core/paint/brush';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
@@ -135,9 +148,22 @@ function transferMask(mask: MaskData | null): MaskData | null {
 
 const conversions = {
   /** See PixelOps.convertAlpha. */
-  convertAlpha(tiles: SampleArray[], from: PixelFormat, to: PixelFormat, matte: number[]): SampleArray[] {
-    const out = tiles.map((t) =>
-      convertAlphaTile(t, from, to, matte, newSamples(to, (t.length / samplesPerPixel(from)) * samplesPerPixel(to))),
+  convertAlpha(
+    tiles: SampleArray[],
+    from: PixelFormat,
+    to: PixelFormat,
+    matte: number[],
+    keep?: readonly (Rect | null)[],
+  ): SampleArray[] {
+    const out = tiles.map((t, i) =>
+      convertAlphaTile(
+        t,
+        from,
+        to,
+        matte,
+        newSamples(to, (t.length / samplesPerPixel(from)) * samplesPerPixel(to)),
+        keep?.[i] ?? null,
+      ),
     );
     return transfer(
       out,
@@ -189,6 +215,42 @@ const conversions = {
       tiles,
       tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
     );
+  },
+
+  /** See PixelOps.contentBounds. */
+  contentBounds(source: LayerSource): Rect | null {
+    return contentBounds(source);
+  },
+
+  /** See PixelOps.transformLayerPixels. */
+  transformLayerPixels(
+    setup: TransformPixelsSetup,
+    sources: { tx: number; ty: number; data: SampleArray }[],
+    area: Rect,
+  ): LayerTile[] {
+    const shared = self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined';
+    const tiles = transformLayerPixels(setup, sources, area, (n) =>
+      shared ? new SharedArrayBuffer(n) : new ArrayBuffer(n),
+    );
+    return transfer(
+      tiles,
+      tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
+    );
+  },
+
+  /** See PixelOps.transformSelectedPixels: same return convention as movePixels. */
+  transformSelectedPixels(
+    setup: TransformPixelsSetup,
+    sources: { tx: number; ty: number; data: SampleArray }[],
+    outputs: { tx: number; ty: number; data: SampleArray }[],
+  ): (SampleArray | null)[] {
+    transformSelectedPixels(setup, sources, outputs);
+    return returnUnshared(outputs.map((o) => o.data));
+  },
+
+  /** See PixelOps.transformMask. */
+  transformMask(mask: MaskData, inverse: Mat3, area: Rect, canvas: Rect): MaskData | null {
+    return transformMask(mask, inverse, area, canvas);
   },
 
   /** See PixelOps.maskBounds. */

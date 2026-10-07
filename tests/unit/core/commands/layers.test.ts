@@ -262,6 +262,9 @@ describe('Layer from Background', () => {
     expect(doc.background).toBeUndefined();
     expect(layer.buffer.getPixel(5, 5)).toEqual([10, 20, 30, 255]);
     expect(layer.buffer.getPixel(250, 150)).toEqual([255, 255, 255, 255]);
+    // Only the canvas comes along: past its edge (inside the same tiles) is transparent.
+    expect(layer.buffer.getPixel(doc.width, 5)[3]).toBe(0);
+    expect(layer.buffer.getPixel(5, doc.height)[3]).toBe(0);
     doc.updateLayer(layer.id, { opacity: 0.5, offsetX: 3 }); // now allowed
     await history.undo();
     expect(doc.background?.buffer.getPixel(5, 5)).toEqual([10, 20, 30]);

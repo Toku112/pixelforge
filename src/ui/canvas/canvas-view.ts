@@ -77,6 +77,7 @@ export class CanvasView {
       paint: options.paint ?? null,
       setBrushOutline: (outline) => this.#ants?.setBrushOutline(outline),
       setCropBox: (box) => this.#ants?.setCropBox(box),
+      setTransformBox: (box) => this.#ants?.setTransformBox(box),
       preview: (descriptor) => options.preview?.(descriptor),
       selectLayers: (ids) => options.selectLayers?.(ids),
       report: (title, message) => options.report?.(title, message),

@@ -4,7 +4,12 @@ import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { ImageDocument, type DocumentInit } from '../../../src/core/document/document';
 import { convertAlphaTile } from '../../../src/core/commands/alpha';
 import { compositeTiles } from '../../../src/core/composite/composite-tiles';
-import { mapLayer, resampleLayer } from '../../../src/core/geometry/layer-geometry';
+import { contentBounds, mapLayer, resampleLayer } from '../../../src/core/geometry/layer-geometry';
+import {
+  transformLayerPixels,
+  transformMask,
+  transformSelectedPixels,
+} from '../../../src/core/geometry/transform-pixels';
 import { fillTiles } from '../../../src/core/paint/fill';
 import { movePixels } from '../../../src/core/paint/move-pixels';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
@@ -28,8 +33,8 @@ export const referencePixelOps: PixelOps = {
     }
     return Promise.resolve();
   },
-  convertAlpha(tiles, from, to, matte) {
-    return Promise.resolve(tiles.map((t) => convertAlphaTile(t, from, to, matte)));
+  convertAlpha(tiles, from, to, matte, keep) {
+    return Promise.resolve(tiles.map((t, i) => convertAlphaTile(t, from, to, matte, undefined, keep?.[i] ?? null)));
   },
   clear(tiles, format, through, fill) {
     clearMasked(tiles, format, through, fill);
@@ -40,6 +45,19 @@ export const referencePixelOps: PixelOps = {
   },
   invertSelection(current, canvas) {
     return Promise.resolve(invertSelection(current, canvas));
+  },
+  contentBounds(source) {
+    return Promise.resolve(contentBounds(source));
+  },
+  transformLayerPixels(setup, sources, area) {
+    return Promise.resolve(transformLayerPixels(setup, sources, area));
+  },
+  transformSelectedPixels(setup, sources, outputs) {
+    transformSelectedPixels(setup, sources, outputs);
+    return Promise.resolve();
+  },
+  transformMask(mask, inverse, area, canvas) {
+    return Promise.resolve(transformMask(mask, inverse, area, canvas));
   },
   maskBounds(mask, canvas) {
     return Promise.resolve(maskBounds(mask, canvas));

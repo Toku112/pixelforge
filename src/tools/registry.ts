@@ -7,6 +7,7 @@ import { HandTool } from './hand/hand-tool';
 import { MoveTool } from './move/move-tool';
 import { PaintingTool } from './paint/paint-tool';
 import { RotateViewTool } from './rotate-view/rotate-view-tool';
+import { TransformTool } from './transform/transform-tool';
 import { LassoTool, PolygonalLassoTool } from './selection/lasso-tool';
 import { MarqueeTool, SingleLineMarqueeTool } from './selection/marquee-tool';
 import type { Tool } from './types';
@@ -31,6 +32,8 @@ export function createTools() {
   const lasso = new LassoTool();
   const polygonalLasso = new PolygonalLassoTool();
   const crop = new CropTool();
+  // Not on the toolbar: the app switches to it while Free Transform is open.
+  const transform = new TransformTool();
   const brush = new PaintingTool('brush');
   const eraser = new PaintingTool('eraser');
   const groups: ToolGroup[] = [
@@ -48,6 +51,7 @@ export function createTools() {
     { id: 'zoom-group', tools: [zoom] },
   ];
   const byId = new Map<string, Tool>(groups.flatMap((g) => g.tools.map((t) => [t.id, t] as const)));
+  byId.set(transform.id, transform);
   return {
     move,
     hand,
@@ -60,6 +64,7 @@ export function createTools() {
     lasso,
     polygonalLasso,
     crop,
+    transform,
     brush,
     eraser,
     groups,

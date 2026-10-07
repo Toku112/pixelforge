@@ -44,6 +44,13 @@ export interface CropBoxOverlay {
   thirds: boolean;
 }
 
+/** Free Transform's box (document coordinates): its corners, the 8 handles and the reference point (if shown). */
+export interface TransformBoxOverlay {
+  quad: readonly { x: number; y: number }[];
+  handles: readonly { x: number; y: number }[];
+  reference: { x: number; y: number } | null;
+}
+
 /** A brush/eraser stroke in progress (see app/paint-session.ts). */
 export interface PaintStroke {
   add(dabs: Dab[]): void;
@@ -74,6 +81,8 @@ export interface ToolContext {
   readonly paint: PaintHost | null;
   /** Shows the Crop tool's box, or hides it with null. */
   setCropBox(box: CropBoxOverlay | null): void;
+  /** Shows Free Transform's box, or hides it with null. */
+  setTransformBox(box: TransformBoxOverlay | null): void;
   /** Shows the brush outline at a document point (diameter in document px), or hides it. */
   setBrushOutline(outline: { x: number; y: number; size: number } | null): void;
   /** Shows a command's result live without recording it (null cancels); `execute` then records it. */

@@ -269,10 +269,10 @@ function cubic(b: number, c: number): Kernel {
   return {
     radius: 2,
     weight: (t) => {
-      const x = Math.abs(t);
-      if (x < 1) return ((12 - 9 * b - 6 * c) * x ** 3 + (-18 + 12 * b + 6 * c) * x ** 2 + (6 - 2 * b)) / 6;
-      if (x < 2)
-        return ((-b - 6 * c) * x ** 3 + (6 * b + 30 * c) * x ** 2 + (-12 * b - 48 * c) * x + (8 * b + 24 * c)) / 6;
+      const x = t < 0 ? -t : t;
+      const x2 = x * x;
+      if (x < 1) return ((12 - 9 * b - 6 * c) * x2 * x + (-18 + 12 * b + 6 * c) * x2 + (6 - 2 * b)) / 6;
+      if (x < 2) return ((-b - 6 * c) * x2 * x + (6 * b + 30 * c) * x2 + (-12 * b - 48 * c) * x + (8 * b + 24 * c)) / 6;
       return 0;
     },
   };
@@ -448,4 +448,32 @@ export function resampleLayer(
     }
   }
   return tiles;
+}
+
+/** The exact area (document coordinates) of a layer's visible pixels: alpha above 0; null when there are none. */
+export function contentBounds(src: LayerSource): Rect | null {
+  const format = src.format;
+  if (!format.hasAlpha) return src.domain;
+  const spp = samplesPerPixel(format);
+  const cc = format.colorChannels;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const t of src.tiles) {
+    const ox = t.tx * TILE_SIZE + src.offsetX;
+    const oy = t.ty * TILE_SIZE + src.offsetY;
+    // Tiles inside the bounds found so far cannot widen them.
+    if (ox >= x0 && oy >= y0 && ox + TILE_SIZE <= x1 && oy + TILE_SIZE <= y1) continue;
+    for (let y = 0; y < TILE_SIZE; y++) {
+      for (let x = 0; x < TILE_SIZE; x++) {
+        if (t.data[(y * TILE_SIZE + x) * spp + cc] === 0) continue;
+        x0 = Math.min(x0, ox + x);
+        y0 = Math.min(y0, oy + y);
+        x1 = Math.max(x1, ox + x + 1);
+        y1 = Math.max(y1, oy + y + 1);
+      }
+    }
+  }
+  return x0 === Infinity ? null : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }

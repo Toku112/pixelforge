@@ -1,7 +1,10 @@
 /** The options bar: settings and actions for the active tool. */
 import type { SelectionMode } from '../../core/selection/mask-ops';
 import { resetView, setViewRotation } from '../../tools/rotate-view/rotate-view-tool';
+import { useEffect, useReducer } from 'react';
+import type { ResampleMethod } from '../../core/geometry/layer-geometry';
 import { CropTool } from '../../tools/crop/crop-tool';
+import { TransformTool } from '../../tools/transform/transform-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
 import { MoveTool } from '../../tools/move/move-tool';
 import { PaintingTool } from '../../tools/paint/paint-tool';
@@ -164,6 +167,171 @@ function CropOptions({ tool }: { tool: CropTool }) {
         className="option-icon"
         aria-label="Commit crop"
         title="Commit crop (Enter)"
+        onClick={act((c) => tool.commit(c))}
+      >
+        <Icon name="check" size={16} />
+      </button>
+    </>
+  );
+}
+
+const INTERPOLATIONS: [ResampleMethod, string][] = [
+  ['nearest', 'Nearest Neighbor'],
+  ['bilinear', 'Bilinear'],
+  ['bicubic', 'Bicubic'],
+  ['bicubic-smoother', 'Bicubic Smoother'],
+  ['bicubic-sharper', 'Bicubic Sharper'],
+  ['automatic', 'Bicubic Automatic'],
+];
+
+const REFERENCE_NAMES = [
+  ['top left', 'top', 'top right'],
+  ['left', 'center', 'right'],
+  ['bottom left', 'bottom', 'bottom right'],
+];
+
+/** Free Transform: reference point, position, scale, angle, skews, interpolation, cancel/apply. */
+function TransformOptions({ tool }: { tool: TransformTool }) {
+  const controller = useController();
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => tool.onChange(redraw), [tool]);
+  const ctx = () => controller.canvas?.context;
+  const parts = tool.parts;
+  const ref = tool.reference;
+  if (!parts || !ref) return null;
+  const set = (changes: Parameters<TransformTool['setNumbers']>[0]) => {
+    const c = ctx();
+    if (c) tool.setNumbers(changes, c);
+  };
+  const option = (changes: Partial<TransformTool['options']>) => tool.setOptions(changes, ctx());
+  const act = (fn: (c: NonNullable<ReturnType<typeof ctx>>) => void) => () => {
+    const c = ctx();
+    if (c) fn(c);
+  };
+  return (
+    <>
+      <label className="option-check">
+        <input
+          type="checkbox"
+          aria-label="Show reference point"
+          checked={tool.options.showReference}
+          onChange={(e) => option({ showReference: e.target.checked })}
+        />
+      </label>
+      <div className="anchor-grid reference-grid" role="group" aria-label="Reference point location">
+        {REFERENCE_NAMES.map((row, y) =>
+          row.map((name, x) => (
+            <button
+              key={name}
+              type="button"
+              className="anchor-cell"
+              aria-label={`Reference point ${name}`}
+              onClick={act((c) => tool.setReferenceAt(x / 2, y / 2, c))}
+            />
+          )),
+        )}
+      </div>
+      <NumberField
+        label="X:"
+        value={Number(ref.x.toFixed(1))}
+        precision={1}
+        width={56}
+        onChange={(v) => set({ x: v })}
+      />
+      <NumberField
+        label="Y:"
+        value={Number(ref.y.toFixed(1))}
+        precision={1}
+        width={56}
+        onChange={(v) => set({ y: v })}
+      />
+      <span className="options-divider" />
+      <NumberField
+        label="W:"
+        value={Number((parts.scaleX * 100).toFixed(2))}
+        precision={2}
+        suffix="%"
+        width={64}
+        onChange={(v) => v !== 0 && set({ scaleX: v / 100 })}
+      />
+      <button
+        type="button"
+        className={`option-icon${tool.options.keepRatio ? ' active' : ''}`}
+        aria-label="Maintain aspect ratio"
+        aria-pressed={tool.options.keepRatio}
+        title="Maintain aspect ratio"
+        onClick={() => option({ keepRatio: !tool.options.keepRatio })}
+      >
+        <Icon name="link" size={16} />
+      </button>
+      <NumberField
+        label="H:"
+        value={Number((parts.scaleY * 100).toFixed(2))}
+        precision={2}
+        suffix="%"
+        width={64}
+        onChange={(v) => v !== 0 && set({ scaleY: v / 100 })}
+      />
+      <span className="options-divider" />
+      <NumberField
+        label="Angle:"
+        ariaLabel="Rotation angle"
+        value={Number(parts.angle.toFixed(2))}
+        precision={2}
+        suffix="°"
+        width={56}
+        onChange={(v) => set({ angle: v })}
+      />
+      <NumberField
+        label="H:"
+        ariaLabel="Horizontal skew"
+        value={Number(parts.skewH.toFixed(2))}
+        precision={2}
+        suffix="°"
+        width={52}
+        min={-89}
+        max={89}
+        onChange={(v) => set({ skewH: v })}
+      />
+      <NumberField
+        label="V:"
+        ariaLabel="Vertical skew"
+        value={Number(parts.skewV.toFixed(2))}
+        precision={2}
+        suffix="°"
+        width={52}
+        min={-89}
+        max={89}
+        onChange={(v) => set({ skewV: v })}
+      />
+      <span className="options-divider" />
+      <select
+        className="option-select"
+        aria-label="Interpolation"
+        value={tool.options.interpolation}
+        onChange={(e) => option({ interpolation: e.target.value as ResampleMethod })}
+      >
+        {INTERPOLATIONS.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <span className="options-divider" />
+      <button
+        type="button"
+        className="option-icon"
+        aria-label="Cancel transform"
+        title="Cancel transform (Esc)"
+        onClick={act((c) => tool.abandon(c))}
+      >
+        <Icon name="cancelCircle" size={16} />
+      </button>
+      <button
+        type="button"
+        className="option-icon"
+        aria-label="Commit transform"
+        title="Commit transform (Enter)"
         onClick={act((c) => tool.commit(c))}
       >
         <Icon name="check" size={16} />
@@ -406,6 +574,7 @@ export function OptionsBar() {
       {tool instanceof PaintingTool && <PaintOptions key={tool.id} tool={tool} />}
       {tool instanceof MoveTool && <MoveOptions tool={tool} />}
       {tool instanceof CropTool && <CropOptions tool={tool} />}
+      {tool instanceof TransformTool && <TransformOptions tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}
       {toolId === 'zoom' && (
         <>

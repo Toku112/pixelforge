@@ -23,6 +23,11 @@ import {
 } from '../core/commands/command';
 import type { LayerPropChanges } from '../core/commands/builtin/set-layer-props';
 import type { ImageDocument } from '../core/document/document';
+import { unionRects, type Rect } from '../core/document/geometry';
+import { layerSource } from '../core/commands/builtin/geometry';
+import { transformTargets } from '../core/commands/builtin/transform';
+import type { Thumbnail } from '../core/composite/thumbnail';
+import { IDENTITY, invert } from '../core/geometry/transform';
 import { bytesPerSample, samplesPerPixel } from '../core/document/pixel-format';
 import {
   LAYER_BLEND_MODES,
@@ -31,6 +36,7 @@ import {
   type LayerBlendMode,
   type GroupLayer,
   type LayerNode,
+  type PixelLayer,
 } from '../core/document/layers';
 import { AppCommandRegistry } from './commands/app-commands';
 import { detectPlatform, type Platform } from './keymap/chord';
@@ -360,6 +366,79 @@ export class AppController {
     });
   }
 
+  /** Edit > Free Transform: opens the transform box around the selection or the selected layers. */
+  async freeTransform(): Promise<void> {
+    const ws = this.workspace;
+    const doc = ws.active?.doc;
+    const ctx = this.#canvas?.context;
+    const tool = this.tools.transform;
+    if (!doc || !ctx || tool.active || ws.running) return;
+    const targets = transformTargets(doc);
+    if (targets.kind === 'refused') return this.#ui.alert('Could not use Free Transform', targets.reason);
+    const { pixelOps } = this.services;
+    let bounds: Rect | null;
+    if (targets.kind === 'pixels') {
+      bounds = await pixelOps.maskBounds(doc.selection!.data, doc.canvasRect);
+    } else {
+      const all = await Promise.all(targets.layers.map((l) => pixelOps.contentBounds(layerSource(doc, l))));
+      const found = all.filter((b): b is Rect => b !== null);
+      bounds = found.length > 0 ? found.reduce((a, b) => unionRects(a, b)) : null;
+    }
+    if (ws.active?.doc !== doc || tool.active) return;
+    if (!bounds) return this.#ui.alert('Could not use Free Transform', 'There are no pixels to transform.');
+    const renderer = this.#canvas?.renderer;
+    // Whole layers preview on the GPU from a picture of each (at most 4096 px a side);
+    // selected pixels preview through the command itself, computed for the visible area.
+    const pictures = targets.kind === 'layers' && renderer ? await this.#transformPictures(doc, targets.layers) : null;
+    if (ws.active?.doc !== doc || tool.active) return;
+    if (pictures) renderer!.setTransformPreview({ layers: pictures, inverse: [...IDENTITY] });
+    const previous = this.#ui.activeToolId();
+    this.#ui.setActiveTool(tool.id, '');
+    tool.begin(ctx, bounds, {
+      preview: (matrix, draft) => {
+        if (pictures) {
+          const inverse = invert(matrix);
+          if (inverse) renderer!.setTransformPreview({ layers: pictures, inverse: [...inverse] });
+        } else {
+          void this.previewDocumentCommand({
+            name: 'freeTransform',
+            params: { matrix: [...matrix], interpolation: 'bilinear', draft: { ...draft } },
+          });
+        }
+      },
+      finish: (descriptor) => {
+        const endPreview = () => (pictures ? renderer!.setTransformPreview(null) : undefined);
+        if (descriptor) void this.runDocumentCommand(descriptor, doc).finally(endPreview);
+        else {
+          endPreview();
+          void ws.cancelPreview();
+        }
+        // Back to the tool used before (unless another one was chosen meanwhile).
+        if (this.#ui.activeToolId() === tool.id) this.#ui.setActiveTool(previous, this.groupOf(previous));
+      },
+    });
+  }
+
+  /** Pictures of layers for the GPU transform preview (8-bit sRGB, at most 4096 px a side). */
+  async #transformPictures(
+    doc: ImageDocument,
+    layers: readonly PixelLayer[],
+  ): Promise<Map<string, { image: Thumbnail; area: Rect }>> {
+    const pictures = new Map<string, { image: Thumbnail; area: Rect }>();
+    await Promise.all(
+      layers.map(async (layer) => {
+        const source = layerSource(doc, layer);
+        const area = await this.services.pixelOps.contentBounds(source);
+        if (!area) return;
+        const scale = Math.min(1, 4096 / Math.max(area.w, area.h));
+        const width = Math.max(1, Math.round(area.w * scale));
+        const height = Math.max(1, Math.round(area.h * scale));
+        pictures.set(layer.id, { image: await this.services.renderThumbnail(source, area, width, height), area });
+      }),
+    );
+    return pictures;
+  }
+
   /** Fills with a colour (Alt/Ctrl+Backspace and the dialog). */
   async #fill(color: RGB, mode: LayerBlendMode, opacity: number, preserve: boolean): Promise<void> {
     const doc = this.workspace.active?.doc;
@@ -389,7 +468,8 @@ export class AppController {
    * the Background, and for new canvas when a crop reaches past the old one.
    */
   #withAppParams(descriptor: CommandDescriptor): CommandDescriptor {
-    if (!['moveSelectedPixels', 'crop'].includes(descriptor.name) || descriptor.params['color']) return descriptor;
+    if (!['moveSelectedPixels', 'crop', 'freeTransform'].includes(descriptor.name) || descriptor.params['color'])
+      return descriptor;
     const color = this.#backgroundSamples();
     return color ? { ...descriptor, params: { ...descriptor.params, color } } : descriptor;
   }
@@ -404,10 +484,10 @@ export class AppController {
     }
   }
 
-  /** Runs a document command for a tool, reporting problems (cancelling is not one). */
-  async runDocumentCommand(descriptor: CommandDescriptor): Promise<void> {
+  /** Runs a document command for a tool (on the active document, or `doc`), reporting problems (cancelling is not one). */
+  async runDocumentCommand(descriptor: CommandDescriptor, doc?: ImageDocument): Promise<void> {
     try {
-      await this.workspace.execute(this.#withAppParams(descriptor));
+      await this.workspace.execute(this.#withAppParams(descriptor), doc);
     } catch (error) {
       if (error instanceof CommandCancelledError || error instanceof CommandUnavailableError) return;
       await this.#ui.alert('Something went wrong', error instanceof Error ? error.message : String(error));
@@ -677,6 +757,12 @@ export class AppController {
         const color = this.#backgroundSamples();
         return ws.execute({ name: 'clear', params: color ? { color } : {} });
       },
+    });
+    add({
+      id: 'edit.freeTransform',
+      label: 'Free Transform',
+      enabled: () => !toolBusy() && ws.active !== null && ws.canExecute('freeTransform'),
+      run: () => this.freeTransform(),
     });
     add({
       id: 'edit.fill',
