@@ -1,6 +1,7 @@
 /** The options bar: settings and actions for the active tool. */
 import type { SelectionMode } from '../../core/selection/mask-ops';
 import { resetView, setViewRotation } from '../../tools/rotate-view/rotate-view-tool';
+import { CropTool } from '../../tools/crop/crop-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
 import { MoveTool } from '../../tools/move/move-tool';
 import { PaintingTool } from '../../tools/paint/paint-tool';
@@ -54,6 +55,119 @@ function MoveOptions({ tool }: { tool: MoveTool }) {
         <option value="layer">Layer</option>
         <option value="group">Group</option>
       </select>
+    </>
+  );
+}
+
+const CROP_RATIOS: [string, string, number, number][] = [
+  ['free', 'Ratio', 0, 0],
+  ['original', 'Original Ratio', 0, 0],
+  ['1:1', '1 : 1 (Square)', 1, 1],
+  ['4:5', '4 : 5 (8 : 10)', 4, 5],
+  ['5:7', '5 : 7', 5, 7],
+  ['2:3', '2 : 3 (4 : 6)', 2, 3],
+  ['16:9', '16 : 9', 16, 9],
+];
+
+/** Options of the Crop tool. */
+function CropOptions({ tool }: { tool: CropTool }) {
+  const controller = useController();
+  const bump = useUi((s) => s.bumpToolOptions);
+  useUi((s) => s.toolOptionsVersion);
+  const ctx = () => controller.canvas?.context;
+  const { ratioW, ratioH } = tool.options;
+  const preset = CROP_RATIOS.find(([id, , w, h]) => id !== 'original' && w === ratioW && h === ratioH)?.[0] ?? 'free';
+  const set = (changes: Partial<CropTool['options']>) => {
+    tool.setOptions(changes, ctx());
+    bump();
+  };
+  const choose = (id: string) => {
+    const doc = ctx()?.document;
+    if (id === 'original') {
+      if (doc) set({ ratioW: doc.width, ratioH: doc.height });
+      return;
+    }
+    const entry = CROP_RATIOS.find(([key]) => key === id);
+    if (entry) set({ ratioW: entry[2], ratioH: entry[3] });
+  };
+  const act = (fn: (c: NonNullable<ReturnType<typeof ctx>>) => void) => () => {
+    const c = ctx();
+    if (c) fn(c);
+  };
+  return (
+    <>
+      <select
+        className="option-select"
+        aria-label="Crop ratio preset"
+        value={preset}
+        onChange={(e) => choose(e.target.value)}
+      >
+        {CROP_RATIOS.map(([id, label]) => (
+          <option key={id} value={id}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <NumberField
+        label="Ratio width"
+        hideLabel
+        value={ratioW}
+        min={0}
+        max={300000}
+        precision={3}
+        width={48}
+        onChange={(v) => set({ ratioW: v })}
+      />
+      <button
+        type="button"
+        className="option-icon"
+        aria-label="Swap width and height"
+        title="Swap width and height"
+        onClick={() => set({ ratioW: ratioH, ratioH: ratioW })}
+      >
+        <Icon name="swap" size={16} />
+      </button>
+      <NumberField
+        label="Ratio height"
+        hideLabel
+        value={ratioH}
+        min={0}
+        max={300000}
+        precision={3}
+        width={48}
+        onChange={(v) => set({ ratioH: v })}
+      />
+      <button type="button" className="option-button" onClick={() => set({ ratioW: 0, ratioH: 0 })}>
+        Clear
+      </button>
+      <span className="options-divider" />
+      <label className="option-check">
+        <input
+          type="checkbox"
+          checked={tool.options.deleteCropped}
+          onChange={(e) => set({ deleteCropped: e.target.checked })}
+        />
+        Delete Cropped Pixels
+      </label>
+      <span className="options-divider" />
+      <button
+        type="button"
+        className="option-icon"
+        aria-label="Cancel crop"
+        title="Cancel crop (Esc)"
+        onClick={act((c) => tool.reset(c))}
+      >
+        <Icon name="cancelCircle" size={16} />
+      </button>
+      <button
+        type="button"
+        className="option-icon"
+        aria-label="Commit crop"
+        title="Commit crop (Enter)"
+        onClick={act((c) => tool.commit(c))}
+      >
+        <Icon name="check" size={16} />
+      </button>
     </>
   );
 }
@@ -291,6 +405,7 @@ export function OptionsBar() {
       {tool instanceof SelectionTool && <SelectionOptions key={tool.id} tool={tool} />}
       {tool instanceof PaintingTool && <PaintOptions key={tool.id} tool={tool} />}
       {tool instanceof MoveTool && <MoveOptions tool={tool} />}
+      {tool instanceof CropTool && <CropOptions tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}
       {toolId === 'zoom' && (
         <>

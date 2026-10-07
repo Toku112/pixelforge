@@ -968,3 +968,46 @@
   width: 64px;
   font-family: ui-monospace, monospace;
 }
+
+/* Image Size / Canvas Size */
+.size-rows {
+  margin: 8px 0;
+  padding: 8px 0;
+  border-block: 1px solid var(--border-soft);
+}
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.size-row .number-field-label {
+  min-width: 64px;
+}
+.size-constrain {
+  margin: 0 0 6px 64px;
+}
+.size-extension {
+  grid-template-columns: auto 1fr auto;
+}
+.color-chip {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 22px);
+  grid-auto-rows: 22px;
+  gap: 2px;
+}
+.anchor-cell {
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+}
+.anchor-cell[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+}

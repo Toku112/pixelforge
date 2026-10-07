@@ -22,6 +22,8 @@ import {
   type JsonObject,
 } from '../core/commands/command';
 import type { LayerPropChanges } from '../core/commands/builtin/set-layer-props';
+import type { ImageDocument } from '../core/document/document';
+import { bytesPerSample, samplesPerPixel } from '../core/document/pixel-format';
 import {
   LAYER_BLEND_MODES,
   layerCapabilities,
@@ -40,12 +42,16 @@ import { viewActions } from '../tools/hand/hand-tool';
 import { createTools, type ToolSet } from '../tools/registry';
 import type { CanvasView } from '../ui/canvas/canvas-view';
 import type {
+  CanvasSizeRequest,
+  CanvasSizeResult,
   ConfirmRequest,
   FillContents,
   FillRequest,
   FillResult,
+  ImageSizeResult,
   LayerOptionsRequest,
   LayerOptionsResult,
+  SizeRequest,
 } from '../ui/state/ui-store';
 import { formatById, openAcceptTypes, withExtension } from '../io/formats';
 import { pickFiles, saveFileAs, writeToHandle, type PickedFile } from '../io/file-access';
@@ -79,6 +85,10 @@ export interface UiBridge {
   toolOptionsChanged(): void;
   /** The Fill dialog; null when cancelled. */
   fill(request: FillRequest): Promise<FillResult | null>;
+  /** The Image Size dialog; null when cancelled. */
+  imageSize(request: SizeRequest): Promise<ImageSizeResult | null>;
+  /** The Canvas Size dialog; null when cancelled. */
+  canvasSize(request: CanvasSizeRequest): Promise<CanvasSizeResult | null>;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -88,6 +98,7 @@ const TOOL_COMMANDS: Record<string, string> = {
   'tool.move': 'move',
   'tool.brush': 'brush',
   'tool.eraser': 'eraser',
+  'tool.crop': 'crop',
 };
 
 /** Two number keys typed within this time (ms) make one value ("4", "5" → 45 %). */
@@ -286,6 +297,69 @@ export class AppController {
     await this.#fill(result.color, result.mode, result.opacity, result.preserveTransparency);
   }
 
+  #sizeRequest(doc: ImageDocument): SizeRequest {
+    const format = doc.layerFormat(false);
+    return {
+      width: doc.width,
+      height: doc.height,
+      resolution: doc.resolution,
+      bytesPerPixel: samplesPerPixel(format) * bytesPerSample(format.depth),
+    };
+  }
+
+  /** Image > Image Size: resamples the image (or only changes its resolution). */
+  async imageSizeWithDialog(): Promise<void> {
+    const ws = this.workspace;
+    const doc = ws.active?.doc;
+    if (!doc) return;
+    const result = await this.#ui.imageSize(this.#sizeRequest(doc));
+    if (!result || ws.active?.doc !== doc) return;
+    const { width, height, resolution, method } = result;
+    if (width === doc.width && height === doc.height && resolution === doc.resolution) return;
+    await this.runDocumentCommand({ name: 'imageSize', params: { width, height, resolution, method } });
+  }
+
+  /** Image > Canvas Size: adds or removes canvas around the image. */
+  async canvasSizeWithDialog(): Promise<void> {
+    const ws = this.workspace;
+    const doc = ws.active?.doc;
+    if (!doc) return;
+    const hasBackground = !!doc.background;
+    const result = await this.#ui.canvasSize({
+      ...this.#sizeRequest(doc),
+      hasBackground,
+      foreground: this.colors.foreground,
+      background: this.colors.background,
+    });
+    if (!result || ws.active?.doc !== doc) return;
+    const { width, height, anchor } = result;
+    if (width === doc.width && height === doc.height) return;
+    if (width < doc.width || height < doc.height) {
+      const proceed = await this.#ui.confirm({
+        title: 'Canvas Size',
+        message: 'The new canvas is smaller than the current one, so part of the image will be cut off.',
+        confirmLabel: 'Proceed',
+      });
+      if (!proceed || ws.active?.doc !== doc) return;
+    }
+    let color: number[] | undefined;
+    if (hasBackground) {
+      try {
+        color = colorToSamples(result.color, doc.mode, doc.depth);
+      } catch (error) {
+        await this.#ui.alert(
+          'Could not change the canvas size',
+          error instanceof Error ? error.message : String(error),
+        );
+        return;
+      }
+    }
+    await this.runDocumentCommand({
+      name: 'canvasSize',
+      params: { width, height, anchor, ...(color ? { color } : {}) },
+    });
+  }
+
   /** Fills with a colour (Alt/Ctrl+Backspace and the dialog). */
   async #fill(color: RGB, mode: LayerBlendMode, opacity: number, preserve: boolean): Promise<void> {
     const doc = this.workspace.active?.doc;
@@ -310,9 +384,12 @@ export class AppController {
     return this.#ui.alert(title, message);
   }
 
-  /** Parameters a tool leaves to the app: the background colour for moving pixels on the Background. */
+  /**
+   * Parameters a tool leaves to the app: the background colour for moving pixels on
+   * the Background, and for new canvas when a crop reaches past the old one.
+   */
   #withAppParams(descriptor: CommandDescriptor): CommandDescriptor {
-    if (descriptor.name !== 'moveSelectedPixels' || descriptor.params['color']) return descriptor;
+    if (!['moveSelectedPixels', 'crop'].includes(descriptor.name) || descriptor.params['color']) return descriptor;
     const color = this.#backgroundSamples();
     return color ? { ...descriptor, params: { ...descriptor.params, color } } : descriptor;
   }
@@ -627,6 +704,24 @@ export class AppController {
       label: 'Invert',
       enabled: () => ws.canExecute('invert'),
       run: () => ws.execute({ name: 'invert', params: {} }),
+    });
+    const docIdle = () => !toolBusy() && ws.active !== null;
+    add({ id: 'image.imageSize', label: 'Image Size…', enabled: docIdle, run: () => this.imageSizeWithDialog() });
+    add({ id: 'image.canvasSize', label: 'Canvas Size…', enabled: docIdle, run: () => this.canvasSizeWithDialog() });
+    for (const [id, label, params] of [
+      ['image.rotate180', 'Rotate 180°', { turns: 2 }],
+      ['image.rotate90cw', 'Rotate 90° Clockwise', { turns: 1 }],
+      ['image.rotate90ccw', 'Rotate 90° Counter Clockwise', { turns: 3 }],
+      ['image.flipCanvasH', 'Flip Canvas Horizontal', { flip: 'horizontal' }],
+      ['image.flipCanvasV', 'Flip Canvas Vertical', { flip: 'vertical' }],
+    ] as const) {
+      add({ id, label, enabled: docIdle, run: () => this.runDocumentCommand({ name: 'rotateCanvas', params }) });
+    }
+    add({
+      id: 'image.crop',
+      label: 'Crop',
+      enabled: () => docIdle() && !!ws.active?.doc.selection,
+      run: () => this.runDocumentCommand({ name: 'crop', params: {} }),
     });
 
     // Brush keys

@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D items 1–9 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool)
-- Next up: Part D item 10 (Crop tool and Image > Crop; Image Size; Canvas Size; Image Rotation)
+- Last completed: Part D items 1–10 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool, crop/canvas size/image size/rotation)
+- Next up: Part D item 11 (Free Transform)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -83,6 +83,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 
 ### Crop & slice
 - [ ] Crop tool (C): ratio/size/resolution presets, straighten, overlays (rule of thirds, grid, diagonal, triangle, golden ratio, golden spiral), delete cropped pixels toggle, content-aware fill on expand, classic mode, crop shield colour/opacity, rotate crop
+  ↳ partial: classic-mode box (draw, move, resize; Shift/Alt), ratio presets with swap/clear, rule-of-thirds while dragging, fixed shield, Delete Cropped Pixels, Enter/Esc and ✓/⊘ (Part D item 10, D-031). Missing: size/resolution presets, straighten and rotating the box, the other overlays, shield settings, content-aware fill, the image-moves (non-classic) mode.
 - [ ] Generative Expand when extending canvas with crop **(AI)**
 - [ ] Perspective Crop tool
 - [ ] Slice tool
@@ -190,9 +191,13 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Adjustments submenu (all items in B7)
 - [ ] Auto Tone, Auto Contrast, Auto Color (with auto colour correction options: algorithms, target shadows/midtones/highlights, clip)
 - [ ] Image Size: width/height/resolution, constrain, resample methods (Automatic, Preserve Details 2.0, Preserve Details (enlargement), Bicubic Smoother, Bicubic Sharper, Bicubic, Bilinear, Nearest Neighbor), reduce noise, scale styles, fit-to presets, preview
-- [ ] Canvas Size: relative, anchor, extension colour
+  ↳ partial: dimensions in all length units, resolution (px/in, px/cm), Constrain Proportions, Resample on/off, Automatic + the five classic methods, Fit To (own presets) (FORMAT_NOTES §6). Missing: Preserve Details and Preserve Details 2.0 (with Reduce Noise), Scale Styles (with layer styles, Phase 6), the result preview.
+- [x] Canvas Size: relative, anchor, extension colour
+  ↳ note: all length units, the anchor grid, extension colours (foreground/background/white/black/gray/other) on the Background, a warning before cutting off; Ctrl/Cmd+Alt+C (D-031).
 - [ ] Image Rotation: 180°, 90° CW/CCW, Arbitrary, Flip Canvas H/V
+  ↳ partial: 180°, 90° CW/CCW and both flips work. Missing: Arbitrary (with Free Transform's resampling, Part D item 11).
 - [ ] Crop (to selection), Trim (transparent/top-left/bottom-right colour, per-side), Reveal All
+  ↳ partial: Image > Crop to the selection's exact bounds works. Missing: Trim, Reveal All.
 - [ ] Duplicate image (merged layers only option)
 - [ ] Apply Image (source document/layer/channel, invert, blending, opacity, mask)
 - [ ] Calculations (two sources → new channel/document/selection)
@@ -597,7 +602,8 @@ scope (all modes, masks, etc.) is complete.
   ↳ note: Fill dialog (Color… opens the Color Picker over it), Alt/Ctrl+Backspace quick fills (Shift: preserve transparency), Delete on the Background opens Fill (D-029). Content-Aware, Pattern and History contents come with their features (PatchMatch, patterns, History Brush).
 - [x] Move tool: move layers (and selected pixels), auto-select, arrow nudge (Shift = 10 px), Alt-drag duplicate
   ↳ note: also Shift-constrained drags, live preview, arrows moving the selection outline with selection tools (D-030). Not in this item (Part B): transform controls, align/distribute buttons, moving between documents.
-- [ ] Crop tool and Image > Crop; Image Size (resample methods); Canvas Size (anchor, relative); Image Rotation (180°, 90° CW/CCW, Flip Canvas)
+- [x] Crop tool and Image > Crop; Image Size (resample methods); Canvas Size (anchor, relative); Image Rotation (180°, 90° CW/CCW, Flip Canvas)
+  ↳ note: one snapshot-based command per change, pixel work in the worker with progress, 8/16/32-bit (D-031, FORMAT_NOTES §6); the view re-centres after a size change. Part B items above list what the full features still need (Crop tool straighten/overlays, Preserve Details, Arbitrary rotation, Trim, Reveal All).
 - [ ] Free Transform (Ctrl/Cmd+T): scale, rotate, skew, distort, perspective, numeric fields, reference point, interpolation
 - [ ] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd
 - [ ] Phase 1 exit test: edit a layered composition and round-trip it as PSD (automated), plus owner check with real Photoshop

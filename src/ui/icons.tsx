@@ -217,6 +217,23 @@ const icons = {
       <rect x="9.5" y="9.5" width="5" height="5" fill="currentColor" fillOpacity="0.5" stroke="none" />
     </Svg>
   ),
+  crop: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M7 2.5V17h14.5" />
+      <path d="M2.5 7H17v14.5" />
+    </Svg>
+  ),
+  cancelCircle: (p: IconProps) => (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="m6.5 17.5 11-11" />
+    </Svg>
+  ),
+  swap: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M4 9h15l-3.5-3.5M20 15H5l3.5 3.5" />
+    </Svg>
+  ),
   move: (p: IconProps) => (
     <Svg {...p}>
       <path d="M5 3.5 5 17l3.5-3.2 2.4 5.5 2.6-1.1-2.4-5.4 4.9-.3Z" />

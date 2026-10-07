@@ -406,3 +406,25 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   Space) stay with lists, sliders and menus. Delete and tool letters still work there.
 - Duplicating a copy counts up ("Sky copy" → "Sky copy 2") instead of adding another "copy", as in the reference app.
 - Fix: Fill with a selection now also fills where a layer has no pixels yet (a new layer).
+
+## D-031 — 2026-10-07 — Crop, Canvas Size, Image Size, Image Rotation
+
+**Decision:**
+
+- All four are one command class: the document before and after are snapshots sharing unchanged tiles, the new
+  layer pixels are made in the worker layer by layer (with progress; Esc cancels), and undo/redo swap snapshots.
+  Each records one step ("Crop", "Canvas Size", "Image Size", "Rotate Canvas", "Flip Canvas Horizontal/Vertical")
+  with replayable parameters; Image > Crop records no rectangle and crops to the selection on replay.
+- Canvas Size and Crop move the selection with the image; rotation, flips and resampling deselect (Select > Reselect
+  brings the old outline back, in its old place).
+- Crop with Delete Cropped Pixels off turns the Background into "Layer 0" first, so the cropped pixels can be kept.
+- The Crop tool works like the reference app's classic mode: dragging inside the box moves the box (not the image).
+  Choosing another tool drops an unapplied box rather than asking whether to crop. Straightening, rotating the box,
+  the other overlays, size/resolution presets and content-aware fill come with the full Crop tool (Part B).
+- Image Size offers the six classic methods (FORMAT_NOTES §6). Preserve Details (enlargement), Preserve Details 2.0
+  and the result preview are not in this item (Part B Image Size). Fit To lists our own common sizes; the image is
+  fitted inside the box, turned to match the image's orientation.
+- Canvas Size asks before cutting off part of the image. Its extension colour applies only with a Background
+  (other layers get transparency), as in the reference app.
+- After any change of canvas size the view shows the image centred at the same zoom.
+- Number fields: Enter applies the value and, in a dialog, presses OK; leaving a field unchanged is not a change.

@@ -40,6 +40,12 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
     invertSelection(current, canvas) {
       return worker.invertSelection(current, canvas);
     },
+    maskBounds(mask, canvas) {
+      return worker.maskBounds(mask, canvas);
+    },
+    transformLayer(source, geometry, fill) {
+      return worker.transformLayer(source, geometry, fill ? [...fill] : null);
+    },
     async movePixels(setup, sources, outputs) {
       if (outputs.length === 0) return;
       copyBack(

@@ -7,6 +7,7 @@ import { NumberField } from '../controls/NumberField';
 import { ColorPickerDialog } from './ColorPicker';
 import { FillDialog } from './FillDialog';
 import { Modal } from './Modal';
+import { CanvasSizeDialog, ImageSizeDialog } from './SizeDialogs';
 import { remember, useUi, type DialogRequest } from '../state/ui-store';
 
 function LayerOptionsDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'layer-options' }> }) {
@@ -168,6 +169,10 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <ColorPickerDialog dialog={dialog} />;
     case 'fill':
       return <FillDialog dialog={dialog} />;
+    case 'image-size':
+      return <ImageSizeDialog dialog={dialog} />;
+    case 'canvas-size':
+      return <CanvasSizeDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (

@@ -40,12 +40,17 @@ export function cloneLayer(layer: LayerNode, idFor: (oldId: string) => string = 
     }
     copy = group;
   }
-  copy.visible = layer.visible;
-  copy.opacity = layer.opacity;
-  copy.fillOpacity = layer.fillOpacity;
-  copy.blendMode = layer.blendMode;
-  copy.locks = layer.locks;
+  copyLayerProps(layer, copy);
   return copy;
+}
+
+/** Copies the properties every layer has (visibility, opacity, blending, locks). */
+export function copyLayerProps(from: LayerNode, to: LayerNode): void {
+  to.visible = from.visible;
+  to.opacity = from.opacity;
+  to.fillOpacity = from.fillOpacity;
+  to.blendMode = from.blendMode;
+  to.locks = from.locks;
 }
 
 /** Every tile held by a layer tree (for residency management). */

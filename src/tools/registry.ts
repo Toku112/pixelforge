@@ -2,6 +2,7 @@
  * The tools available in this build, grouped as on the toolbar. Tools that are not
  * implemented yet are not listed (no placeholder tools).
  */
+import { CropTool } from './crop/crop-tool';
 import { HandTool } from './hand/hand-tool';
 import { MoveTool } from './move/move-tool';
 import { PaintingTool } from './paint/paint-tool';
@@ -29,6 +30,7 @@ export function createTools() {
   const marqueeColumn = new SingleLineMarqueeTool('column');
   const lasso = new LassoTool();
   const polygonalLasso = new PolygonalLassoTool();
+  const crop = new CropTool();
   const brush = new PaintingTool('brush');
   const eraser = new PaintingTool('eraser');
   const groups: ToolGroup[] = [
@@ -39,6 +41,7 @@ export function createTools() {
       cycle: [marqueeRect.id, marqueeEllipse.id],
     },
     { id: 'lasso-group', tools: [lasso, polygonalLasso] },
+    { id: 'crop-group', tools: [crop] },
     { id: 'brush-group', tools: [brush] },
     { id: 'eraser-group', tools: [eraser] },
     { id: 'hand-group', tools: [hand, rotateView] },
@@ -56,6 +59,7 @@ export function createTools() {
     marqueeColumn,
     lasso,
     polygonalLasso,
+    crop,
     brush,
     eraser,
     groups,

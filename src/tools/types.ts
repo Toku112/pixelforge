@@ -38,6 +38,12 @@ export type SelectionPreview =
   /** The current selection outline being dragged to a new place. */
   | { kind: 'move'; dx: number; dy: number };
 
+/** The Crop tool's box: `rect` in document pixels, or null for the whole canvas; `thirds` shows the grid. */
+export interface CropBoxOverlay {
+  rect: { x: number; y: number; w: number; h: number } | null;
+  thirds: boolean;
+}
+
 /** A brush/eraser stroke in progress (see app/paint-session.ts). */
 export interface PaintStroke {
   add(dabs: Dab[]): void;
@@ -66,6 +72,8 @@ export interface ToolContext {
   execute(descriptor: CommandDescriptor): void;
   /** Painting (Brush, Eraser); null where painting is not set up (e.g. in tests). */
   readonly paint: PaintHost | null;
+  /** Shows the Crop tool's box, or hides it with null. */
+  setCropBox(box: CropBoxOverlay | null): void;
   /** Shows the brush outline at a document point (diameter in document px), or hides it. */
   setBrushOutline(outline: { x: number; y: number; size: number } | null): void;
   /** Shows a command's result live without recording it (null cancels); `execute` then records it. */
@@ -102,4 +110,8 @@ export interface Tool {
   busy?(): boolean;
   /** Called when the pointer gesture is abandoned (e.g. Escape or tool switch). */
   cancel?(ctx: ToolContext): void;
+  /** The tool was chosen (or another document is shown while it is active). */
+  activate?(ctx: ToolContext): void;
+  /** Another tool was chosen (or the document goes away): hide what the tool shows. */
+  deactivate?(ctx: ToolContext): void;
 }

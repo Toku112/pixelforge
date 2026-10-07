@@ -57,10 +57,10 @@ test('Edit > Fill with a picked colour (the Color Picker opens over Fill), mode 
   await picker.getByRole('button', { name: 'OK' }).click();
   await expect(fill.getByLabel('Contents')).toHaveValue('color');
   await fill.getByLabel('Mode').selectOption('normal');
-  await fill.getByRole('textbox', { name: 'Opacity' }).fill('50');
-  await fill.getByRole('textbox', { name: 'Opacity' }).press('Enter');
   await expect(fill.getByLabel('Preserve Transparency')).toBeDisabled(); // the Background has no transparency
-  await fill.getByRole('button', { name: 'OK' }).click();
+  await fill.getByRole('textbox', { name: 'Opacity' }).fill('50');
+  await fill.getByRole('textbox', { name: 'Opacity' }).press('Enter'); // applies 50 % and presses OK
+  await expect(fill).toBeHidden();
   await expect(history(page).last()).toHaveText('Fill');
   const before = await page.evaluate(async () => {
     const ws = (window as unknown as AppWindow).__pixelforge.workspace;

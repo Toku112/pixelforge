@@ -90,6 +90,8 @@ describe('Invert command', () => {
       paintStroke: () => Promise.reject(new Error('not used')),
       fill: () => Promise.reject(new Error('not used')),
       movePixels: () => Promise.reject(new Error('not used')),
+      transformLayer: () => Promise.reject(new Error('not used')),
+      maskBounds: () => Promise.reject(new Error('not used')),
     };
     const { doc, ctx, registry } = withBackground(createContext({}, failing));
     const layer = doc.background!;

@@ -35,6 +35,8 @@ const bridge: UiBridge = {
   groupTool: (groupId) => ui().groupTool[groupId],
   toolOptionsChanged: () => ui().bumpToolOptions(),
   fill: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'fill', ...request, resolve })),
+  imageSize: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'image-size', ...request, resolve })),
+  canvasSize: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'canvas-size', ...request, resolve })),
   pickColor: (title, color) =>
     new Promise((resolve) => ui().pushDialog({ kind: 'color-picker', title, color, resolve })),
 };

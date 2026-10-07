@@ -9,7 +9,15 @@
 import { convertAlphaTile } from '../core/commands/alpha';
 import { compositeTiles, type CompositeTile } from '../core/composite/composite-tiles';
 import { clearMasked, invertMasked, type MaskedTarget } from '../core/selection/masked-edits';
-import { invertSelection, selectShape, type SelectionMode, type SelectionShape } from '../core/selection/mask-ops';
+import {
+  invertSelection,
+  maskBounds,
+  selectShape,
+  type SelectionMode,
+  type SelectionShape,
+} from '../core/selection/mask-ops';
+import type { LayerGeometry } from '../core/commands/builtin/geometry';
+import { mapLayer, resampleLayer, type LayerSource, type LayerTile } from '../core/geometry/layer-geometry';
 import type { Dab } from '../core/paint/brush';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
@@ -177,6 +185,29 @@ const conversions = {
     const tiles = compositeTiles(plan, rect, format, matte, (n) =>
       shared ? new SharedArrayBuffer(n) : new ArrayBuffer(n),
     );
+    return transfer(
+      tiles,
+      tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
+    );
+  },
+
+  /** See PixelOps.maskBounds. */
+  maskBounds(mask: MaskData, canvas: Rect): Rect | null {
+    return maskBounds(mask, canvas);
+  },
+
+  /** See PixelOps.transformLayer. */
+  transformLayer(
+    source: LayerSource,
+    geometry: Exclude<LayerGeometry, { kind: 'offset' }>,
+    fill: number[] | null,
+  ): LayerTile[] {
+    const shared = self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined';
+    const allocate = (n: number) => (shared ? new SharedArrayBuffer(n) : new ArrayBuffer(n));
+    const tiles =
+      geometry.kind === 'map'
+        ? mapLayer(source, geometry.map, geometry.clip, fill, allocate)
+        : resampleLayer(source, geometry.scaleX, geometry.scaleY, geometry.method, geometry.clip, fill, allocate);
     return transfer(
       tiles,
       tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),

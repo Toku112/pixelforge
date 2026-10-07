@@ -3,6 +3,7 @@ import {
   MaskReader,
   featherTiles,
   invertSelection,
+  maskBounds,
   maskIsEmpty,
   rasterizePolygon,
   selectShape,
@@ -138,5 +139,20 @@ describe('reading selections', () => {
     expect(maskIsEmpty({ tiles: [], fill: 0, offsetX: 0, offsetY: 0 }, canvas)).toBe(true);
     expect(maskIsEmpty(Selection.all().data, canvas)).toBe(false);
     expect(maskIsEmpty(new Selection(select(rect(0, 0, 10, 10))!).moved(1000, 0).data, canvas)).toBe(true);
+  });
+
+  it('finds the exact bounds of the selected pixels within the canvas', () => {
+    expect(maskBounds(select(rect(300, 20, 10, 50))!, canvas)).toEqual({ x: 300, y: 20, w: 10, h: 50 });
+    const two = select(rect(500, 300, 200, 200), select(rect(5, 6, 1, 1)), 'add')!;
+    expect(maskBounds(two, canvas)).toEqual({ x: 5, y: 6, w: 595, h: 394 });
+    expect(maskBounds(Selection.all().data, canvas)).toEqual(canvas);
+    expect(maskBounds({ tiles: [], fill: 0, offsetX: 0, offsetY: 0 }, canvas)).toBeNull();
+    // Partly selected (anti-aliased) pixels count.
+    expect(maskBounds(select({ kind: 'ellipse', x: 10.5, y: 10, w: 20, h: 20 })!, canvas)).toEqual({
+      x: 10,
+      y: 10,
+      w: 21,
+      h: 20,
+    });
   });
 });

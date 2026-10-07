@@ -51,6 +51,7 @@ export class CanvasView {
   #dprQuery: MediaQueryList | null = null;
   #cssSize = { w: 1, h: 1 };
   #pendingFit: 'open' | 'fit' | null = null;
+  #stopDoc: (() => void) | null = null;
 
   constructor(host: HTMLElement, canvas: HTMLCanvasElement, overlay: HTMLElement, options: CanvasViewOptions) {
     this.#host = host;
@@ -75,6 +76,7 @@ export class CanvasView {
       execute: (descriptor) => options.execute?.(descriptor),
       paint: options.paint ?? null,
       setBrushOutline: (outline) => this.#ants?.setBrushOutline(outline),
+      setCropBox: (box) => this.#ants?.setCropBox(box),
       preview: (descriptor) => options.preview?.(descriptor),
       selectLayers: (ids) => options.selectLayers?.(ids),
       report: (title, message) => options.report?.(title, message),
@@ -100,7 +102,11 @@ export class CanvasView {
 
   /** Shows a document, restoring a saved view or fitting it on screen. */
   setDocument(doc: ImageDocument | null, view?: ViewportState): void {
-    if (doc !== this.renderer.document) this.#input.cancelTool(); // e.g. a half-drawn polygon
+    if (doc !== this.renderer.document) {
+      this.#input.cancelTool(); // e.g. a half-drawn polygon
+      this.#stopDoc?.();
+      this.#stopDoc = doc ? this.#watchCanvasSize(doc) : null;
+    }
     this.renderer.setDocument(doc);
     this.#ants?.setDocument(doc);
     if (doc && view) {
@@ -115,6 +121,18 @@ export class CanvasView {
       this.#fit(true);
     }
     this.#input.refresh();
+  }
+
+  /** A new canvas size (crop, Canvas Size, rotation…) shows the image centred, at the same zoom. */
+  #watchCanvasSize(doc: ImageDocument): () => void {
+    let size = `${doc.width}x${doc.height}`;
+    return doc.changes.on((change) => {
+      if (change.kind !== 'canvas' || `${doc.width}x${doc.height}` === size) return;
+      size = `${doc.width}x${doc.height}`;
+      if (this.renderer.document !== doc) return;
+      this.renderer.viewport.centerDocument(doc.width, doc.height);
+      this.#viewChanged();
+    });
   }
 
   /** View > Fit on Screen: the whole image, as large as the window allows (may exceed 100 %). */
@@ -150,6 +168,7 @@ export class CanvasView {
   }
 
   dispose(): void {
+    this.#stopDoc?.();
     this.#input.dispose();
     this.#ants?.dispose();
     this.#resizeObserver.disconnect();

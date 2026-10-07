@@ -10,7 +10,7 @@ import type { ImageDocument } from '../../core/document/document';
 import { shapePoints } from '../../core/selection/mask-ops';
 import type { Selection } from '../../core/selection/selection';
 import type { Renderer } from '../../engine/gl/renderer';
-import type { SelectionPreview } from '../../tools/types';
+import type { CropBoxOverlay, SelectionPreview } from '../../tools/types';
 
 /** Dash length, CSS pixels. */
 const DASH = 4;
@@ -27,6 +27,7 @@ export class SelectionOverlay {
   #stopDoc: (() => void) | null = null;
   #preview: SelectionPreview | null = null;
   #brush: { x: number; y: number; size: number } | null = null;
+  #crop: CropBoxOverlay | null = null;
   #phase = 0;
   #timer: ReturnType<typeof setInterval> | null = null;
   readonly #still: boolean;
@@ -63,6 +64,12 @@ export class SelectionOverlay {
     this.draw();
   }
 
+  /** The Crop tool's box (shaded outside, handles, thirds grid), or none. */
+  setCropBox(box: CropBoxOverlay | null): void {
+    this.#crop = box;
+    this.draw();
+  }
+
   /** The traced outline of the current selection, or null while it is being traced. */
   get outline(): Float32Array[] | null {
     const sel = this.#doc?.selection;
@@ -90,22 +97,12 @@ export class SelectionOverlay {
     const doc = this.#doc;
     const loops = this.#loopsToDraw(doc);
     this.#animate(loops.length > 0);
+    if (doc && this.#crop) this.#drawCrop(ctx, doc, this.#crop);
     if (doc && this.#brush) this.#drawBrush(ctx, this.#brush);
     if (!doc || loops.length === 0) return;
 
     // Build the paths in document coordinates through the view transform…
-    const v = this.#renderer.viewport;
-    const r = (v.rotation * Math.PI) / 180;
-    const c = Math.cos(r) * v.zoom;
-    const s = Math.sin(r) * v.zoom;
-    ctx.setTransform(
-      c,
-      s,
-      -s,
-      c,
-      v.viewWidth / 2 - c * v.centerX + s * v.centerY,
-      v.viewHeight / 2 - s * v.centerX - c * v.centerY,
-    );
+    this.#docTransform(ctx);
     ctx.beginPath();
     for (const { points, closed } of loops) {
       ctx.moveTo(points[0]!, points[1]!);
@@ -123,6 +120,71 @@ export class SelectionOverlay {
     ctx.lineDashOffset = -this.#phase * dpr;
     ctx.strokeStyle = '#000';
     ctx.stroke();
+  }
+
+  /** Sets the 2D transform to draw in document coordinates. */
+  #docTransform(ctx: CanvasRenderingContext2D): void {
+    const v = this.#renderer.viewport;
+    const r = (v.rotation * Math.PI) / 180;
+    const c = Math.cos(r) * v.zoom;
+    const s = Math.sin(r) * v.zoom;
+    ctx.setTransform(
+      c,
+      s,
+      -s,
+      c,
+      v.viewWidth / 2 - c * v.centerX + s * v.centerY,
+      v.viewHeight / 2 - s * v.centerX - c * v.centerY,
+    );
+  }
+
+  #drawCrop(ctx: CanvasRenderingContext2D, doc: ImageDocument, crop: CropBoxOverlay): void {
+    const box = crop.rect ?? doc.canvasRect;
+    const v = this.#renderer.viewport;
+    const dpr = this.#renderer.devicePixelRatio;
+    const line = Math.max(1, Math.round(dpr));
+    // Shade everything outside the box.
+    this.#docTransform(ctx);
+    ctx.beginPath();
+    const far = 1e7;
+    ctx.rect(-far, -far, 2 * far, 2 * far);
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.fillStyle = 'rgb(0 0 0 / 55%)';
+    ctx.fill('evenodd');
+    // Border and thirds, stroked in screen space.
+    ctx.beginPath();
+    ctx.rect(box.x, box.y, box.w, box.h);
+    if (crop.thirds) {
+      for (const f of [1 / 3, 2 / 3]) {
+        ctx.moveTo(box.x + box.w * f, box.y);
+        ctx.lineTo(box.x + box.w * f, box.y + box.h);
+        ctx.moveTo(box.x, box.y + box.h * f);
+        ctx.lineTo(box.x + box.w, box.y + box.h * f);
+      }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setLineDash([]);
+    ctx.lineWidth = line;
+    ctx.strokeStyle = 'rgb(255 255 255 / 85%)';
+    ctx.stroke();
+    // Handles: corners and edge middles.
+    const size = 8 * dpr;
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = 'rgb(0 0 0 / 70%)';
+    for (const [fx, fy] of [
+      [0, 0],
+      [0.5, 0],
+      [1, 0],
+      [1, 0.5],
+      [1, 1],
+      [0.5, 1],
+      [0, 1],
+      [0, 0.5],
+    ] as const) {
+      const p = v.docToView({ x: box.x + box.w * fx, y: box.y + box.h * fy });
+      ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+      ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
+    }
   }
 
   #drawBrush(ctx: CanvasRenderingContext2D, brush: { x: number; y: number; size: number }): void {

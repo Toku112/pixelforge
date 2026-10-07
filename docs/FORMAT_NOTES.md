@@ -220,3 +220,33 @@ outline only changes the offset). Only the canvas counts: outside it nothing is 
 - Writes `pHYs` (document resolution) and `iCCP` (kept profile). Default compression: balanced.
 - Not available for 32-bit, CMYK, Lab and other modes (PNG cannot store them), matching the reference app.
 - The colour of fully transparent pixels is not preserved (it is invisible and dropped when flattening).
+
+## 6. Image geometry and resampling
+
+Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the document tile grid
+(`core/geometry/layer-geometry.ts`, run in the pixel worker).
+
+- **Exact maps** (Canvas Size, Crop, 90°/180° rotation, flips) copy pixels without filtering. A quarter turn clockwise
+  sends old `(x, y)` to `(H − 1 − y, x)` on a canvas `W × H`; counter-clockwise to `(y, W − 1 − x)`.
+- **Background vs. layers.** The Background always covers exactly the canvas: new canvas gets the extension colour
+  (Canvas Size) or the background colour (a crop reaching past the canvas). Other layers keep pixels that end up
+  outside the canvas (Canvas Size, Crop with Delete Cropped Pixels off); new areas are transparent.
+- **Resampling** is separable: a horizontal pass, then a vertical one. Output pixel `i` samples the source at
+  `(i + 0.5) / scale − 0.5`. When reducing, the filter is widened by `1 / scale` so every source pixel contributes
+  (anti-aliasing); weights are normalised to sum to 1.
+- **Kernels** (cubics in the Mitchell–Netravali family `k(B, C)`):
+
+  | Method                         | Kernel                                                    |
+  | ------------------------------ | --------------------------------------------------------- |
+  | Nearest Neighbor               | nearest source pixel                                      |
+  | Bilinear                       | triangle, radius 1                                        |
+  | Bicubic (smooth gradients)     | `B = 0, C = 0.5` (Catmull-Rom)                            |
+  | Bicubic Smoother (enlargement) | `B = 1/3, C = 1/3` (Mitchell)                             |
+  | Bicubic Sharper (reduction)    | `B = 0, C = 0.75` (stronger edge overshoot)               |
+  | Automatic                      | Smoother when enlarging, Sharper when reducing (per axis) |
+
+- Filtering runs on **premultiplied** colour (colour × alpha), so transparent pixels never darken or tint edges;
+  results are clamped to the sample range (8/16-bit) and left unclamped in 32-bit.
+- Past the old canvas edge the Background **repeats its edge pixels**, so its borders keep their colour; layers
+  with transparency read transparency there.
+- Image > Crop uses the exact bounds of the pixels the selection touches at all (any value above 0).

@@ -4,6 +4,7 @@
  * ("+10", "*2", "90-15"). Enter or leaving the field applies; Escape reverts.
  */
 import { useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { evaluateNumberInput } from './number-expr';
 
 export interface NumberFieldProps {
@@ -30,6 +31,8 @@ export interface NumberFieldProps {
   disabled?: boolean;
   /** Name read by screen readers when the visible label is ambiguous (e.g. "B:" for Blue). */
   ariaLabel?: string;
+  /** The field a dialog focuses when it opens. */
+  autofocus?: boolean;
 }
 
 export function NumberField({
@@ -48,6 +51,7 @@ export function NumberField({
   onPreview,
   disabled = false,
   ariaLabel,
+  autofocus,
 }: NumberFieldProps) {
   const format = (v: number) => `${Number(v.toFixed(precision))}${suffix}`;
   // Text being typed; null when not editing (the field then shows the current value).
@@ -59,14 +63,20 @@ export function NumberField({
   const commit = () => {
     if (draft === null) return;
     const next = evaluateNumberInput(draft, value);
-    if (next !== null) onChange(clamp(next));
+    // Leaving a field without changing it is not a change (no history step, no "Custom" preset).
+    if (next !== null && clamp(next) !== Number(value.toFixed(precision))) onChange(clamp(next));
     setDraft(null);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      commit();
-      e.currentTarget.blur();
+      // In a dialog, Enter applies the value and then presses OK (applied synchronously,
+      // so OK sees it). Leaving the field first would stop the browser from submitting.
+      e.preventDefault();
+      const input = e.currentTarget;
+      flushSync(commit);
+      input.blur();
+      input.form?.requestSubmit();
     } else if (e.key === 'Escape') {
       setDraft(null);
       e.currentTarget.blur();
@@ -130,6 +140,7 @@ export function NumberField({
         onBlur={commit}
         onKeyDown={onKeyDown}
         aria-label={ariaLabel ?? label}
+        data-autofocus={autofocus || undefined}
       />
     </label>
   );

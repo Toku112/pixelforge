@@ -20,6 +20,7 @@ function setup(zoom = 1) {
     execute: () => {},
     paint: null,
     setBrushOutline: () => {},
+    setCropBox: () => {},
     preview: () => {},
     selectLayers: () => {},
     report: () => {},

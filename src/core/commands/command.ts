@@ -5,6 +5,8 @@
  * journal stores; `CommandRegistry` turns a descriptor back into a command.
  */
 import type { CompositeTile } from '../composite/composite-tiles';
+import type { LayerSource, LayerTile } from '../geometry/layer-geometry';
+import type { LayerGeometry } from './builtin/geometry';
 import type { Dab } from '../paint/brush';
 import type { FillSpec } from '../paint/fill';
 import type { MovePixelsSetup } from '../paint/move-pixels';
@@ -80,8 +82,19 @@ export interface PixelOps {
     antiAlias: boolean,
     canvas: Rect,
   ): Promise<MaskData | null>;
+  /** The exact bounds of the selected pixels within the canvas (Image > Crop); null when none are. */
+  maskBounds(mask: MaskData, canvas: Rect): Promise<Rect | null>;
   /** Select > Inverse; null when nothing is left selected. */
   invertSelection(current: MaskData, canvas: Rect): Promise<MaskData | null>;
+  /**
+   * A layer's new tiles for Image Size, Canvas Size, Crop or Image Rotation (see
+   * core/geometry/layer-geometry.ts); `fill`: colour of new canvas on layers without alpha.
+   */
+  transformLayer(
+    source: LayerSource,
+    geometry: Exclude<LayerGeometry, { kind: 'offset' }>,
+    fill: readonly number[] | null,
+  ): Promise<LayerTile[]>;
   /** Moves selected pixels (see core/paint/move-pixels.ts): reads `sources`, writes `outputs`. */
   movePixels(
     setup: MovePixelsSetup,

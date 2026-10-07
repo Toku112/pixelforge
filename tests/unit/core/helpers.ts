@@ -4,11 +4,12 @@ import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { ImageDocument, type DocumentInit } from '../../../src/core/document/document';
 import { convertAlphaTile } from '../../../src/core/commands/alpha';
 import { compositeTiles } from '../../../src/core/composite/composite-tiles';
+import { mapLayer, resampleLayer } from '../../../src/core/geometry/layer-geometry';
 import { fillTiles } from '../../../src/core/paint/fill';
 import { movePixels } from '../../../src/core/paint/move-pixels';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
 import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
-import { invertSelection, selectShape } from '../../../src/core/selection/mask-ops';
+import { invertSelection, maskBounds, selectShape } from '../../../src/core/selection/mask-ops';
 import { maxSampleValue, type PixelFormat, type SampleArray } from '../../../src/core/document/pixel-format';
 
 /** Straightforward TypeScript implementation of PixelOps (the app uses WebAssembly in a worker). */
@@ -39,6 +40,16 @@ export const referencePixelOps: PixelOps = {
   },
   invertSelection(current, canvas) {
     return Promise.resolve(invertSelection(current, canvas));
+  },
+  maskBounds(mask, canvas) {
+    return Promise.resolve(maskBounds(mask, canvas));
+  },
+  transformLayer(source, geometry, fill) {
+    return Promise.resolve(
+      geometry.kind === 'map'
+        ? mapLayer(source, geometry.map, geometry.clip, fill)
+        : resampleLayer(source, geometry.scaleX, geometry.scaleY, geometry.method, geometry.clip, fill),
+    );
   },
   movePixels(setup, sources, outputs) {
     movePixels(setup, sources, outputs);

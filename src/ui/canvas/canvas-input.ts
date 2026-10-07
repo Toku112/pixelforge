@@ -70,16 +70,25 @@ export class CanvasInput {
 
   /** Call when the active tool or the document changes (abandons a tool's unfinished work). */
   refresh(): void {
+    const ctx = this.#o.context;
     const active = this.#o.tools.byId.get(this.#o.getActiveToolId()) ?? null;
-    if (this.#activeTool && this.#activeTool !== active) this.#activeTool.cancel?.(this.#o.context);
-    this.#activeTool = active;
+    if (this.#activeTool !== active) {
+      if (this.#activeTool) {
+        this.#activeTool.cancel?.(ctx);
+        this.#activeTool.deactivate?.(ctx);
+      }
+      this.#activeTool = active;
+      if (ctx.document) active?.activate?.(ctx);
+    }
     this.#updateCursor();
   }
 
-  /** Abandons whatever the active tool is in the middle of (e.g. the document changed). */
+  /** Abandons whatever the active tool is in the middle of (e.g. the document changed); `refresh` restarts it. */
   cancelTool(): void {
     this.#cancelDrag();
     this.#activeTool?.cancel?.(this.#o.context);
+    this.#activeTool?.deactivate?.(this.#o.context);
+    this.#activeTool = null;
   }
 
   dispose(): void {
@@ -133,6 +142,7 @@ export class CanvasInput {
       }
     } else if (!this.#dragTool && this.#o.context.document) {
       this.currentTool.onPointerHover?.(this.#toolEvent(e), this.#o.context);
+      this.#updateCursor(); // the cursor may depend on what is under the pointer (crop handles)
     }
     this.#syncModifiers(e);
   };

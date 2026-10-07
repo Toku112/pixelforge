@@ -416,6 +416,46 @@ export function maskIsEmpty(mask: MaskData, canvas: Rect): boolean {
   return true;
 }
 
+/** The smallest rectangle holding every (partly) selected pixel of the canvas; null when none is. */
+export function maskBounds(mask: MaskData, canvas: Rect): Rect | null {
+  if (isEmptyRect(canvas)) return null;
+  const reader = new MaskReader(mask);
+  const out = new Uint8Array(TILE_PIXELS);
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  const gx = canvas.x - ((((canvas.x - mask.offsetX) % TILE_SIZE) + TILE_SIZE) % TILE_SIZE);
+  const gy = canvas.y - ((((canvas.y - mask.offsetY) % TILE_SIZE) + TILE_SIZE) % TILE_SIZE);
+  for (let wy = gy; wy < canvas.y + canvas.h; wy += TILE_SIZE) {
+    for (let wx = gx; wx < canvas.x + canvas.w; wx += TILE_SIZE) {
+      const inside = intersectRects({ x: wx, y: wy, w: TILE_SIZE, h: TILE_SIZE }, canvas);
+      // Skip windows that cannot widen the bounds.
+      if (inside.x >= x0 && inside.y >= y0 && inside.x + inside.w <= x1 && inside.y + inside.h <= y1) continue;
+      const w = reader.window(wx, wy, canvas, out);
+      if (w === 0) continue;
+      if (w === 255) {
+        x0 = Math.min(x0, inside.x);
+        y0 = Math.min(y0, inside.y);
+        x1 = Math.max(x1, inside.x + inside.w);
+        y1 = Math.max(y1, inside.y + inside.h);
+        continue;
+      }
+      for (let y = inside.y; y < inside.y + inside.h; y++) {
+        const row = (y - wy) * TILE_SIZE - wx;
+        for (let x = inside.x; x < inside.x + inside.w; x++) {
+          if (w[row + x] === 0) continue;
+          if (x < x0) x0 = x;
+          if (x >= x1) x1 = x + 1;
+          if (y < y0) y0 = y;
+          if (y >= y1) y1 = y + 1;
+        }
+      }
+    }
+  }
+  return x0 === Infinity ? null : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
 /** True when every pixel of `inside` (document coordinates) in the window at (x0, y0) equals `value`. */
 function insideUniform(data: Uint8Array, x0: number, y0: number, inside: Rect, value: number): boolean {
   for (let y = inside.y; y < inside.y + inside.h; y++) {
