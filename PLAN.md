@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D items 1–3 (layer commands, Layers panel with dialogs, all 27 blend modes)
-- Next up: Part D item 4 (Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer)
+- Last completed: Part D items 1–4 (layer commands, Layers panel with dialogs, all 27 blend modes, merges)
+- Next up: Part D item 5 (Selections)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -585,9 +585,11 @@ scope (all modes, masks, etc.) is complete.
   ↳ note: includes the New Layer, New Group, Group from Layers, Layer from Background and Duplicate Layer dialogs and keyboard navigation (D-024). Not in this item (Part B Layers panel): filtering by kind, colour labels, Panel Options (thumbnail size/contents), Alt-drag to duplicate, dragging across eyes, row context menu, mask/fx/adjustment buttons (their phases).
 - [x] All 27 blend modes with Photoshop math in the CPU and GPU compositors (incl. Dissolve, Darker/Lighter Color, Hue/Saturation/Color/Luminosity, Fill vs Opacity for the "special eight"); Shift+/− and Alt+Shift+letter blend-mode shortcuts
   ↳ note: formulas in FORMAT_NOTES §3, choices in D-023. The blend-mode menu itself comes with the Layers panel; PSD blend-mode keys with the PSD item; CMYK on screen with Phase 7. The Special-eight Fill formula should be re-checked against real reference files when the owner provides them.
-- [ ] Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer (composited off the main thread)
+- [x] Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer (composited off the main thread)
+  ↳ note: also Merge Layers and Merge Group (Ctrl/Cmd+E adapts, as does its menu label); progress bar and Esc-to-cancel for long commands added here (D-025). Compositing is TypeScript in the pixel worker (~0.6 s per 6000×4000 16-bit layer); a Rust/multi-threaded compositor is a later performance task.
 - [ ] Selections: selection mask model; Select All/Deselect/Reselect/Inverse; Rectangular, Elliptical, Single Row/Column Marquee; Lasso and Polygonal Lasso (new/add/subtract/intersect, feather, anti-alias); marching ants; selection-aware Invert and Delete
 - [ ] Foreground/background colours in the toolbar (X swap, D default) and a Color Picker dialog
+  ↳ note: Layer > New > Background from Layer must then fill with the current background colour (the command already takes a `color`; it uses white until this item).
 - [ ] Brush and Eraser (simple round brush: size, hardness, opacity, flow, spacing, pen pressure; [ ] { } and number-key shortcuts), painting off the main thread with tile-diff undo
   ↳ note: while a painting tool is active, the blend-mode shortcuts (Alt+Shift+letter, Shift+/−) must change the tool's mode instead of the layer's (D-023).
 - [ ] Edit > Fill (foreground/background/colour/black/white/50% gray, mode, opacity, preserve transparency) and Delete/Backspace fills

@@ -1,8 +1,9 @@
-import type { CommandContext, PixelOps } from '../../../src/core/commands/command';
+import { CommandCancelledError, type CommandContext, type PixelOps } from '../../../src/core/commands/command';
 import { CommandRegistry } from '../../../src/core/commands/registry';
 import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { ImageDocument, type DocumentInit } from '../../../src/core/document/document';
 import { convertAlphaTile } from '../../../src/core/commands/alpha';
+import { compositeTiles } from '../../../src/core/composite/composite-tiles';
 import { maxSampleValue, type PixelFormat, type SampleArray } from '../../../src/core/document/pixel-format';
 
 /** Straightforward TypeScript implementation of PixelOps (the app uses WebAssembly in a worker). */
@@ -19,6 +20,11 @@ export const referencePixelOps: PixelOps = {
   },
   convertAlpha(tiles, from, to, matte) {
     return Promise.resolve(tiles.map((t) => convertAlphaTile(t, from, to, matte)));
+  },
+  composite(plan, rect, format, matte, task) {
+    if (task?.cancelled) return Promise.reject(new CommandCancelledError());
+    task?.progress(1);
+    return Promise.resolve(compositeTiles(plan, rect, format, matte));
   },
 };
 

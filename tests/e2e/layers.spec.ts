@@ -291,3 +291,79 @@ test('F7 and Window > Layers show and hide the panel; Layer > Rename Layer… ed
   await page.keyboard.press('Enter');
   await expect(row(page, 'From menu')).toBeVisible();
 });
+
+/** Rendered colour at the centre of the canvas. */
+const centrePixel = (page: Page) =>
+  page.evaluate(() => {
+    const r = (window as unknown as AppWindow).__pixelforge.canvas!.renderer;
+    while (!r.render());
+    const data = r.readCanvas();
+    const i = (Math.floor(r.canvas.height / 2) * r.canvas.width + Math.floor(r.canvas.width / 2)) * 4;
+    return [data[i], data[i + 1], data[i + 2]];
+  });
+
+const near = (a: (number | undefined)[], b: (number | undefined)[]) => a.every((v, i) => Math.abs(v! - b[i]!) <= 2);
+
+test('merge: Merge Down / Merge Layers (Ctrl/Cmd+E), Merge Visible, Stamp Visible keep the picture', async ({
+  page,
+}) => {
+  // Two layers with content: duplicates of the Background, the top one inverted at 50 %.
+  await page.keyboard.press('ControlOrMeta+J');
+  await page.keyboard.press('ControlOrMeta+J');
+  await page.keyboard.press('ControlOrMeta+I');
+  const opacity = page.getByRole('textbox', { name: 'Opacity' });
+  await opacity.fill('50');
+  await opacity.press('Enter');
+  await tree(page).focus();
+  const look = await centrePixel(page);
+
+  await page.getByRole('menuitem', { name: 'Layer' }).click();
+  await expect(page.getByRole('menuitem', { name: /^Merge Down/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('ControlOrMeta+E');
+  await expect(tree(page).getByRole('treeitem')).toHaveText(['Background copy', 'Background']);
+  await expect(history(page).last()).toHaveText('Merge Down');
+  expect(near(await centrePixel(page), look)).toBe(true);
+
+  // Select both: the menu says Merge Layers; merging includes the Background → one Background.
+  await row(page, 'Background').click({ modifiers: ['Shift'] });
+  await page.getByRole('menuitem', { name: 'Layer' }).click();
+  await expect(page.getByRole('menuitem', { name: /^Merge Layers/ })).toBeVisible();
+  await page.getByRole('menuitem', { name: /^Merge Layers/ }).click();
+  await expect(tree(page).getByRole('treeitem')).toHaveText(['Background']);
+  expect(near(await centrePixel(page), look)).toBe(true);
+
+  // Stamp Visible, then Merge Visible.
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+E');
+  await expect(tree(page).getByRole('treeitem')).toHaveText(['Layer 1', 'Background']);
+  await expect(history(page).last()).toHaveText('Stamp Visible');
+  await page.keyboard.press('ControlOrMeta+Shift+E');
+  await expect(tree(page).getByRole('treeitem')).toHaveText(['Background']);
+  await expect(history(page).last()).toHaveText('Merge Visible');
+  expect(near(await centrePixel(page), look)).toBe(true);
+});
+
+test('Flatten Image asks before discarding hidden layers; Background from Layer', async ({ page }) => {
+  await page.keyboard.press('ControlOrMeta+J');
+  await page.getByRole('button', { name: 'Visibility of Background copy' }).click();
+  await page.getByRole('menuitem', { name: 'Layer' }).click();
+  await page.getByRole('menuitem', { name: 'Flatten Image' }).click();
+  const ask = page.getByRole('dialog', { name: 'Flatten Image' });
+  await expect(ask).toContainText('Discard hidden layers?');
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(tree(page).getByRole('treeitem')).toHaveCount(2);
+  await page.getByRole('menuitem', { name: 'Layer' }).click();
+  await page.getByRole('menuitem', { name: 'Flatten Image' }).click();
+  await ask.getByRole('button', { name: 'OK' }).click();
+  await expect(tree(page).getByRole('treeitem')).toHaveText(['Background']);
+
+  // Make the Background a layer, add one above, then turn that one into the Background.
+  await row(page, 'Background').getByText('Background').dblclick();
+  await page.getByRole('dialog', { name: 'New Layer' }).getByRole('button', { name: 'OK' }).click();
+  await page.getByRole('button', { name: 'New layer' }).click();
+  await page.getByRole('menuitem', { name: 'Layer' }).click();
+  await page.getByRole('menuitem', { name: 'New', exact: true }).hover();
+  await page.getByRole('menuitem', { name: 'Background from Layer' }).click();
+  await expect(tree(page).getByRole('treeitem')).toHaveText(['Layer 0', 'Background']);
+  await expect(history(page).last()).toHaveText('Background From Layer');
+});

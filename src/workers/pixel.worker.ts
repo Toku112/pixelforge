@@ -7,6 +7,8 @@
  * single-threaded SIMD build.
  */
 import { convertAlphaTile } from '../core/commands/alpha';
+import { compositeTiles, type CompositeTile } from '../core/composite/composite-tiles';
+import type { FlattenPlan } from '../core/composite/flatten';
 import { renderThumbnail, type Thumbnail, type ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { createSampleArray, samplesPerPixel, type PixelFormat, type SampleArray } from '../core/document/pixel-format';
@@ -104,6 +106,18 @@ const conversions = {
     return transfer(
       out,
       out.filter((t) => !(t.buffer instanceof SharedArrayBuffer)).map((t) => t.buffer as ArrayBuffer),
+    );
+  },
+
+  /** See PixelOps.composite. */
+  composite(plan: FlattenPlan, rect: Rect, format: PixelFormat, matte: number[] | null): CompositeTile[] {
+    const shared = self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined';
+    const tiles = compositeTiles(plan, rect, format, matte, (n) =>
+      shared ? new SharedArrayBuffer(n) : new ArrayBuffer(n),
+    );
+    return transfer(
+      tiles,
+      tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
     );
   },
 

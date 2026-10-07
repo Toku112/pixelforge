@@ -83,6 +83,7 @@ describe('Invert command', () => {
         return Promise.reject(new Error('worker crashed'));
       },
       convertAlpha: () => Promise.reject(new Error('not used')),
+      composite: () => Promise.reject(new Error('not used')),
     };
     const { doc, ctx, registry } = withBackground(createContext({}, failing));
     const layer = doc.background!;

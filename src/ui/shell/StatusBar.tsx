@@ -20,6 +20,7 @@ export function StatusBar() {
   const setInfo = useUi((s) => s.setStatusInfo);
   const toolId = useUi((s) => s.activeToolId);
   const doc = useWorkspace((w) => w.active?.doc ?? null);
+  const task = useWorkspace((w) => w.task);
   useWorkspace((w) => w.version); // refresh sizes after edits
   // Text being typed in the zoom field; null when not editing.
   const [zoomDraft, setZoomDraft] = useState<string | null>(null);
@@ -114,6 +115,21 @@ export function StatusBar() {
           </div>
         )}
       </div>
+      {task && (
+        <div
+          className="status-progress"
+          role="progressbar"
+          aria-label={task.label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(task.fraction * 100)}
+        >
+          <span>{task.label}… (Esc to cancel)</span>
+          <span className="status-progress-track">
+            <span className="status-progress-fill" style={{ width: `${task.fraction * 100}%` }} />
+          </span>
+        </div>
+      )}
     </footer>
   );
 }

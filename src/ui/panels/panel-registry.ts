@@ -40,6 +40,9 @@ export const PANELS: Record<string, PanelDefinition> = {
       { label: 'Collapse All Groups', command: 'layers.collapseAll' },
       { label: 'Layer from Background…', command: 'layer.fromBackground' },
       { label: 'Rename Layer…', command: 'layer.rename' },
+      { label: 'Merge Down', command: 'layer.mergeDown' },
+      { label: 'Merge Visible', command: 'layer.mergeVisible' },
+      { label: 'Flatten Image', command: 'layer.flatten' },
     ],
   },
 };

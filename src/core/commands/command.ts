@@ -4,7 +4,10 @@
  * what Actions record and replay, what scripts send, and what the crash-recovery
  * journal stores; `CommandRegistry` turns a descriptor back into a command.
  */
+import type { CompositeTile } from '../composite/composite-tiles';
+import type { FlattenPlan } from '../composite/flatten';
 import type { ImageDocument } from '../document/document';
+import type { Rect } from '../document/geometry';
 import type { PixelFormat, SampleArray } from '../document/pixel-format';
 import type { Tile } from '../document/tile';
 
@@ -59,6 +62,37 @@ export interface PixelOps {
     to: PixelFormat,
     matte: readonly number[],
   ): Promise<SampleArray[]>;
+  /**
+   * Composites a flatten plan over `rect` (document coordinates) into tiles of
+   * `format` on the document's tile grid; without alpha, over `matte` (colour
+   * samples). Empty tiles are left out. See core/composite/composite-tiles.ts.
+   */
+  composite(
+    plan: FlattenPlan,
+    rect: Rect,
+    format: PixelFormat,
+    matte: readonly number[] | null,
+    task?: TaskControl,
+  ): Promise<CompositeTile[]>;
+}
+
+/**
+ * Progress and cancellation for one long command run (CLAUDE.md §3.4): heavy
+ * operations report how far they are and stop between chunks once cancelled.
+ */
+export interface TaskControl {
+  /** Set when the user cancels (Esc). Operations then throw CommandCancelledError. */
+  readonly cancelled: boolean;
+  /** Reports progress, 0–1. */
+  progress(fraction: number): void;
+}
+
+/** Thrown by a command whose run was cancelled; the document is left unchanged. */
+export class CommandCancelledError extends Error {
+  override readonly name = 'CommandCancelledError';
+  constructor() {
+    super('Cancelled');
+  }
 }
 
 export interface CommandServices {
@@ -68,6 +102,8 @@ export interface CommandServices {
 export interface CommandContext {
   doc: ImageDocument;
   services: CommandServices;
+  /** Progress/cancellation of this run, when the caller tracks it. */
+  task?: TaskControl;
 }
 
 /** Thrown when a command cannot run in the current state (e.g. no active pixel layer). */

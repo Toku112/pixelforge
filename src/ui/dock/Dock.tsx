@@ -173,7 +173,7 @@ function PanelMenu({ group, onClose }: { group: PanelGroup; onClose: () => void 
           }}
         >
           <span className="menu-check" />
-          <span className="menu-label">{m.label}</span>
+          <span className="menu-label">{controller.labelFor(m.command, m.label)}</span>
           <span className="menu-shortcut">{controller.keymap.label(m.command)}</span>
         </div>
       ))}

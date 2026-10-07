@@ -6,7 +6,9 @@
  * tiles are sent as copies and the results are written back into the original
  * arrays, so callers always see the change in the arrays they passed.
  */
-import type { PixelOps } from '../core/commands/command';
+import { CommandCancelledError, type PixelOps } from '../core/commands/command';
+import type { CompositeTile } from '../core/composite/composite-tiles';
+import { TILE_SIZE, tileIndex } from '../core/document/tile';
 import { copySamples, samplesPerPixel, type SampleArray } from '../core/document/pixel-format';
 import type { PixelWorkerClient } from './pixel-client';
 
@@ -26,6 +28,21 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
     },
     convertAlpha(tiles, from, to, matte) {
       return worker.convertAlpha(tiles, from, to, [...matte]);
+    },
+    async composite(plan, rect, format, matte, task) {
+      // In bands of tile rows, so progress can be shown and Esc can stop between bands.
+      const tiles: CompositeTile[] = [];
+      const first = tileIndex(rect.y);
+      const last = tileIndex(rect.y + rect.h - 1);
+      for (let ty = first; ty <= last; ty++) {
+        if (task?.cancelled) throw new CommandCancelledError();
+        const top = Math.max(rect.y, ty * TILE_SIZE);
+        const band = { x: rect.x, y: top, w: rect.w, h: Math.min(rect.y + rect.h, (ty + 1) * TILE_SIZE) - top };
+        tiles.push(...(await worker.composite(plan, band, format, matte ? [...matte] : null)));
+        task?.progress((ty - first + 1) / (last - first + 1));
+      }
+      if (task?.cancelled) throw new CommandCancelledError();
+      return tiles;
     },
   };
 }

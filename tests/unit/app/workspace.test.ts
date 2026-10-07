@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Workspace } from '../../../src/app/workspace';
+import { CommandCancelledError } from '../../../src/core/commands/command';
 import { ImageDocument } from '../../../src/core/document/document';
 import { createRegistry, referencePixelOps } from '../core/helpers';
 
@@ -48,6 +49,40 @@ describe('Workspace live preview', () => {
     await workspace.preview(opacity(0.2));
     await workspace.cancelPreview();
     expect(layer.opacity).toBe(1);
+    expect(session.history.length).toBe(1);
+  });
+});
+
+describe('Workspace long commands', () => {
+  it('shows progress after a short delay and can be cancelled, leaving the document unchanged', async () => {
+    let release = () => {};
+    let reported: ((f: number) => void) | undefined;
+    const slowOps = {
+      ...referencePixelOps,
+      composite: (...args: Parameters<typeof referencePixelOps.composite>) => {
+        const task = args[4];
+        reported = (f) => task?.progress(f);
+        return new Promise<Awaited<ReturnType<typeof referencePixelOps.composite>>>((resolve, reject) => {
+          release = () => (task?.cancelled ? reject(new CommandCancelledError()) : resolve([]));
+        });
+      },
+    };
+    const workspace = new Workspace({ registry: createRegistry(), services: { pixelOps: slowOps } });
+    const doc = new ImageDocument({ width: 100, height: 100 });
+    doc.insertLayer(doc.createBackgroundLayer());
+    doc.insertLayer(doc.createPixelLayer());
+    const session = workspace.add(doc);
+    const run = workspace.execute({ name: 'mergeVisible', params: {} });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(workspace.running).toBe(true);
+    reported?.(0.5);
+    expect(workspace.task).toEqual({ label: 'Merge Visible', fraction: 0.5 });
+    workspace.cancelTask();
+    release();
+    await expect(run).rejects.toBeInstanceOf(CommandCancelledError);
+    expect(workspace.running).toBe(false);
+    expect(workspace.task).toBeNull();
+    expect(doc.layerCount).toBe(2);
     expect(session.history.length).toBe(1);
   });
 });

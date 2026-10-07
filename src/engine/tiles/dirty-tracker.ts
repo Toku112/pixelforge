@@ -8,15 +8,8 @@
  * new position; structural and canvas changes dirty everything.
  */
 import type { DocumentChange, ImageDocument } from '../../core/document/document';
-import {
-  EMPTY_RECT,
-  intersectRects,
-  isEmptyRect,
-  translateRect,
-  unionRects,
-  type Rect,
-} from '../../core/document/geometry';
-import type { LayerNode } from '../../core/document/layers';
+import { EMPTY_RECT, intersectRects, isEmptyRect, unionRects, type Rect } from '../../core/document/geometry';
+import { layerBounds, type LayerNode } from '../../core/document/layers';
 import { tileCoordsFromKey, tileIndex, tileKey } from '../../core/document/tile';
 
 export interface DirtySet {
@@ -134,16 +127,4 @@ export class DirtyTracker {
   #emit(): void {
     for (const listener of this.#listeners) listener();
   }
-}
-
-/**
- * Document-space bounds of a layer's allocated tiles (for groups, of all
- * descendants). A Background layer covers the whole canvas.
- */
-export function layerBounds(layer: LayerNode, canvas: Rect): Rect {
-  if (layer.kind === 'pixel') {
-    if (layer.isBackground) return canvas;
-    return translateRect(layer.buffer.tileBounds(), layer.offsetX, layer.offsetY);
-  }
-  return layer.children.reduce((acc, child) => unionRects(acc, layerBounds(child, canvas)), EMPTY_RECT);
 }

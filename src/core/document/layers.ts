@@ -4,6 +4,7 @@
  * Children are ordered bottom → top (index 0 is the bottom-most layer), matching
  * compositing order and the PSD file layout; the Layers panel shows them reversed.
  */
+import { EMPTY_RECT, translateRect, unionRects, type Rect } from './geometry';
 import type { TiledBuffer } from './tiled-buffer';
 
 /** The 27 layer blend modes, plus Pass Through for groups. Formulas: docs/FORMAT_NOTES.md §3. */
@@ -171,4 +172,19 @@ export function layerCapabilities(layer: LayerNode): LayerCapabilities {
     changeBlendMode: !background && !locks.all,
     editPixels: layer.kind === 'pixel' && !locks.pixels && !locks.all,
   };
+}
+
+/**
+ * Document-space bounds of a layer's pixels (tile-aligned; for groups, of all
+ * descendants). A layer whose unallocated area is not transparent — the
+ * Background — covers at least the whole canvas.
+ */
+export function layerBounds(layer: LayerNode, canvas: Rect): Rect {
+  if (layer.kind === 'group') {
+    return layer.children.reduce((acc, child) => unionRects(acc, layerBounds(child, canvas)), EMPTY_RECT);
+  }
+  const { buffer } = layer;
+  const tiles = translateRect(buffer.tileBounds(), layer.offsetX, layer.offsetY);
+  const defaultVisible = !buffer.format.hasAlpha || buffer.defaultPixel[buffer.format.colorChannels] !== 0;
+  return defaultVisible ? unionRects(tiles, canvas) : tiles;
 }

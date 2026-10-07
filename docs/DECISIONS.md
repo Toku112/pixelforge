@@ -289,3 +289,27 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   keymap.) Double-clicking the Background's name converts it to a normal layer through the New Layer dialog.
 - The Essentials workspace now includes the Layers panel; panel layouts saved before this change are replaced by the
   new default once.
+
+## D-025 — 2026-10-07 — Merging layers; long operations
+
+**Decision:**
+
+- Ctrl/Cmd+E does what fits the selection: Merge Down (one layer), Merge Layers (several), Merge Group (one group);
+  the menu label follows.
+- Merge Down keeps the lower layer's name, blend mode, opacity and fill and bakes the upper layer onto the lower
+  layer's own pixels (so the result looks the same whenever the lower layer is Normal at 100 %). It needs a visible,
+  editable pixel layer directly below in the same group; it is unavailable onto hidden or pixel-locked layers (the
+  reference app's behaviour there could not be confirmed, and refusing is the safe choice).
+- Merge Layers composites the selected layers on their own (Normal, 100 %), named after the topmost visible one and
+  placed where it was; hidden selected layers are discarded; with the Background selected the result is the
+  Background. Merge Group keeps the group's name, opacity and fill, and its blend mode (Pass Through → Normal).
+- Merge Visible removes every visible layer (a group goes only when everything in it is visible) and puts the
+  composite in the visible Background, or else a layer named after the active layer (if merged) or the topmost merged
+  one, where the topmost merged layer was. Hidden layers stay where they are.
+- Merged results keep pixels outside the canvas (union of the layers' bounds); Backgrounds and Stamp Visible are
+  canvas-sized. Flatten Image composites over white and asks before discarding hidden layers. Background from Layer
+  bakes the layer's opacity and fill over the fill colour; its blend mode does not apply (it has nothing to blend
+  with but a plain colour).
+- Long operations: commands get a task control; heavy work runs in chunks (rows of tiles) in the worker, reporting
+  progress after each chunk and stopping at the next chunk boundary on Esc. The status bar shows the operation
+  and a progress bar once it has run for 250 ms. A cancelled command leaves the document and the History unchanged.

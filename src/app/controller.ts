@@ -5,8 +5,9 @@
  */
 import { APP_NAME } from './brand';
 import { BLEND_MODE_LABELS, availableBlendModes, blendModeMenu, cycleBlendMode } from '../core/composite/blend';
-import { suggestedCopyName } from '../core/commands/builtin/layers';
-import type { JsonObject } from '../core/commands/command';
+import { suggestedCopyName } from '../core/commands/builtin/layer-common';
+import { mergeKind } from '../core/commands/builtin/merge';
+import { CommandCancelledError, type JsonObject } from '../core/commands/command';
 import type { LayerPropChanges } from '../core/commands/builtin/set-layer-props';
 import {
   LAYER_BLEND_MODES,
@@ -81,11 +82,21 @@ export class AppController {
         nextToolForCommand: (c) => TOOL_COMMANDS[c],
       },
     });
-    this.commands.onError(
-      (_id, error) => void ui.alert('Something went wrong', error instanceof Error ? error.message : String(error)),
-    );
+    this.commands.onError((_id, error) => {
+      if (error instanceof CommandCancelledError) return; // the user pressed Esc
+      void ui.alert('Something went wrong', error instanceof Error ? error.message : String(error));
+    });
     this.#registerCommands();
+    if (typeof window !== 'undefined') window.addEventListener('keydown', this.#onEscape, { capture: true });
   }
+
+  /** Esc while a long command runs cancels it (and does nothing else). */
+  readonly #onEscape = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape' || !this.workspace.running) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.workspace.cancelTask();
+  };
 
   get workspace() {
     return this.services.workspace;
@@ -465,6 +476,45 @@ export class AppController {
       add({ id, label, enabled: () => ws.canExecute('arrangeLayers'), run: exec('arrangeLayers', { mode }) });
     }
     add({
+      id: 'layer.mergeDown',
+      label: 'Merge Down',
+      enabled: () => ws.canExecute('mergeLayers'),
+      run: exec('mergeLayers'),
+    });
+    add({
+      id: 'layer.mergeVisible',
+      label: 'Merge Visible',
+      enabled: () => ws.canExecute('mergeVisible'),
+      run: exec('mergeVisible'),
+    });
+    add({
+      id: 'layer.stampVisible',
+      label: 'Stamp Visible',
+      enabled: () => ws.canExecute('stampVisible'),
+      run: exec('stampVisible'),
+    });
+    add({
+      id: 'layer.flatten',
+      label: 'Flatten Image',
+      enabled: () => ws.canExecute('flattenImage'),
+      run: async () => {
+        const hidden = [...(doc()?.layers() ?? [])].some((l) => !l.visible);
+        if (
+          hidden &&
+          !(await this.#ui.confirm({ title: 'Flatten Image', message: 'Discard hidden layers?', confirmLabel: 'OK' }))
+        )
+          return;
+        await ws.execute({ name: 'flattenImage', params: {} });
+      },
+    });
+    add({
+      id: 'layer.backgroundFromLayer',
+      label: 'Background from Layer',
+      enabled: () => ws.canExecute('backgroundFromLayer'),
+      // Transparency is filled with the background colour (white by default).
+      run: exec('backgroundFromLayer'),
+    });
+    add({
       id: 'layer.hide',
       label: 'Hide Layers',
       enabled: () => selected().length > 0,
@@ -592,10 +642,16 @@ export class AppController {
     if (id === 'edit.undo' && h?.canUndo) return `Undo ${h.entries[h.currentIndex]!.label}`;
     if (id === 'edit.redo' && h?.canRedo) return `Redo ${h.entries[h.currentIndex + 1]!.label}`;
     if (id === 'help.about') return `About ${APP_NAME}…`;
+    if (id === 'layer.mergeDown') {
+      const doc = this.workspace.active?.doc;
+      const kind = doc ? mergeKind(doc) : null;
+      return kind === 'layers' ? 'Merge Layers' : kind === 'group' ? 'Merge Group' : 'Merge Down';
+    }
     return fallback;
   }
 
   dispose(): void {
     this.keyboard.dispose();
+    if (typeof window !== 'undefined') window.removeEventListener('keydown', this.#onEscape, { capture: true });
   }
 }

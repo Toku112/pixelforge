@@ -25,6 +25,16 @@ export interface DocumentSession {
   savedEntryId: number | null;
 }
 
+/** Progress of a long-running command, for the status bar. */
+export interface TaskProgress {
+  label: string;
+  /** 0–1. */
+  fraction: number;
+}
+
+/** Progress is only shown for commands still running after this long. */
+const PROGRESS_DELAY_MS = 250;
+
 export interface WorkspaceOptions {
   registry: CommandRegistry;
   services: CommandServices;
@@ -39,6 +49,7 @@ export class Workspace {
   #activeId: string | null = null;
   #version = 0;
   #preview: { session: DocumentSession; undo: () => void | Promise<void> } | null = null;
+  #task: { control: { cancelled: boolean }; label: string; fraction: number; shown: boolean } | null = null;
   #queue: Promise<void> = Promise.resolve();
 
   constructor(options: WorkspaceOptions) {
@@ -128,15 +139,60 @@ export class Workspace {
     return this.registry.isAvailable(name, { doc: session.doc, services: this.#options.services });
   }
 
-  /** Runs a document command on the active document through its History. */
+  /**
+   * Runs a document command on the active document through its History. Long runs
+   * report progress (see `task`) and can be cancelled with `cancelTask()`.
+   */
   execute(descriptor: CommandDescriptor): Promise<void> {
     return this.#serial(async () => {
       await this.#undoPreview();
       const session = this.active;
       if (!session) throw new Error('No document is open');
-      const command = this.registry.create({ doc: session.doc, services: this.#options.services }, descriptor);
-      await session.history.execute(command);
+      const control = { cancelled: false, progress: (f: number) => this.#reportProgress(f) };
+      const command = this.registry.create(
+        { doc: session.doc, services: this.#options.services, task: control },
+        descriptor,
+      );
+      const timer = setTimeout(() => {
+        if (this.#task?.control === control) {
+          this.#task.shown = true;
+          this.#changed();
+        }
+      }, PROGRESS_DELAY_MS);
+      this.#task = { control, label: command.label, fraction: 0, shown: false };
+      try {
+        await session.history.execute(command);
+      } finally {
+        clearTimeout(timer);
+        const shown = this.#task.shown;
+        this.#task = null;
+        if (shown) this.#changed();
+      }
     });
+  }
+
+  /** The command running long enough to show progress (after a short delay), or null. */
+  get task(): TaskProgress | null {
+    const t = this.#task;
+    return t?.shown ? { label: t.label, fraction: t.fraction } : null;
+  }
+
+  /** True while a command runs (even before its progress is shown). */
+  get running(): boolean {
+    return this.#task !== null;
+  }
+
+  /** Asks the running command to stop (Esc); it then leaves the document unchanged. */
+  cancelTask(): void {
+    if (this.#task) this.#task.control.cancelled = true;
+  }
+
+  #reportProgress(fraction: number): void {
+    const t = this.#task;
+    if (!t) return;
+    const previous = t.fraction;
+    t.fraction = Math.min(1, Math.max(0, fraction));
+    if (t.shown && Math.floor(t.fraction * 100) !== Math.floor(previous * 100)) this.#changed();
   }
 
   /**
