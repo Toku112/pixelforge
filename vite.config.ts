@@ -74,7 +74,15 @@ export default defineConfig({
   build: {
     target: 'es2023',
     sourcemap: true,
-    rollupOptions: { input: buildInputs() },
+    rolldownOptions: {
+      input: buildInputs(),
+      // React in its own file: it changes rarely, so browsers keep it cached across app updates.
+      output: {
+        codeSplitting: {
+          groups: [{ name: 'react', test: /[\\/]node_modules[\\/].*(react|react-dom|scheduler)[\\/]/ }],
+        },
+      },
+    },
   },
   worker: {
     format: 'es',
