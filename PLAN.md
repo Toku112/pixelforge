@@ -12,7 +12,7 @@ _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
 - Last completed: Part D items 1–12 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool, crop/canvas size/image size/rotation, Free Transform, Save As JPEG/WebP and basic PSD)
-- Next up: Part D item 13 (Phase 1 exit test: automated PSD round trip, then the owner's check with real Photoshop)
+- Next up: the owner's check with real Photoshop (`docs/phase1-check/README.md`), which completes Phase 1 (item 13). Work stops here until the owner has checked and says to start Phase 2.
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -618,3 +618,4 @@ scope (all modes, masks, etc.) is complete.
 - [x] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd
   ↳ note: Save As dialog with formats, JPEG Options (our own encoder: quality 0–12, baseline/optimised/progressive, matte, ICC, resolution), WebP Options (lossless ours; lossy via the browser's encoder, not in Safari), PSD open (8/16/32-bit RGB/Gray, groups, locks, Background; simplified features listed) and save (8-bit RGB) (D-033, D-034, FORMAT_NOTES §7).
 - [ ] Phase 1 exit test: edit a layered composition and round-trip it as PSD (automated), plus owner check with real Photoshop
+  ↳ partial: the automated round trip passes in Chromium, Firefox and WebKit (`tests/e2e/phase1-exit.spec.ts`: canvas size, brush stroke, move, Multiply square with opacity/fill and a lock, feathered ellipse turned with Free Transform inside a Screen group, a hidden layer — same layers and same image after saving and reopening, and again after a second save). Waiting for the owner's check with real Photoshop (`docs/phase1-check/README.md`).
