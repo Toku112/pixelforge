@@ -3,6 +3,7 @@
  * implemented yet are not listed (no placeholder tools).
  */
 import { HandTool } from './hand/hand-tool';
+import { PaintingTool } from './paint/paint-tool';
 import { RotateViewTool } from './rotate-view/rotate-view-tool';
 import { LassoTool, PolygonalLassoTool } from './selection/lasso-tool';
 import { MarqueeTool, SingleLineMarqueeTool } from './selection/marquee-tool';
@@ -26,6 +27,8 @@ export function createTools() {
   const marqueeColumn = new SingleLineMarqueeTool('column');
   const lasso = new LassoTool();
   const polygonalLasso = new PolygonalLassoTool();
+  const brush = new PaintingTool('brush');
+  const eraser = new PaintingTool('eraser');
   const groups: ToolGroup[] = [
     {
       id: 'marquee-group',
@@ -33,6 +36,8 @@ export function createTools() {
       cycle: [marqueeRect.id, marqueeEllipse.id],
     },
     { id: 'lasso-group', tools: [lasso, polygonalLasso] },
+    { id: 'brush-group', tools: [brush] },
+    { id: 'eraser-group', tools: [eraser] },
     { id: 'hand-group', tools: [hand, rotateView] },
     { id: 'zoom-group', tools: [zoom] },
   ];
@@ -47,6 +52,8 @@ export function createTools() {
     marqueeColumn,
     lasso,
     polygonalLasso,
+    brush,
+    eraser,
     groups,
     byId,
   };

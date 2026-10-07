@@ -10,7 +10,7 @@ import type { ImageDocument } from '../../core/document/document';
 import { Renderer, type RendererOptions } from '../../engine/gl/renderer';
 import type { ViewportState } from '../../engine/viewport/viewport';
 import type { ToolSet } from '../../tools/registry';
-import type { ToolContext, ViewRect } from '../../tools/types';
+import type { PaintHost, ToolContext, ViewRect } from '../../tools/types';
 import { CanvasInput } from './canvas-input';
 import { SelectionOverlay } from './selection-overlay';
 
@@ -25,6 +25,8 @@ export interface CanvasViewOptions {
   onGestureStart?(): void;
   /** Runs a document command for a tool (e.g. a selection tool's result). */
   execute?(descriptor: CommandDescriptor): void;
+  /** Starts brush/eraser strokes. */
+  paint?: PaintHost;
   /** Marching ants: a 2D canvas stacked above the document canvas, and the outline tracer. */
   ants?: { canvas: HTMLCanvasElement; trace: OutlineTracer };
   renderer?: RendererOptions;
@@ -67,6 +69,8 @@ export class CanvasView {
       setOverlayRect: (rect) => this.#showOverlay(rect),
       setSelectionPreview: (preview) => this.#ants?.setPreview(preview),
       execute: (descriptor) => options.execute?.(descriptor),
+      paint: options.paint ?? null,
+      setBrushOutline: (outline) => this.#ants?.setBrushOutline(outline),
     };
     canvas.tabIndex = 0; // focusable, so keyboard tools work after clicking the canvas
     this.#input = new CanvasInput({

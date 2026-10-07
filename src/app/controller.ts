@@ -8,6 +8,11 @@ import { BLEND_MODE_LABELS, availableBlendModes, blendModeMenu, cycleBlendMode }
 import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
 import { colorToSamples, type RGB } from '../core/color/color';
+import { paintTarget, strokeSetup, type PaintTool } from '../core/commands/builtin/paint';
+import { stepBrushSize, stepHardness, type BrushSettings } from '../core/paint/brush';
+import { PaintingTool } from '../tools/paint/paint-tool';
+import type { PaintHost, PaintStroke } from '../tools/types';
+import { PaintSession } from './paint-session';
 import { ColorSwatches } from './colors';
 import {
   CommandCancelledError,
@@ -61,13 +66,20 @@ export interface UiBridge {
   groupTool(groupId: string): string | undefined;
   /** The Color Picker; null when cancelled. */
   pickColor(title: string, color: RGB): Promise<RGB | null>;
+  /** A tool's options changed outside the options bar (e.g. [ ] keys): refresh it. */
+  toolOptionsChanged(): void;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
   'tool.hand': 'hand',
   'tool.rotateView': 'rotate-view',
   'tool.zoom': 'zoom',
+  'tool.brush': 'brush',
+  'tool.eraser': 'eraser',
 };
+
+/** Two number keys typed within this time (ms) make one value ("4", "5" → 45 %). */
+const DIGIT_PAIR_MS = 400;
 
 /** Tool letters that pick a toolbar group's current tool (Shift + letter cycles the group). */
 const GROUP_COMMANDS: Record<string, string> = {
@@ -82,6 +94,9 @@ export class AppController {
   readonly keymap = new Keymap(this.platform);
   readonly tools: ToolSet = createTools();
   readonly colors = new ColorSwatches();
+  /** Starts brush/eraser strokes on the active document. */
+  readonly paintHost: PaintHost = { begin: (tool, brush) => this.#beginStroke(tool, brush) };
+  #lastDigit: { digit: number; time: number; shift: boolean } | null = null;
   readonly keyboard: KeyboardService;
   readonly #ui: UiBridge;
   #canvas: CanvasView | null = null;
@@ -168,6 +183,76 @@ export class AppController {
     } catch {
       return undefined;
     }
+  }
+
+  #beginStroke(tool: PaintTool, brush: BrushSettings): PaintStroke | null {
+    const ws = this.workspace;
+    const session = ws.active;
+    if (!session || ws.running) return null;
+    const doc = session.doc;
+    const what = tool === 'brush' ? 'the Brush Tool' : 'the Eraser';
+    const layer = paintTarget(doc);
+    if (!layer) {
+      const active = doc.activeLayer;
+      const reason = !active
+        ? 'No layer is selected.'
+        : active.kind === 'group'
+          ? 'The active layer is a group. Select a pixel layer.'
+          : 'The active layer is locked.';
+      void this.#ui.alert(`Could not use ${what}`, reason);
+      return null;
+    }
+    let color: number[];
+    try {
+      color = colorToSamples(tool === 'brush' ? this.colors.foreground : this.colors.background, doc.mode, doc.depth);
+    } catch (error) {
+      void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
+      return null;
+    }
+    const live = this.services.strokes.begin(strokeSetup(doc, layer, { tool, points: [], brush, color }));
+    const stroke = new PaintSession(ws, doc, layer, live, tool, brush, color);
+    return {
+      add: (dabs) => stroke.add(dabs),
+      end: async (points) => {
+        try {
+          await stroke.end(points);
+        } catch (error) {
+          await this.#ui.alert('Something went wrong', error instanceof Error ? error.message : String(error));
+        }
+      },
+      cancel: () => stroke.cancel(),
+    };
+  }
+
+  /** The active tool when it is the Brush or the Eraser. */
+  #paintTool(): PaintingTool | null {
+    const tool = this.tools.byId.get(this.#ui.activeToolId());
+    return tool instanceof PaintingTool ? tool : null;
+  }
+
+  #setPaintOptions(changes: Partial<BrushSettings>): void {
+    this.#paintTool()?.setOptions(changes);
+    this.#ui.toolOptionsChanged();
+  }
+
+  /**
+   * Number keys: opacity (Shift: flow) of the Brush/Eraser, or of the selected layers
+   * (Shift: fill) with other tools. 1 = 10 % … 0 = 100 %; two digits typed quickly
+   * give a precise value ("4", "5" → 45 %; "0", "5" → 5 %).
+   */
+  #numberKey(digit: number, shift: boolean): void {
+    const now = performance.now();
+    const last = this.#lastDigit;
+    let percent = digit === 0 ? 100 : digit * 10;
+    if (last && last.shift === shift && now - last.time < DIGIT_PAIR_MS) {
+      percent = last.digit * 10 + digit;
+      this.#lastDigit = null;
+    } else {
+      this.#lastDigit = { digit, time: now, shift };
+    }
+    const value = percent / 100;
+    if (this.#paintTool()) this.#setPaintOptions(shift ? { flow: value } : { opacity: value });
+    else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });
   }
 
   /** Runs a document command for a tool, reporting problems (cancelling is not one). */
@@ -407,16 +492,18 @@ export class AppController {
     });
 
     // Edit
+    // Not in the middle of a stroke or a polygon.
+    const toolBusy = () => this.tools.byId.get(this.#ui.activeToolId())?.busy?.() ?? false;
     add({
       id: 'edit.undo',
       label: 'Undo',
-      enabled: () => !!history()?.canUndo,
+      enabled: () => !toolBusy() && !!history()?.canUndo,
       run: async () => (await ws.cancelPreview(), history()?.undo()),
     });
     add({
       id: 'edit.redo',
       label: 'Redo',
-      enabled: () => !!history()?.canRedo,
+      enabled: () => !toolBusy() && !!history()?.canRedo,
       run: async () => (await ws.cancelPreview(), history()?.redo()),
     });
     add({
@@ -428,7 +515,6 @@ export class AppController {
 
     // Delete/Backspace: clears the selected pixels; with nothing selected it deletes the
     // selected layers (as in the reference app). Not while a tool uses the key itself.
-    const toolBusy = () => this.tools.byId.get(this.#ui.activeToolId())?.busy?.() ?? false;
     add({
       id: 'edit.clear',
       label: 'Clear',
@@ -447,6 +533,47 @@ export class AppController {
       enabled: () => ws.canExecute('invert'),
       run: () => ws.execute({ name: 'invert', params: {} }),
     });
+
+    // Brush keys
+    const paintTool = () => this.#paintTool() !== null;
+    add({
+      id: 'brush.smaller',
+      label: 'Decrease Brush Size',
+      enabled: paintTool,
+      run: () => this.#setPaintOptions({ size: stepBrushSize(this.#paintTool()!.options.size, -1) }),
+    });
+    add({
+      id: 'brush.larger',
+      label: 'Increase Brush Size',
+      enabled: paintTool,
+      run: () => this.#setPaintOptions({ size: stepBrushSize(this.#paintTool()!.options.size, 1) }),
+    });
+    add({
+      id: 'brush.softer',
+      label: 'Decrease Brush Hardness',
+      enabled: paintTool,
+      run: () => this.#setPaintOptions({ hardness: stepHardness(this.#paintTool()!.options.hardness, -1) }),
+    });
+    add({
+      id: 'brush.harder',
+      label: 'Increase Brush Hardness',
+      enabled: paintTool,
+      run: () => this.#setPaintOptions({ hardness: stepHardness(this.#paintTool()!.options.hardness, 1) }),
+    });
+    for (let digit = 0; digit <= 9; digit++) {
+      add({
+        id: `paint.opacity${digit}`,
+        label: `Opacity ${digit === 0 ? 100 : digit * 10}%`,
+        enabled: () => paintTool() || ws.active !== null,
+        run: () => this.#numberKey(digit, false),
+      });
+      add({
+        id: `paint.flow${digit}`,
+        label: `Flow ${digit === 0 ? 100 : digit * 10}%`,
+        enabled: () => paintTool() || ws.active !== null,
+        run: () => this.#numberKey(digit, true),
+      });
+    }
 
     // Colours
     add({ id: 'color.default', label: 'Default Foreground and Background Colors', run: () => this.colors.reset() });

@@ -53,6 +53,7 @@ export class CanvasInput {
     this.#listen(el, 'pointermove', this.#onPointerMove);
     this.#listen(el, 'pointerup', this.#onPointerUp);
     this.#listen(el, 'pointercancel', this.#onPointerCancel);
+    this.#listen(el, 'pointerleave', this.#onPointerLeave);
     this.#listen(el, 'wheel', this.#onWheel, { passive: false });
     this.#listen(window, 'keydown', this.#onKeyDown);
     this.#listen(window, 'keyup', this.#onKeyUp);
@@ -107,6 +108,7 @@ export class CanvasInput {
       altKey: e.altKey,
       primaryKey: isMac ? e.metaKey : e.ctrlKey,
       spaceKey: this.#space,
+      pressure: 'pointerType' in e && (e as PointerEvent).pointerType === 'pen' ? (e as PointerEvent).pressure : 1,
     };
   }
 
@@ -146,6 +148,10 @@ export class CanvasInput {
   };
 
   readonly #onPointerCancel = () => this.#cancelDrag();
+
+  readonly #onPointerLeave = () => {
+    if (!this.#dragTool) this.currentTool.onPointerLeave?.(this.#o.context);
+  };
 
   readonly #onWheel = (e: WheelEvent) => {
     e.preventDefault();

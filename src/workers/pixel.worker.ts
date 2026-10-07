@@ -10,6 +10,8 @@ import { convertAlphaTile } from '../core/commands/alpha';
 import { compositeTiles, type CompositeTile } from '../core/composite/composite-tiles';
 import { clearMasked, invertMasked, type MaskedTarget } from '../core/selection/masked-edits';
 import { invertSelection, selectShape, type SelectionMode, type SelectionShape } from '../core/selection/mask-ops';
+import type { Dab } from '../core/paint/brush';
+import { StrokeRenderer, type StrokeSetup } from '../core/paint/stroke';
 import { selectionOutline } from '../core/selection/outline';
 import type { MaskData } from '../core/selection/selection';
 import type { FlattenPlan } from '../core/composite/flatten';
@@ -110,6 +112,9 @@ function returnUnshared(tiles: SampleArray[]): (SampleArray | null)[] {
   );
 }
 
+/** Live strokes being painted, by id. */
+const strokes = new Map<number, StrokeRenderer>();
+
 function transferMask(mask: MaskData | null): MaskData | null {
   if (!mask) return null;
   return transfer(
@@ -174,6 +179,48 @@ const conversions = {
       tiles,
       tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
     );
+  },
+
+  /** See PixelOps.paintStroke (a whole recorded stroke at once); same return convention as invertTiles. */
+  paintStroke(
+    setup: StrokeSetup,
+    tiles: SampleArray[],
+    coords: [number, number][],
+    dabs: Dab[],
+  ): (SampleArray | null)[] {
+    const renderer = new StrokeRenderer(setup);
+    tiles.forEach((data, i) => renderer.addTile(coords[i]![0], coords[i]![1], data));
+    renderer.applyDabs(dabs);
+    return returnUnshared(tiles);
+  },
+
+  /** Starts a live stroke (the Brush or Eraser being dragged). */
+  strokeBegin(id: number, setup: StrokeSetup): void {
+    strokes.set(id, new StrokeRenderer(setup));
+  },
+
+  /**
+   * Paints a batch of dabs of a live stroke into its tiles (`tiles`: tiles touched
+   * for the first time). Tiles in shared memory change in place; edited copies of
+   * the others are returned for the caller to copy over.
+   */
+  strokeDabs(id: number, tiles: { tx: number; ty: number; data: SampleArray }[], dabs: Dab[]) {
+    const renderer = strokes.get(id);
+    if (!renderer) throw new Error(`No stroke ${id}`);
+    for (const t of tiles) renderer.addTile(t.tx, t.ty, t.data);
+    const edited: { tx: number; ty: number; data: SampleArray }[] = [];
+    for (const key of renderer.applyDabs(dabs)) {
+      const tile = renderer.tile(key)!;
+      if (!(tile.data.buffer instanceof SharedArrayBuffer)) edited.push({ ...tile, data: tile.data.slice() });
+    }
+    return transfer(
+      edited,
+      edited.map((t) => t.data.buffer as ArrayBuffer),
+    );
+  },
+
+  strokeEnd(id: number): void {
+    strokes.delete(id);
   },
 
   /** Marching-ants outline of a selection (see core/selection/outline.ts). */

@@ -217,6 +217,34 @@ const icons = {
       <rect x="9.5" y="9.5" width="5" height="5" fill="currentColor" fillOpacity="0.5" stroke="none" />
     </Svg>
   ),
+  brush: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M20 3.5 11.5 12" />
+      <path d="M11 11.5c1.4 1.2 1.7 3 .6 4.4-1.6 2.1-4.4 3.3-8.1 3.6 1.2-1.6 1.1-3.4 2-5 .9-1.8 3.7-4.4 5.5-3Z" />
+      <path d="m14 9 1.5 1.5" />
+    </Svg>
+  ),
+  eraser: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="m4 15.5 9-9a2 2 0 0 1 2.8 0l3.7 3.7a2 2 0 0 1 0 2.8L13 19.5H8Z" />
+      <path d="M8.5 11 13 15.5M8 19.5h12" />
+    </Svg>
+  ),
+  penPressure: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M15.5 3.5 20.5 8.5 9 20H4v-5Z" />
+      <path d="M13 6l5 5" />
+      <circle cx="18.5" cy="18.5" r="2" fill="currentColor" fillOpacity="0.5" />
+    </Svg>
+  ),
+  penPressureSize: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M15.5 3.5 20.5 8.5 9 20H4v-5Z" />
+      <path d="M13 6l5 5" />
+      <circle cx="19" cy="19" r="1" />
+      <circle cx="19" cy="19" r="3" />
+    </Svg>
+  ),
   swapColors: (p: IconProps) => (
     <Svg {...p} strokeWidth={2}>
       <path d="M5 9a7 7 0 0 1 10-5" />

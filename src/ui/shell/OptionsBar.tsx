@@ -2,6 +2,7 @@
 import type { SelectionMode } from '../../core/selection/mask-ops';
 import { resetView, setViewRotation } from '../../tools/rotate-view/rotate-view-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
+import { PaintingTool } from '../../tools/paint/paint-tool';
 import { MarqueeTool, SingleLineMarqueeTool, type MarqueeStyle } from '../../tools/selection/marquee-tool';
 import { SelectionTool } from '../../tools/selection/selection-tool';
 import { useController } from '../AppContext';
@@ -22,6 +23,88 @@ const MARQUEE_STYLES: [MarqueeStyle, string][] = [
   ['fixed-ratio', 'Fixed Ratio'],
   ['fixed-size', 'Fixed Size'],
 ];
+
+/** Options of the Brush and Eraser. */
+function PaintOptions({ tool }: { tool: PaintingTool }) {
+  const bump = useUi((s) => s.bumpToolOptions);
+  useUi((s) => s.toolOptionsVersion);
+  const o = tool.options;
+  const set = (changes: Partial<typeof o>) => {
+    tool.setOptions(changes);
+    bump();
+  };
+  const percent = (v: number) => Math.round(v * 100);
+  return (
+    <>
+      <NumberField
+        label="Size:"
+        value={o.size}
+        min={1}
+        max={5000}
+        suffix=" px"
+        width={58}
+        onChange={(size) => set({ size })}
+      />
+      <NumberField
+        label="Hardness:"
+        value={percent(o.hardness)}
+        min={0}
+        max={100}
+        suffix="%"
+        width={46}
+        onChange={(v) => set({ hardness: v / 100 })}
+      />
+      <span className="options-divider" />
+      <NumberField
+        label="Opacity:"
+        value={percent(o.opacity)}
+        min={1}
+        max={100}
+        suffix="%"
+        width={46}
+        onChange={(v) => set({ opacity: v / 100 })}
+      />
+      <button
+        type="button"
+        className={`option-icon${o.pressureOpacity ? ' active' : ''}`}
+        aria-pressed={o.pressureOpacity}
+        aria-label="Pen pressure controls opacity"
+        title="Pen pressure controls opacity"
+        onClick={() => set({ pressureOpacity: !o.pressureOpacity })}
+      >
+        <Icon name="penPressure" size={16} />
+      </button>
+      <NumberField
+        label="Flow:"
+        value={percent(o.flow)}
+        min={1}
+        max={100}
+        suffix="%"
+        width={46}
+        onChange={(v) => set({ flow: v / 100 })}
+      />
+      <NumberField
+        label="Spacing:"
+        value={percent(o.spacing)}
+        min={1}
+        max={1000}
+        suffix="%"
+        width={50}
+        onChange={(v) => set({ spacing: v / 100 })}
+      />
+      <button
+        type="button"
+        className={`option-icon${o.pressureSize ? ' active' : ''}`}
+        aria-pressed={o.pressureSize}
+        aria-label="Pen pressure controls size"
+        title="Pen pressure controls size"
+        onClick={() => set({ pressureSize: !o.pressureSize })}
+      >
+        <Icon name="penPressureSize" size={16} />
+      </button>
+    </>
+  );
+}
 
 /** Options of the marquee and lasso tools. */
 function SelectionOptions({ tool }: { tool: SelectionTool }) {
@@ -172,6 +255,7 @@ export function OptionsBar() {
       </span>
       <span className="options-divider" />
       {tool instanceof SelectionTool && <SelectionOptions key={tool.id} tool={tool} />}
+      {tool instanceof PaintingTool && <PaintOptions key={tool.id} tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}
       {toolId === 'zoom' && (
         <>

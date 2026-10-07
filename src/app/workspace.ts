@@ -5,7 +5,7 @@
  * and its saved view (zoom, position, rotation) for when the tab is shown again.
  * All document changes go through `execute()`, i.e. through the History.
  */
-import type { CommandDescriptor, CommandServices } from '../core/commands/command';
+import type { Command, CommandContext, CommandDescriptor, CommandServices } from '../core/commands/command';
 import type { CommandRegistry } from '../core/commands/registry';
 import { Emitter } from '../core/document/events';
 import type { ImageDocument } from '../core/document/document';
@@ -51,6 +51,7 @@ export class Workspace {
   #preview: { session: DocumentSession; undo: () => void | Promise<void> } | null = null;
   #task: { control: { cancelled: boolean }; label: string; fraction: number; shown: boolean } | null = null;
   #queue: Promise<void> = Promise.resolve();
+  readonly #work = new Set<Promise<unknown>>();
 
   constructor(options: WorkspaceOptions) {
     this.#options = options;
@@ -171,6 +172,19 @@ export class Workspace {
     });
   }
 
+  /**
+   * Records a change already made to `doc` (e.g. a brush stroke painted live) as one
+   * History step; `build` makes the command holding its undo data.
+   */
+  executePrepared(doc: ImageDocument, build: (ctx: CommandContext) => Command): Promise<void> {
+    return this.#serial(async () => {
+      await this.#undoPreview();
+      const session = this.#sessions.find((s) => s.doc === doc);
+      if (!session) return; // closed meanwhile
+      await session.history.execute(build({ doc, services: this.#options.services }));
+    });
+  }
+
   /** The command running long enough to show progress (after a short delay), or null. */
   get task(): TaskProgress | null {
     const t = this.#task;
@@ -224,9 +238,21 @@ export class Workspace {
     if (this.#sessions.includes(preview.session)) await preview.undo();
   }
 
-  /** Resolves once every command and preview started so far has finished (also when they failed). */
-  whenIdle(): Promise<void> {
-    return this.#queue;
+  /**
+   * Resolves once every command, preview and tracked piece of work (e.g. a brush
+   * stroke being finished) has completed — also when they failed.
+   */
+  async whenIdle(): Promise<void> {
+    do {
+      await Promise.allSettled([...this.#work]);
+      await this.#queue;
+    } while (this.#work.size > 0);
+  }
+
+  /** Work that changes documents outside `execute()` (a live brush stroke), for `whenIdle()`. */
+  trackWork(work: Promise<unknown>): void {
+    this.#work.add(work);
+    void work.finally(() => this.#work.delete(work));
   }
 
   /** Runs tasks one after another, so previews and commands never interleave. */

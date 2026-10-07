@@ -26,6 +26,7 @@ export class SelectionOverlay {
   #doc: ImageDocument | null = null;
   #stopDoc: (() => void) | null = null;
   #preview: SelectionPreview | null = null;
+  #brush: { x: number; y: number; size: number } | null = null;
   #phase = 0;
   #timer: ReturnType<typeof setInterval> | null = null;
   readonly #still: boolean;
@@ -56,6 +57,12 @@ export class SelectionOverlay {
     this.draw();
   }
 
+  /** The brush outline at a document point (diameter in document px), or none. */
+  setBrushOutline(outline: { x: number; y: number; size: number } | null): void {
+    this.#brush = outline;
+    this.draw();
+  }
+
   /** The traced outline of the current selection, or null while it is being traced. */
   get outline(): Float32Array[] | null {
     const sel = this.#doc?.selection;
@@ -83,6 +90,7 @@ export class SelectionOverlay {
     const doc = this.#doc;
     const loops = this.#loopsToDraw(doc);
     this.#animate(loops.length > 0);
+    if (doc && this.#brush) this.#drawBrush(ctx, this.#brush);
     if (!doc || loops.length === 0) return;
 
     // Build the paths in document coordinates through the view transform…
@@ -114,6 +122,22 @@ export class SelectionOverlay {
     ctx.setLineDash([DASH * dpr, DASH * dpr]);
     ctx.lineDashOffset = -this.#phase * dpr;
     ctx.strokeStyle = '#000';
+    ctx.stroke();
+  }
+
+  #drawBrush(ctx: CanvasRenderingContext2D, brush: { x: number; y: number; size: number }): void {
+    const v = this.#renderer.viewport;
+    const c = v.docToView(brush);
+    const r = (brush.size / 2) * v.zoom;
+    if (r < 2) return; // tiny brushes: the crosshair cursor is enough
+    const dpr = this.#renderer.devicePixelRatio;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+    ctx.lineWidth = Math.max(1, Math.round(dpr)) * 2;
+    ctx.strokeStyle = 'rgb(255 255 255 / 70%)';
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, Math.round(dpr));
+    ctx.strokeStyle = 'rgb(0 0 0 / 80%)';
     ctx.stroke();
   }
 

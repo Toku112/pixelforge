@@ -5,6 +5,8 @@
  * journal stores; `CommandRegistry` turns a descriptor back into a command.
  */
 import type { CompositeTile } from '../composite/composite-tiles';
+import type { Dab } from '../paint/brush';
+import type { StrokeSetup } from '../paint/stroke';
 import type { MaskedTarget } from '../selection/masked-edits';
 import type { SelectionMode, SelectionShape } from '../selection/mask-ops';
 import type { MaskData } from '../selection/selection';
@@ -78,6 +80,8 @@ export interface PixelOps {
   ): Promise<MaskData | null>;
   /** Select > Inverse; null when nothing is left selected. */
   invertSelection(current: MaskData, canvas: Rect): Promise<MaskData | null>;
+  /** Paints a whole brush/eraser stroke into layer tiles (`coords`: their layer tile coordinates). */
+  paintStroke(setup: StrokeSetup, tiles: SampleArray[], coords: [number, number][], dabs: Dab[]): Promise<void>;
   /**
    * Converts whole tiles to a format that differs only in alpha: adds a fully
    * opaque alpha channel, or removes alpha by compositing over `matte` (colour

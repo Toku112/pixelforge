@@ -12,6 +12,7 @@ import { TileStore, defaultMemoryBudget } from '../engine/tiles/tile-store';
 import { createCodecWorker, type CodecWorkerClient } from '../workers/codec-client';
 import { createPixelWorker } from '../workers/pixel-client';
 import { createWorkerPixelOps } from '../workers/pixel-ops-client';
+import { createStrokeEngine, type StrokeEngine } from '../workers/stroke-client';
 import { Workspace } from './workspace';
 
 /** Renders a layer thumbnail off the main thread. */
@@ -31,6 +32,8 @@ export interface AppServices {
   workspace: Workspace;
   renderThumbnail: ThumbnailRenderer;
   traceOutline: OutlineTracer;
+  /** Live brush/eraser strokes in the pixel worker. */
+  strokes: StrokeEngine;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -48,5 +51,6 @@ export async function createServices(): Promise<AppServices> {
     workspace,
     renderThumbnail: (source, area, width, height) => pixelWorker.layerThumbnail(source, area, width, height),
     traceOutline: (mask, canvas) => pixelWorker.selectionOutline(mask, canvas),
+    strokes: createStrokeEngine(pixelWorker),
   };
 }

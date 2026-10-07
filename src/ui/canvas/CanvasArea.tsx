@@ -31,6 +31,7 @@ export function CanvasArea() {
       getActiveToolId: () => useUi.getState().activeToolId,
       onGestureStart: () => controller.keyboard.pointerUsed(),
       execute: (descriptor) => void controller.runDocumentCommand(descriptor),
+      paint: controller.paintHost,
       ants: { canvas: antsRef.current!, trace: controller.services.traceOutline },
       onViewChange: (state) => {
         // Publish view changes to panels and the status bar at most once per frame.

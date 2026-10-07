@@ -4,6 +4,7 @@ import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { ImageDocument, type DocumentInit } from '../../../src/core/document/document';
 import { convertAlphaTile } from '../../../src/core/commands/alpha';
 import { compositeTiles } from '../../../src/core/composite/composite-tiles';
+import { StrokeRenderer } from '../../../src/core/paint/stroke';
 import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
 import { invertSelection, selectShape } from '../../../src/core/selection/mask-ops';
 import { maxSampleValue, type PixelFormat, type SampleArray } from '../../../src/core/document/pixel-format';
@@ -36,6 +37,12 @@ export const referencePixelOps: PixelOps = {
   },
   invertSelection(current, canvas) {
     return Promise.resolve(invertSelection(current, canvas));
+  },
+  paintStroke(setup, tiles, coords, dabs) {
+    const renderer = new StrokeRenderer(setup);
+    tiles.forEach((data, i) => renderer.addTile(coords[i]![0], coords[i]![1], data));
+    renderer.applyDabs(dabs);
+    return Promise.resolve();
   },
   composite(plan, rect, format, matte, task) {
     if (task?.cancelled) return Promise.reject(new CommandCancelledError());

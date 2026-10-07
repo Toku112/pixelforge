@@ -18,6 +18,8 @@ function setup(zoom = 1) {
     setOverlayRect: (r) => overlays.push(r),
     setSelectionPreview: () => {},
     execute: () => {},
+    paint: null,
+    setBrushOutline: () => {},
   };
   return { viewport, ctx, overlays, changes: () => changes };
 }
@@ -29,6 +31,7 @@ const ev = (x: number, y: number, mods: Partial<ToolPointerEvent> = {}): ToolPoi
   altKey: false,
   primaryKey: false,
   spaceKey: false,
+  pressure: 1,
   ...mods,
 });
 

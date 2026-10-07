@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D items 1–6 (layer commands, Layers panel, blend modes, merges, selections, colours)
-- Next up: Part D item 7 (Brush and Eraser)
+- Last completed: Part D items 1–7 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser)
+- Next up: Part D item 8 (Edit > Fill and Delete/Backspace fills)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -591,8 +591,8 @@ scope (all modes, masks, etc.) is complete.
   ↳ note: also marquee styles (Fixed Ratio/Size), Shift/Alt/Space while dragging, moving the outline, M/L and Shift+M/L tool keys (D-026, FORMAT_NOTES §4).
 - [x] Foreground/background colours in the toolbar (X swap, D default) and a Color Picker dialog
   ↳ note: picker with HSB/RGB/Lab/hex fields, saturation–brightness field and hue strip (D-027); Clear and Background from Layer use the background colour. Not in this item (Part B picker): field modes other than hue, Only Web Colors, gamut warning, Add to Swatches, Color Libraries, CMYK fields (colour management, Phase 7).
-- [ ] Brush and Eraser (simple round brush: size, hardness, opacity, flow, spacing, pen pressure; [ ] { } and number-key shortcuts), painting off the main thread with tile-diff undo
-  ↳ note: while a painting tool is active, the blend-mode shortcuts (Alt+Shift+letter, Shift+/−) must change the tool's mode instead of the layer's (D-023).
+- [x] Brush and Eraser (simple round brush: size, hardness, opacity, flow, spacing, pen pressure; [ ] { } and number-key shortcuts), painting off the main thread with tile-diff undo
+  ↳ note: Opacity caps a stroke, Flow builds up; Shift-click lines; selection and locked transparency respected; strokes recorded as replayable descriptors (D-028). Not in this item (Phase 2 painting engine): brush blend modes, Brush Settings panel and presets, tilt/rotation, smoothing, Alt+right-drag size HUD, Pencil.
 - [ ] Edit > Fill (foreground/background/colour/black/white/50% gray, mode, opacity, preserve transparency) and Delete/Backspace fills
   ↳ note: Delete on the Background should then open the Fill dialog (it currently clears to the background colour, D-026).
 - [ ] Move tool: move layers (and selected pixels), auto-select, arrow nudge (Shift = 10 px), Alt-drag duplicate

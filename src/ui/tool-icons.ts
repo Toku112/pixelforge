@@ -11,6 +11,8 @@ export const TOOL_ICONS: Readonly<Record<string, IconName>> = {
   'marquee-column': 'marqueeColumn',
   lasso: 'lasso',
   'polygonal-lasso': 'polygonalLasso',
+  brush: 'brush',
+  eraser: 'eraser',
 };
 
 export function toolIcon(toolId: string): IconName {

@@ -3,7 +3,9 @@
  * device pixels and act on the document view and the document (through commands)
  * via a context. The UI layer turns DOM events into these calls and draws overlays.
  */
+import type { PaintTool } from '../core/commands/builtin/paint';
 import type { CommandDescriptor } from '../core/commands/command';
+import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
 import type { ImageDocument } from '../core/document/document';
 import type { SelectionShape } from '../core/selection/mask-ops';
 import type { Viewport } from '../engine/viewport/viewport';
@@ -18,6 +20,8 @@ export interface ToolPointerEvent {
   primaryKey: boolean;
   /** Space is held (selection tools: reposition the shape being drawn). */
   spaceKey: boolean;
+  /** Pen pressure 0–1 (1 for a mouse or touch). */
+  pressure: number;
 }
 
 export interface ViewRect {
@@ -34,6 +38,19 @@ export type SelectionPreview =
   /** The current selection outline being dragged to a new place. */
   | { kind: 'move'; dx: number; dy: number };
 
+/** A brush/eraser stroke in progress (see app/paint-session.ts). */
+export interface PaintStroke {
+  add(dabs: Dab[]): void;
+  /** Ends the stroke (one History step); `points` are its pointer samples, for Actions. */
+  end(points: StrokePoint[]): Promise<void>;
+  cancel(): Promise<void>;
+}
+
+/** Starts strokes on the active layer; null (after telling the user why) when it cannot be painted. */
+export interface PaintHost {
+  begin(tool: PaintTool, brush: BrushSettings): PaintStroke | null;
+}
+
 export interface ToolContext {
   readonly viewport: Viewport;
   readonly document: ImageDocument | null;
@@ -47,6 +64,10 @@ export interface ToolContext {
   setSelectionPreview(preview: SelectionPreview | null): void;
   /** Runs a document command through the History (problems are reported to the user). */
   execute(descriptor: CommandDescriptor): void;
+  /** Painting (Brush, Eraser); null where painting is not set up (e.g. in tests). */
+  readonly paint: PaintHost | null;
+  /** Shows the brush outline at a document point (diameter in document px), or hides it. */
+  setBrushOutline(outline: { x: number; y: number; size: number } | null): void;
 }
 
 /** Modifier and drag state that decides a tool's cursor. */
@@ -67,6 +88,8 @@ export interface Tool {
   onPointerUp?(e: ToolPointerEvent, ctx: ToolContext): void;
   /** Pointer moves while no button is pressed (e.g. the polygonal lasso's next segment). */
   onPointerHover?(e: ToolPointerEvent, ctx: ToolContext): void;
+  /** The pointer left the canvas. */
+  onPointerLeave?(ctx: ToolContext): void;
   /** A key pressed over the canvas (Enter, Escape, Backspace…); true when the tool used it. */
   onKeyDown?(key: string, ctx: ToolContext): boolean;
   /** True while the tool is in the middle of something spanning several clicks. */

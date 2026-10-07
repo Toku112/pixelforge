@@ -350,3 +350,24 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   with the full picker (Part B).
 - The modal dialog frame no longer refocuses its first field on every re-render (it did so whenever a dialog's state
   changed); it keeps the latest cancel handler in a ref instead.
+
+## D-028 — 2026-10-07 — Brush and Eraser
+
+**Decision:**
+
+- Strokes are painted live in the pixel worker: the tool turns pointer samples into dabs (spacing × diameter apart,
+  carried over between pointer events), the paint session prepares the tiles they reach (copy-on-write, undo
+  capture) and sends one batch at a time while later dabs queue, so painting never lags the pointer by more than a
+  batch. The stroke then becomes one History step ("Brush Tool" / "Eraser") holding only the changed tiles; its
+  descriptor (pointer samples, settings, colour samples) repaints it identically when replayed.
+- Opacity caps a stroke and Flow builds up within it: per pixel the stroke keeps a coverage c ← c + (1 − c)·flow·
+  profile, and the pixel is recomputed from its value before the stroke with coverage × opacity × selection. So a
+  stroke crossing itself never exceeds Opacity, as in the reference app.
+- Dab profile: hardness is the solid share of the radius; the rest fades with a smoothstep, with at least a
+  one-pixel anti-aliased edge. (The reference app's exact soft-brush curve is not published.)
+- Pen pressure scales size and/or opacity only when the options-bar toggles are on (off by default, as in the
+  reference app's options bar).
+- Number keys set the tool's opacity (Shift: flow) with the Brush/Eraser, and the selected layers' opacity
+  (Shift: fill) with other tools; two digits within 0.4 s make one value.
+- Undo/redo and Delete wait while a stroke or a polygonal lasso is in progress.
+- `Workspace.whenIdle()` also waits for strokes being finished (used by tests).
