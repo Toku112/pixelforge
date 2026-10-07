@@ -1,4 +1,4 @@
-//! Image codecs compiled to WebAssembly: PNG, JPEG and WebP decoding, PNG encoding.
+//! Image codecs compiled to WebAssembly: PNG, JPEG and WebP decoding; PNG, JPEG and lossless WebP encoding.
 //!
 //! Decoders produce interleaved samples with straight alpha: 1–4 channels (gray,
 //! gray+alpha, RGB, RGBA) at 8 or 16 bits, plus the embedded ICC profile and the
@@ -10,7 +10,9 @@ use std::borrow::Cow;
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
+mod jpeg_encode;
 mod orientation;
+pub use jpeg_encode::{JpegMode, JpegOptions, encode_jpeg};
 pub use orientation::{apply_orientation, exif_orientation};
 
 /// Refuse images whose decoded size would not fit comfortably in WebAssembly memory.
@@ -159,6 +161,30 @@ pub fn decode_png(bytes: &[u8]) -> Result<Decoded, CodecError> {
     })
 }
 
+/// The resolution in a JPEG's JFIF (APP0) segment, in pixels per inch (zune-jpeg does not read it).
+pub fn jfif_density(bytes: &[u8]) -> Option<(f64, f64)> {
+    let mut i = 2; // after SOI
+    while i + 4 <= bytes.len() && bytes[i] == 0xFF {
+        let marker = bytes[i + 1];
+        if marker == 0xDA || marker == 0xD9 {
+            break; // image data or end: no more headers
+        }
+        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
+        let seg = bytes.get(i + 4..i + 2 + len)?;
+        if marker == 0xE0 && seg.len() >= 12 && &seg[0..5] == b"JFIF\0" {
+            let x = u16::from_be_bytes([seg[8], seg[9]]) as f64;
+            let y = u16::from_be_bytes([seg[10], seg[11]]) as f64;
+            return match seg[7] {
+                1 if x > 0.0 && y > 0.0 => Some((x, y)),
+                2 if x > 0.0 && y > 0.0 => Some((x * 2.54, y * 2.54)),
+                _ => None,
+            };
+        }
+        i += 2 + len;
+    }
+    None
+}
+
 pub fn decode_jpeg(bytes: &[u8]) -> Result<Decoded, CodecError> {
     use zune_core::colorspace::ColorSpace;
     use zune_core::options::DecoderOptions;
@@ -188,14 +214,7 @@ pub fn decode_jpeg(bytes: &[u8]) -> Result<Decoded, CodecError> {
     check_size(width as u32, height as u32, channels)?;
     decoder.set_options(options.jpeg_set_out_colorspace(out));
     let pixels = decoder.decode().map_err(|e| err(format!("Invalid JPEG: {e:?}")))?;
-    let info = decoder.info().ok_or_else(|| err("Invalid JPEG: missing header"))?;
-    let ppi = match info.pixel_density {
-        1 if info.x_density > 0 && info.y_density > 0 => Some((info.x_density as f64, info.y_density as f64)),
-        2 if info.x_density > 0 && info.y_density > 0 => {
-            Some((info.x_density as f64 * 2.54, info.y_density as f64 * 2.54))
-        }
-        _ => None,
-    };
+    let ppi = jfif_density(bytes);
     let orientation = decoder.exif().map(|e| exif_orientation(e)).unwrap_or(1);
     let (pixels, w, h) = apply_orientation(pixels, width as u32, height as u32, channels, orientation);
     Ok(Decoded {
@@ -446,6 +465,82 @@ pub fn js_encode_png16(
         icc_profile,
         compression,
     )
+}
+
+/// Encodes 8-bit samples (1–4 channels) as a lossless WebP, with an optional ICC profile.
+pub fn encode_webp_lossless(
+    samples: &[u8],
+    width: u32,
+    height: u32,
+    channels: u8,
+    icc_profile: Option<&[u8]>,
+) -> Result<Vec<u8>, CodecError> {
+    let color = match channels {
+        1 => image_webp::ColorType::L8,
+        2 => image_webp::ColorType::La8,
+        3 => image_webp::ColorType::Rgb8,
+        4 => image_webp::ColorType::Rgba8,
+        n => return Err(err(format!("WebP cannot store {n} channels"))),
+    };
+    if width == 0 || height == 0 || width > 16383 || height > 16383 {
+        return Err(err("WebP images must be 1 to 16383 pixels wide and high"));
+    }
+    if samples.len() != width as usize * height as usize * channels as usize {
+        return Err(err("Wrong number of samples for the WebP image size"));
+    }
+    let mut out = Vec::new();
+    let mut encoder = image_webp::WebPEncoder::new(&mut out);
+    if let Some(icc) = icc_profile.filter(|p| !p.is_empty()) {
+        encoder.set_icc_profile(icc.to_vec());
+    }
+    encoder
+        .encode(samples, width, height, color)
+        .map_err(|e| err(e.to_string()))?;
+    Ok(out)
+}
+
+#[wasm_bindgen(js_name = encodeWebpLossless)]
+pub fn js_encode_webp_lossless(
+    data: Vec<u8>,
+    width: u32,
+    height: u32,
+    channels: u8,
+    icc_profile: Option<Vec<u8>>,
+) -> Result<Vec<u8>, JsError> {
+    encode_webp_lossless(&data, width, height, channels, icc_profile.as_deref()).map_err(|e| JsError::new(&e.0))
+}
+
+/// Encodes 8-bit gray or RGB samples as JPEG. `mode`: 0 baseline, 1 baseline optimised, 2 progressive.
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen(js_name = encodeJpeg)]
+pub fn js_encode_jpeg(
+    data: Vec<u8>,
+    width: u32,
+    height: u32,
+    channels: u8,
+    quality: u8,
+    subsample: bool,
+    mode: u8,
+    scans: u8,
+    ppi: f64,
+    icc_profile: Option<Vec<u8>>,
+) -> Result<Vec<u8>, JsError> {
+    let options = JpegOptions {
+        width,
+        height,
+        channels,
+        quality,
+        subsample,
+        mode: match mode {
+            0 => JpegMode::Baseline,
+            1 => JpegMode::Optimized,
+            _ => JpegMode::Progressive,
+        },
+        scans,
+        ppi: (ppi > 0.0).then_some(ppi),
+        icc_profile: icc_profile.as_deref(),
+    };
+    encode_jpeg(&data, &options).map_err(|e| JsError::new(&e.0))
 }
 
 #[cfg(test)]

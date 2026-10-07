@@ -1019,3 +1019,16 @@
 .reference-grid .anchor-cell {
   border-radius: 1px;
 }
+.dialog-fieldset {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+}
+.dialog-fieldset legend {
+  padding: 0 4px;
+}
+.dialog-fieldset .option-check {
+  display: flex;
+  margin: 4px 0;
+}

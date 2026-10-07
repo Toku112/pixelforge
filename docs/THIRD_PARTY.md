@@ -11,11 +11,14 @@ Every dependency and every ML model must be listed here with its licence (CLAUDE
 
 ## Shipped (runtime) — npm
 
-| Package   | Licence | Purpose                           |
-| --------- | ------- | --------------------------------- |
-| react     | MIT     | UI shell (panels, menus, dialogs) |
-| react-dom | MIT     | React DOM renderer                |
-| zustand   | MIT     | UI state stores                   |
+| Package   | Licence      | Purpose                                      |
+| --------- | ------------ | -------------------------------------------- |
+| react     | MIT          | UI shell (panels, menus, dialogs)            |
+| react-dom | MIT          | React DOM renderer                           |
+| zustand   | MIT          | UI state stores                              |
+| ag-psd    | MIT          | Reading and writing PSD/PSB files            |
+| pako      | MIT AND Zlib | Deflate for ag-psd (ZIP-compressed PSD data) |
+| base64-js | MIT          | Used by ag-psd                               |
 
 ## Build & test tooling — npm
 
@@ -52,7 +55,7 @@ Direct dependencies of the crates in `src/wasm/` (all compiled into the shipped 
 | wasm-bindgen-rayon   | Apache-2.0                | Runs the rayon pool on Web Workers (threaded build only); its `workerHelpers.js` is bundled with its licence header intact |
 | png                  | MIT OR Apache-2.0         | PNG decoding and encoding (`codecs` crate)                                                                                 |
 | zune-jpeg, zune-core | MIT OR Apache-2.0 OR Zlib | JPEG decoding (`codecs` crate)                                                                                             |
-| image-webp           | MIT OR Apache-2.0         | WebP decoding (`codecs` crate)                                                                                             |
+| image-webp           | MIT OR Apache-2.0         | WebP decoding and lossless encoding (`codecs` crate)                                                                       |
 
 Transitive crates (checked automatically by `pnpm check:licenses`): adler2, bitflags, byteorder-lite (MIT OR
 Unlicense), crc32fast, fdeflate, flate2, miniz_oxide, quick-error, simd-adler32, bumpalo, cfg-if, crossbeam-\*, either,
@@ -62,6 +65,9 @@ wasm-bindgen-macro/-macro-support/-shared, wasm_sync, web-sys — all MIT and/or
 
 Build tools (not shipped): wasm-pack (MIT OR Apache-2.0) downloads `wasm-bindgen-cli` (MIT OR Apache-2.0) and
 binaryen's `wasm-opt` (Apache-2.0) into its own cache.
+
+JPEG encoding is our own code (`codecs/src/jpeg_encode.rs`, written from ITU-T T.81), so no JPEG encoder library is
+used. Lossy WebP is encoded by the browser's built-in encoder (owner-approved, D-034).
 
 ## ML models
 

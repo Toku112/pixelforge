@@ -5,24 +5,50 @@
 import type { ImageDocument } from '../core/document/document';
 
 export interface FileFormat {
-  readonly id: 'png' | 'jpeg' | 'webp';
+  readonly id: 'psd' | 'png' | 'jpeg' | 'webp';
   readonly name: string;
   readonly extensions: readonly string[];
   readonly mimeType: string;
   readonly canOpen: boolean;
+  /** Saving is available in this build (formats without an encoder yet are not offered). */
+  readonly canSave: boolean;
+  /** The format holds layers (others save a flattened copy). */
+  readonly keepsLayers: boolean;
   /** Why the document cannot be saved in this format, or null if it can. */
   saveRestriction(doc: ImageDocument): string | null;
 }
 
-const cannotSave = () => 'Saving in this format is not available yet';
+/** JPEG and WebP: 8-bit gray or RGB, flattened. */
+function flatRestriction(name: string, doc: ImageDocument): string | null {
+  if (doc.depth === 32) return `${name} cannot store 32-bit images; convert to 8 or 16 bits/channel first`;
+  if (doc.mode !== 'rgb' && doc.mode !== 'grayscale') return `${name} supports RGB and Grayscale images only`;
+  return null;
+}
 
 export const FORMATS: readonly FileFormat[] = [
+  {
+    id: 'psd',
+    name: 'PSD',
+    extensions: ['.psd', '.psb'],
+    // The registered PSD media type names the vendor (CLAUDE.md §1.1): pickers and downloads use the extensions.
+    mimeType: 'application/octet-stream',
+    canOpen: true,
+    canSave: true,
+    keepsLayers: true,
+    saveRestriction(doc) {
+      if (doc.mode !== 'rgb' || doc.depth !== 8)
+        return 'PSD files can be saved from 8-bit RGB documents for now (other modes and depths come later)';
+      return null;
+    },
+  },
   {
     id: 'png',
     name: 'PNG',
     extensions: ['.png'],
     mimeType: 'image/png',
     canOpen: true,
+    canSave: true,
+    keepsLayers: false,
     saveRestriction(doc) {
       if (doc.depth === 32) return 'PNG cannot store 32-bit images; convert to 8 or 16 bits/channel first';
       if (doc.mode !== 'rgb' && doc.mode !== 'grayscale') return 'PNG supports RGB and Grayscale images only';
@@ -35,7 +61,12 @@ export const FORMATS: readonly FileFormat[] = [
     extensions: ['.jpg', '.jpeg', '.jpe', '.jfif'],
     mimeType: 'image/jpeg',
     canOpen: true,
-    saveRestriction: cannotSave,
+    canSave: true,
+    keepsLayers: false,
+    saveRestriction(doc) {
+      if (doc.width > 65535 || doc.height > 65535) return 'JPEG images can be at most 65535 pixels wide and high';
+      return flatRestriction('JPEG', doc);
+    },
   },
   {
     id: 'webp',
@@ -43,7 +74,12 @@ export const FORMATS: readonly FileFormat[] = [
     extensions: ['.webp'],
     mimeType: 'image/webp',
     canOpen: true,
-    saveRestriction: cannotSave,
+    canSave: true,
+    keepsLayers: false,
+    saveRestriction(doc) {
+      if (doc.width > 16383 || doc.height > 16383) return 'WebP images can be at most 16383 pixels wide and high';
+      return flatRestriction('WebP', doc);
+    },
   },
 ];
 
@@ -51,6 +87,7 @@ export const FORMATS: readonly FileFormat[] = [
 export function detectFormat(bytes: Uint8Array): FileFormat | undefined {
   const starts = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
   if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return formatById('png');
+  if (starts([0x38, 0x42, 0x50, 0x53])) return formatById('psd'); // "8BPS"
   if (starts([0xff, 0xd8, 0xff])) return formatById('jpeg');
   if (
     starts([0x52, 0x49, 0x46, 0x46]) &&

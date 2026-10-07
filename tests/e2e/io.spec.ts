@@ -51,7 +51,7 @@ test('opens grayscale, 16-bit, palette, JPEG (with EXIF rotation) and WebP files
 });
 
 test('rejects files that are not images', async ({ page }) => {
-  expect(await page.evaluate(() => window.__io!.openGarbage())).toContain('is not a PNG, JPEG or WebP file');
+  expect(await page.evaluate(() => window.__io!.openGarbage())).toContain('is not a PSD, PNG, JPEG or WebP file');
 });
 
 test('Save As PNG round-trips pixels, bit depth, transparency and resolution', async ({ page }) => {

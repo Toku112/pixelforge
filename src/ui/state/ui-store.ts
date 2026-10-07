@@ -6,6 +6,8 @@ import { create } from 'zustand';
 import type { RGB } from '../../core/color/color';
 import type { BlendMode, LayerBlendMode } from '../../core/document/layers';
 import type { ResampleMethod } from '../../core/geometry/layer-geometry';
+import type { JpegSaveOptions } from '../../io/jpeg-options';
+import type { WebpSaveOptions } from '../../io/webp-options';
 import type { ViewportState } from '../../engine/viewport/viewport';
 import { sanitizeLayout, type DockLayout } from '../dock/dock-model';
 import { essentialsLayout } from '../dock/workspaces';
@@ -52,7 +54,42 @@ export type DialogRequest =
   | { kind: 'color-picker'; title: string; color: RGB; resolve: (color: RGB | null) => void }
   | ({ kind: 'fill'; resolve: (result: FillResult | null) => void } & FillRequest)
   | ({ kind: 'image-size'; resolve: (result: ImageSizeResult | null) => void } & SizeRequest)
-  | ({ kind: 'canvas-size'; resolve: (result: CanvasSizeResult | null) => void } & CanvasSizeRequest);
+  | ({ kind: 'canvas-size'; resolve: (result: CanvasSizeResult | null) => void } & CanvasSizeRequest)
+  | ({ kind: 'save-as'; resolve: (result: SaveAsResult | null) => void } & SaveAsRequest)
+  | ({ kind: 'jpeg-options'; resolve: (result: JpegSaveOptions | null) => void } & JpegOptionsRequest)
+  | ({ kind: 'webp-options'; resolve: (result: WebpSaveOptions | null) => void } & WebpOptionsRequest);
+
+export interface WebpOptionsRequest {
+  options: WebpSaveOptions;
+  /** The browser can encode lossy WebP. */
+  lossySupported: boolean;
+  /** The file size these options would give, in bytes. */
+  estimate: (options: WebpSaveOptions) => Promise<number>;
+}
+
+export interface JpegOptionsRequest {
+  options: JpegSaveOptions;
+  /** Offer the matte colour (the image has transparent areas). */
+  hasTransparency: boolean;
+  foreground: RGB;
+  background: RGB;
+  /** The file size these options would give, in bytes. */
+  estimate: (options: JpegSaveOptions) => Promise<number>;
+}
+
+export interface SaveAsRequest {
+  /** Suggested file name, without extension. */
+  name: string;
+  formats: { id: string; label: string; restriction: string | null; keepsLayers: boolean }[];
+  format: string;
+  /** The image has more than one layer (flat formats save a flattened copy). */
+  layered: boolean;
+}
+
+export interface SaveAsResult {
+  name: string;
+  format: string;
+}
 
 /** The document's current size, for Image Size and Canvas Size. */
 export interface SizeRequest {

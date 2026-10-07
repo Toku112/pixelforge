@@ -221,3 +221,128 @@ fn reads_exif_orientation_in_both_byte_orders() {
     assert_eq!(exif_orientation(b"garbage"), 1);
     assert_eq!(exif_orientation(&[]), 1);
 }
+
+/// A smooth colour image with some sharp detail (odd size, to test edge padding).
+fn photo(w: usize, h: usize, channels: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(w * h * channels);
+    for y in 0..h {
+        for x in 0..w {
+            let edge = if (x / 9 + y / 7) % 5 == 0 { 60 } else { 0 };
+            let px = [
+                ((x * 255) / w) as u8,
+                ((y * 255) / h) as u8,
+                (128 + edge - (x + y) % 40) as u8,
+            ];
+            out.extend_from_slice(&px[..channels.min(3)]);
+        }
+    }
+    out
+}
+
+fn psnr(a: &[u8], b: &[u8]) -> f64 {
+    let mse: f64 = a
+        .iter()
+        .zip(b)
+        .map(|(&x, &y)| (x as f64 - y as f64).powi(2))
+        .sum::<f64>()
+        / a.len() as f64;
+    10.0 * (255.0 * 255.0 / mse.max(1e-9)).log10()
+}
+
+fn jpeg_options(w: usize, h: usize, channels: u8, quality: u8, mode: JpegMode) -> JpegOptions<'static> {
+    JpegOptions {
+        width: w as u32,
+        height: h as u32,
+        channels,
+        quality,
+        subsample: false,
+        mode,
+        scans: 3,
+        ppi: Some(300.0),
+        icc_profile: None,
+    }
+}
+
+#[test]
+fn jpeg_round_trips_in_every_mode_and_channel_count() {
+    let (w, h) = (101, 67);
+    for channels in [1u8, 3] {
+        let img = photo(w, h, channels as usize);
+        let mut sizes = Vec::new();
+        for mode in [JpegMode::Baseline, JpegMode::Optimized, JpegMode::Progressive] {
+            for scans in [3u8, 4, 5] {
+                if mode != JpegMode::Progressive && scans > 3 {
+                    continue;
+                }
+                let options = JpegOptions {
+                    scans,
+                    ..jpeg_options(w, h, channels, 92, mode)
+                };
+                let bytes = encode_jpeg(&img, &options).unwrap();
+                let decoded = decode(&bytes).unwrap();
+                assert_eq!((decoded.width, decoded.height), (w as u32, h as u32));
+                assert_eq!(decoded.channels, channels);
+                assert_eq!(decoded.ppi, Some((300.0, 300.0)));
+                let Samples::U8(out) = decoded.samples else {
+                    panic!("8-bit expected")
+                };
+                let quality = psnr(&img, &out);
+                assert!(quality > 36.0, "{mode:?} {channels}ch {scans} scans: PSNR {quality:.1}");
+                if scans == 3 {
+                    sizes.push(bytes.len());
+                }
+            }
+        }
+        assert!(sizes[1] < sizes[0], "optimised tables make smaller files: {sizes:?}");
+    }
+}
+
+#[test]
+fn jpeg_quality_subsampling_and_icc() {
+    let (w, h) = (64, 48);
+    let img = photo(w, h, 3);
+    let low = encode_jpeg(&img, &jpeg_options(w, h, 3, 10, JpegMode::Optimized)).unwrap();
+    let high = encode_jpeg(&img, &jpeg_options(w, h, 3, 100, JpegMode::Optimized)).unwrap();
+    assert!(low.len() < high.len());
+    let decoded_high = decode(&high).unwrap();
+    let Samples::U8(out) = decoded_high.samples else {
+        panic!()
+    };
+    assert!(psnr(&img, &out) > 45.0);
+    let subsampled = JpegOptions {
+        subsample: true,
+        ..jpeg_options(w, h, 3, 90, JpegMode::Baseline)
+    };
+    let profile = vec![7u8; 70_000]; // needs two ICC chunks
+    let with_icc = JpegOptions {
+        icc_profile: Some(&profile),
+        ..subsampled
+    };
+    let bytes = encode_jpeg(&img, &with_icc).unwrap();
+    let decoded = decode(&bytes).unwrap();
+    assert_eq!(decoded.icc_profile.as_deref(), Some(profile.as_slice()));
+    let Samples::U8(out) = decoded.samples else { panic!() };
+    assert!(psnr(&img, &out) > 30.0);
+    assert!(encode_jpeg(&img[1..], &jpeg_options(w, h, 3, 90, JpegMode::Baseline)).is_err());
+}
+
+#[test]
+fn webp_lossless_round_trips_with_icc() {
+    let (w, h) = (37, 23);
+    for channels in [1u8, 2, 3, 4] {
+        let img: Vec<u8> = (0..w * h * channels as usize).map(|i| (i * 31 % 251) as u8).collect();
+        let profile = vec![3u8; 500];
+        let bytes = encode_webp_lossless(&img, w as u32, h as u32, channels, Some(&profile)).unwrap();
+        let decoded = decode(&bytes).unwrap();
+        assert_eq!((decoded.width, decoded.height), (w as u32, h as u32));
+        assert_eq!(decoded.icc_profile.as_deref(), Some(profile.as_slice()));
+        let Samples::U8(out) = decoded.samples else { panic!() };
+        // WebP has no gray: gray comes back as RGB(A) with equal channels.
+        let expect: Vec<u8> = match channels {
+            1 => img.iter().flat_map(|&v| [v, v, v]).collect(),
+            2 => img.chunks(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+            _ => img.clone(),
+        };
+        assert_eq!(out, expect, "{channels} channels");
+    }
+}

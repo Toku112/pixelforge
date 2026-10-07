@@ -5,6 +5,8 @@
 import { TILE_PIXELS, TILE_SIZE } from '../core/document/tile';
 import { compositeToSamples, flatten, isOpaque, type FlattenPlan } from '../core/composite/flatten';
 import init, * as codecs from '../wasm/pkg/codecs-st/codecs.js';
+import { withIccProfile } from '../io/webp-riff';
+import { readPsdFile, writePsdFile, type PsdFileData, type PsdNode, type PsdSaveData } from '../io/psd-format';
 import { exposeApi, transfer } from './rpc';
 
 const ready = init();
@@ -127,6 +129,161 @@ const api = {
   },
 };
 
-export type CodecWorkerApi = typeof api;
+function psdTileBuffers(nodes: PsdNode[]): ArrayBuffer[] {
+  return nodes.flatMap((n) =>
+    n.kind === 'group'
+      ? psdTileBuffers(n.children)
+      : n.tiles.filter((t) => !(t.data.buffer instanceof SharedArrayBuffer)).map((t) => t.data.buffer as ArrayBuffer),
+  );
+}
+
+const psd = {
+  /** Reads a PSD/PSB file into layer data with tiles (see io/psd-format.ts). */
+  readPsd(bytes: Uint8Array, options: { shared: boolean }): PsdFileData {
+    const data = readPsdFile(bytes, options.shared);
+    return transfer(data, psdTileBuffers(data.layers));
+  },
+
+  /** Writes an 8-bit RGB PSD with layers and a flattened composite of `plan`. */
+  writePsd(data: PsdSaveData, plan: FlattenPlan): Uint8Array {
+    const composite = flatten(plan);
+    const samples = compositeToSamples(composite, 8, true) as Uint8Array;
+    const bytes = writePsdFile(data, {
+      width: plan.width,
+      height: plan.height,
+      data: new Uint8ClampedArray(samples.buffer, samples.byteOffset, samples.byteLength),
+    });
+    return transfer(bytes, [bytes.buffer as ArrayBuffer]);
+  },
+};
+Object.assign(api, psd);
+
+/** Replaces transparency with `matte` (colour 0–1): the composite becomes opaque. */
+function overMatte(composite: { colorChannels: number; data: Float32Array }, matte: readonly number[]): void {
+  const cc = composite.colorChannels;
+  const stride = cc + 1;
+  const d = composite.data;
+  for (let i = 0; i < d.length; i += stride) {
+    const a = d[i + cc]!;
+    if (a >= 1) continue;
+    for (let c = 0; c < cc; c++) d[i + c] = d[i + c]! + (matte[c] ?? 1) * (1 - a);
+    d[i + cc] = 1;
+  }
+}
+
+/** Flat formats hold 8-bit gray or RGB. */
+function checkFlat(plan: FlattenPlan, format: string): void {
+  if (plan.depth === 32) throw new Error(`${format} cannot store 32-bit images`);
+  if (plan.colorChannels !== 1 && plan.colorChannels !== 3)
+    throw new Error(`${format} supports RGB and Grayscale images only`);
+}
+
+const lossy = {
+  /** Flattens over `matte` and encodes a JPEG (see io/jpeg-options.ts for the settings). */
+  async flattenToJpeg(
+    plan: FlattenPlan,
+    options: {
+      quality: number;
+      subsample: boolean;
+      mode: number;
+      scans: number;
+      matte: number[];
+      ppi: number;
+      iccProfile: Uint8Array | null;
+    },
+  ): Promise<Uint8Array> {
+    await ready;
+    checkFlat(plan, 'JPEG');
+    const composite = flatten(plan);
+    overMatte(composite, options.matte);
+    const samples = compositeToSamples(composite, 8, false) as Uint8Array;
+    const jpeg = codecs.encodeJpeg(
+      samples,
+      plan.width,
+      plan.height,
+      plan.colorChannels,
+      options.quality,
+      options.subsample,
+      options.mode,
+      options.scans,
+      options.ppi,
+      options.iccProfile ?? undefined,
+    );
+    return transfer(jpeg, [jpeg.buffer as ArrayBuffer]);
+  },
+
+  /** Flattens and encodes a lossless WebP (alpha only if the image has transparency). */
+  async flattenToWebpLossless(plan: FlattenPlan, options: { iccProfile: Uint8Array | null }): Promise<Uint8Array> {
+    await ready;
+    checkFlat(plan, 'WebP');
+    const composite = flatten(plan);
+    const alpha = !isOpaque(composite);
+    const samples = compositeToSamples(composite, 8, alpha) as Uint8Array;
+    const webp = codecs.encodeWebpLossless(
+      samples,
+      plan.width,
+      plan.height,
+      plan.colorChannels + (alpha ? 1 : 0),
+      options.iccProfile ?? undefined,
+    );
+    return transfer(webp, [webp.buffer as ArrayBuffer]);
+  },
+};
+Object.assign(api, lossy);
+
+/** Whether the browser can encode lossy WebP (Chromium and Firefox can; Safari makes PNG instead). */
+async function browserEncodesWebp(): Promise<boolean> {
+  if (typeof OffscreenCanvas === 'undefined') return false;
+  try {
+    const canvas = new OffscreenCanvas(1, 1);
+    canvas.getContext('2d');
+    const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.5 });
+    return blob.type === 'image/webp';
+  } catch {
+    return false;
+  }
+}
+let webpSupport: Promise<boolean> | null = null;
+
+const browserWebp = {
+  canEncodeLossyWebp(): Promise<boolean> {
+    return (webpSupport ??= browserEncodesWebp());
+  },
+
+  /**
+   * Flattens and encodes a lossy WebP with the browser's encoder (`quality` 0–1),
+   * then embeds the ICC profile (the browser writes none).
+   */
+  async flattenToWebpLossy(
+    plan: FlattenPlan,
+    options: { quality: number; iccProfile: Uint8Array | null },
+  ): Promise<Uint8Array> {
+    if (!(await browserWebp.canEncodeLossyWebp())) throw new Error('This browser cannot make lossy WebP files');
+    checkFlat(plan, 'WebP');
+    const composite = flatten(plan);
+    const samples = compositeToSamples(composite, 8, true) as Uint8Array;
+    const { width, height } = plan;
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    if (plan.colorChannels === 1) {
+      for (let p = 0; p < width * height; p++) {
+        const v = samples[p * 2]!;
+        rgba.set([v, v, v, samples[p * 2 + 1]!], p * 4);
+      }
+    } else {
+      rgba.set(samples);
+    }
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d', { colorSpace: 'srgb' })!;
+    ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
+    const blob = await canvas.convertToBlob({ type: 'image/webp', quality: options.quality });
+    let bytes: Uint8Array = new Uint8Array(await blob.arrayBuffer());
+    if (options.iccProfile && options.iccProfile.length > 0)
+      bytes = withIccProfile(bytes, options.iccProfile, width, height);
+    return transfer(bytes, [bytes.buffer as ArrayBuffer]);
+  },
+};
+Object.assign(api, browserWebp);
+
+export type CodecWorkerApi = typeof api & typeof psd & typeof lossy & typeof browserWebp;
 
 exposeApi(api);

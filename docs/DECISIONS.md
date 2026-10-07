@@ -457,3 +457,31 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   Edit > Transform's Rotate 90°/Flip, transforming several layers' selections at once.
 - Fix: turning the Background into a normal layer (Layer from Background, duplicating it) carried the white past the
   canvas edge (inside its tiles) as visible pixels; that area is now transparent.
+
+## D-033 — 2026-10-07 — Save As with formats; PSD via ag-psd
+
+**Decision:**
+
+- File > Save As asks for a name and a format (PSD, PNG, JPEG, WebP), then the browser's save dialog (or a download).
+  Formats the image cannot be saved in are listed with the reason and cannot be chosen; a layered image saved in a
+  flat format becomes a flattened copy (the dialog says so). The suggestion is the file's own format when it keeps
+  everything, else PSD. Save (Ctrl/Cmd+S) writes in place when nothing would be lost (a PSD, or a flat image in its
+  own format) and otherwise opens Save As. The format list says "PSD", never the vendor's product name.
+- PSD reading and writing run in the codec worker through ag-psd, with plain pixel arrays (no canvas, which would
+  premultiply alpha). The Background is recognised as described in FORMAT_NOTES §7.1. Features we cannot hold yet are
+  simplified on opening and the user is told which ("Opened … with simplifications").
+- Saving PSD is limited to 8-bit RGB documents until our own codec (Phase 7): ag-psd writes 8-bit RGB only.
+
+## D-034 — 2026-10-07 — JPEG and WebP encoders (WebP lossy approach owner-approved)
+
+**Context:** The Rust JPEG encoder crate carries the IJG licence (outside our allowlist, D-016) and there is no
+pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain (D-002).
+**Decision:**
+
+- JPEG: our own encoder in the `codecs` crate, written from ITU-T T.81 (AAN floating-point DCT, standard tables,
+  optimal Huffman tables, progressive by spectral selection). Options as in the reference app: quality 0–12 with
+  presets, Baseline / Baseline Optimized / Progressive (3–5 scans), matte for transparency; settings remembered.
+- WebP: lossless with image-webp (already a dependency). Lossy with the browser's built-in encoder (Chromium,
+  Firefox); Safari offers lossless only. Approved by the owner on 2026-10-07 ("Use the browser's encoder"); a compiled
+  libwebp can replace it when Phase 7 brings the C toolchain.
+- Both option dialogs show the estimated file size, encoded in the worker a moment after each change.

@@ -201,8 +201,11 @@ test('Save As writes a PNG and clears the unsaved marker', async ({ page }) => {
   await openFile(page, 'rgba8.png');
   await page.keyboard.press('ControlOrMeta+I');
   await expect(page.getByRole('tab', { name: /\*\)/ })).toBeVisible();
-  const download = page.waitForEvent('download');
   await page.keyboard.press('ControlOrMeta+Shift+S');
+  const dialog = page.getByRole('dialog', { name: 'Save As' });
+  await expect(dialog.getByLabel('Format')).toHaveValue('png'); // a flat PNG stays a PNG
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Save' }).click();
   expect((await download).suggestedFilename()).toBe('rgba8.png');
   await expect(page.getByRole('tab', { name: /^rgba8\.png @ .*\(RGB\/8\)$/ })).toBeVisible();
 });

@@ -11,8 +11,8 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D items 1–11 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool, crop/canvas size/image size/rotation, Free Transform)
-- Next up: Part D item 12 (Save As JPEG and WebP with options; basic PSD open/save via ag-psd)
+- Last completed: Part D items 1–12 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool, crop/canvas size/image size/rotation, Free Transform, Save As JPEG/WebP and basic PSD)
+- Next up: Part D item 13 (Phase 1 exit test: automated PSD round trip, then the owner's check with real Photoshop)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -144,6 +144,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Open, Open As, Open as Smart Object, Open Recent, Browse (web-alt: file picker + drag-and-drop + recent list)
 - [ ] Close, Close All, Close Others, Close and Go to Home
 - [ ] Save, Save As, Save a Copy, Revert (File System Access API for save-in-place; download fallback)
+  ↳ partial: Save (in place when nothing would be lost) and Save As (name, format, options; download fallback) work (D-033). Missing: Save a Copy, Revert.
 - [ ] Version History / autosave & crash recovery (OPFS journal)
 - [ ] Export: Quick Export as PNG, Export As (multiple sizes/suffixes, format, quality, metadata, colour space, canvas size, preview), Export Preferences
 - [ ] Export: Save for Web (Legacy) dialog — 2-up/4-up, optimisation per format, colour table, image size, preview in browser
@@ -524,6 +525,13 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 | Video (MP4/MOV/WebM) | [ ] | [ ] | Via WebCodecs |
 | ABR, PAT, GRD, ASL, CSH, ASE, ACO, ACT, ATN, CUBE/3DL, XMP presets | [ ] | [ ] (own formats + ASE/ACO/CUBE) | Import user-owned preset files |
 
+Progress notes (Phase 1):
+
+- PSD ↳ partial: open 8/16/32-bit RGB/Grayscale with layers, groups, properties, locks and the Background (masks, clipping, styles, text/smart-object editability and adjustment layers simplified, D-033); save 8-bit RGB with layers. Missing: everything else listed in the row (our own codec, Phase 7).
+- JPEG ↳ partial: read (RGB/Gray, ICC, JFIF resolution, EXIF orientation) and write (quality 0–12, baseline/optimised/progressive, matte, ICC, resolution) work; missing: CMYK, EXIF/XMP metadata, the canvas preview of compression.
+- PNG ↳ partial: read (all PNG types, 8/16-bit, ICC, resolution) and write (8/16-bit, alpha when needed, ICC, resolution, compression level) work; missing: interlaced writing, a PNG options dialog.
+- WebP ↳ partial: read (lossy/lossless, alpha, ICC) and write (lossless everywhere; lossy where the browser encodes it — not Safari; ICC) work; missing: animated, metadata.
+
 ## B23. Retouching, compositing & photography commands
 
 - [ ] Content-aware algorithms in WASM: PatchMatch-based fill, healing (Poisson/gradient-domain), structure/colour adaptation
@@ -607,5 +615,6 @@ scope (all modes, masks, etc.) is complete.
   ↳ note: one snapshot-based command per change, pixel work in the worker with progress, 8/16/32-bit (D-031, FORMAT_NOTES §6); the view re-centres after a size change. Part B items above list what the full features still need (Crop tool straighten/overlays, Preserve Details, Arbitrary rotation, Trim, Reveal All).
 - [x] Free Transform (Ctrl/Cmd+T): scale, rotate, skew, distort, perspective, numeric fields, reference point, interpolation
   ↳ note: layers (GPU live preview) and selected pixels (the selection moves too), proportional by default, 8/16/32-bit (D-032, FORMAT_NOTES §6.1). Ctrl/Cmd+T is browser-reserved in a normal tab (KNOWN_GAPS); the Edit menu works everywhere. Undo inside an open box, Warp and Transform Again are Part B.
-- [ ] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd
+- [x] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd
+  ↳ note: Save As dialog with formats, JPEG Options (our own encoder: quality 0–12, baseline/optimised/progressive, matte, ICC, resolution), WebP Options (lossless ours; lossy via the browser's encoder, not in Safari), PSD open (8/16/32-bit RGB/Gray, groups, locks, Background; simplified features listed) and save (8-bit RGB) (D-033, D-034, FORMAT_NOTES §7).
 - [ ] Phase 1 exit test: edit a layered composition and round-trip it as PSD (automated), plus owner check with real Photoshop

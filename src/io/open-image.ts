@@ -11,6 +11,7 @@ import { ImageDocument } from '../core/document/document';
 import { adoptTile, type TileMemory } from '../core/document/tile';
 import type { CodecWorkerClient } from '../workers/codec-client';
 import { detectFormat } from './formats';
+import { openPsd, type OpenedDocument } from './psd';
 
 export interface OpenOptions {
   memory: TileMemory;
@@ -27,9 +28,10 @@ export async function openImage(
   fileName: string,
   codec: CodecWorkerClient,
   options: OpenOptions,
-): Promise<ImageDocument> {
+): Promise<OpenedDocument> {
   const format = detectFormat(bytes);
-  if (!format?.canOpen) throw new UnsupportedFileError(`“${fileName}” is not a PNG, JPEG or WebP file`);
+  if (!format?.canOpen) throw new UnsupportedFileError(`“${fileName}” is not a PSD, PNG, JPEG or WebP file`);
+  if (format.id === 'psd') return openPsd(bytes, fileName, codec, options);
   const decoded = await codec.decodeToTiles(bytes, { shared: options.shared });
   const gray = decoded.channels <= 2;
   const hasAlpha = decoded.channels === 2 || decoded.channels === 4;
@@ -48,5 +50,5 @@ export async function openImage(
     layer.buffer.setTile(t.tx, t.ty, adoptTile(t.data, layer.buffer.format, options.memory));
   doc.insertLayer(layer);
   doc.setActiveLayer(layer.id);
-  return doc;
+  return { doc, simplified: [] };
 }

@@ -6,11 +6,14 @@ import { TileStore } from '../../../src/engine/tiles/tile-store';
 import { installFileDrop } from '../../../src/io/drop';
 import { download, pickFiles, saveFileAs } from '../../../src/io/file-access';
 import { openAcceptTypes } from '../../../src/io/formats';
-import { openImage } from '../../../src/io/open-image';
+import { openImage as openFile } from '../../../src/io/open-image';
 import { encodeDocumentAsPng } from '../../../src/io/save-png';
 import { createCodecWorker } from '../../../src/workers/codec-client';
 import { createPixelWorker } from '../../../src/workers/pixel-client';
 import { createWorkerPixelOps } from '../../../src/workers/pixel-ops-client';
+
+/** Opens a file as a document (simplification notes are not needed here). */
+const openImage = async (...args: Parameters<typeof openFile>) => (await openFile(...args)).doc;
 
 const fixtureUrls = import.meta.glob<string>('../../fixtures/images/*', {
   query: '?url',
@@ -52,7 +55,7 @@ const harness = {
 
   async openGarbage() {
     try {
-      await openImage(new Uint8Array([1, 2, 3, 4]), 'notes.txt', codec, options);
+      await openFile(new Uint8Array([1, 2, 3, 4]), 'notes.txt', codec, options);
       return 'opened';
     } catch (e) {
       return (e as Error).message;

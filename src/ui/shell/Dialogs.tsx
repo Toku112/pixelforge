@@ -7,6 +7,9 @@ import { NumberField } from '../controls/NumberField';
 import { ColorPickerDialog } from './ColorPicker';
 import { FillDialog } from './FillDialog';
 import { Modal } from './Modal';
+import { JpegOptionsDialog } from './JpegOptionsDialog';
+import { SaveAsDialog } from './SaveAsDialog';
+import { WebpOptionsDialog } from './WebpOptionsDialog';
 import { CanvasSizeDialog, ImageSizeDialog } from './SizeDialogs';
 import { remember, useUi, type DialogRequest } from '../state/ui-store';
 
@@ -173,6 +176,12 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <ImageSizeDialog dialog={dialog} />;
     case 'canvas-size':
       return <CanvasSizeDialog dialog={dialog} />;
+    case 'save-as':
+      return <SaveAsDialog dialog={dialog} />;
+    case 'jpeg-options':
+      return <JpegOptionsDialog dialog={dialog} />;
+    case 'webp-options':
+      return <WebpOptionsDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (

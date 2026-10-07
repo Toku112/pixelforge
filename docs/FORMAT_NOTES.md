@@ -265,3 +265,39 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
   (negative when flipped), the angle of its top edge, and the horizontal skew; the vertical skew is the typed value.
 - With a selection, the selected pixels are lifted with their selection value (soft edges lift partly), and the
   selection itself is moved by the same transform (bilinear, so its edge stays smooth).
+
+## 7. Saving and opening files (Phase 1 formats)
+
+### 7.1 PSD / PSB (via ag-psd)
+
+- **Opening** keeps: canvas size, resolution (`ResolutionInfo`, px/in or px/cm), bit depth 8/16/32, RGB or Grayscale,
+  the layer tree (bottom → top) with names, visibility, opacity, fill opacity, blend modes (our ids are the PSD
+  names with hyphens; groups may be Pass Through), group open/closed state and locks (transparency, pixels,
+  position). Photoshop's 16-bit samples run 0–32768 and are scaled to our 0–65535.
+- **The Background** is recognised as the bottom layer at the root that covers the whole canvas, is fully opaque and
+  has locked transparency (or is named "Background"); it opens as our Background (no alpha).
+- **Simplified on opening** (listed to the user): layer/vector masks and clipping (ignored), layer styles (ignored),
+  text layers and smart objects (their stored pixels), adjustment and fill layers (left out). A file without layers
+  opens from its composite image.
+- **Saving** writes 8-bit RGB: each layer cropped to its visible pixels, RLE-compressed, the same properties, the
+  Background as a bottom layer without transparency (locked), and a flattened composite for apps that do not read
+  layers. ICC profiles are not written yet (KNOWN_GAPS).
+
+### 7.2 JPEG (our encoder)
+
+- Quality 0–12 maps to the usual 1–100 scale as 10, 18, 25, 32, 40, 50, 60, 70, 78, 85, 90, 95, 100; steps 0–6 also
+  halve the colour resolution (4:2:0), 7–12 keep it (4:4:4). Quantisation tables are the standard's examples scaled
+  by quality in the common way (`q < 50 ? 5000/q : 200 − 2q` percent).
+- Baseline uses the standard's example Huffman tables; Baseline Optimized builds tables for the image (T.81 Annex
+  K.2, at most 16-bit codes); Progressive sends DC first, then luminance detail in 2–4 bands (3–5 scans) and the
+  colour detail, with optimised tables per scan (spectral selection only).
+- Colour: RGB → YCbCr (JFIF/BT.601 full range); gray stays one component. Transparency is flattened over the matte
+  colour (white unless chosen). JFIF records the resolution in pixels per inch; the ICC profile is written in APP2
+  chunks. 16-bit images are written as 8-bit (JPEG holds 8 bits).
+- Opening JPEGs now reads the JFIF resolution (the decoder library skipped it).
+
+### 7.3 WebP
+
+- Lossless: our Rust encoder (image-webp), exact, alpha kept, ICC profile embedded.
+- Lossy (quality 0–100): the browser's encoder through an OffscreenCanvas in the codec worker; the ICC profile is then
+  added by rewriting the file into the extended format (VP8X + ICCP chunks). Safari cannot encode WebP: lossless only.

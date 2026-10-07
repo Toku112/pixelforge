@@ -56,13 +56,28 @@ import type {
   FillResult,
   ImageSizeResult,
   LayerOptionsRequest,
+  JpegOptionsRequest,
   LayerOptionsResult,
+  SaveAsRequest,
+  SaveAsResult,
+  WebpOptionsRequest,
   SizeRequest,
 } from '../ui/state/ui-store';
-import { formatById, openAcceptTypes, withExtension } from '../io/formats';
+import {
+  FORMATS,
+  formatById,
+  formatFromFileName,
+  openAcceptTypes,
+  withExtension,
+  type FileFormat,
+} from '../io/formats';
 import { pickFiles, saveFileAs, writeToHandle, type PickedFile } from '../io/file-access';
 import { openImage } from '../io/open-image';
 import { encodeDocumentAsPng } from '../io/save-png';
+import { encodeDocumentAsPsd } from '../io/psd';
+import { DEFAULT_JPEG_OPTIONS, type JpegSaveOptions } from '../io/jpeg-options';
+import { DEFAULT_WEBP_OPTIONS, type WebpSaveOptions } from '../io/webp-options';
+import { encodeDocumentAsJpeg, encodeDocumentAsWebp } from '../io/save-flat';
 
 export interface UiBridge {
   activeToolId(): string;
@@ -95,6 +110,12 @@ export interface UiBridge {
   imageSize(request: SizeRequest): Promise<ImageSizeResult | null>;
   /** The Canvas Size dialog; null when cancelled. */
   canvasSize(request: CanvasSizeRequest): Promise<CanvasSizeResult | null>;
+  /** The Save As dialog (name and format); null when cancelled. */
+  saveAs(request: SaveAsRequest): Promise<SaveAsResult | null>;
+  /** The JPEG Options dialog; null when cancelled. */
+  jpegOptions(request: JpegOptionsRequest): Promise<JpegSaveOptions | null>;
+  /** The WebP Options dialog; null when cancelled. */
+  webpOptions(request: WebpOptionsRequest): Promise<WebpSaveOptions | null>;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -505,39 +526,126 @@ export class AppController {
     const { codec, tileStore } = this.services;
     for (const file of files) {
       try {
-        const doc = await openImage(file.bytes, file.name, codec, { memory: tileStore, shared: tileStore.shared });
+        const { doc, simplified } = await openImage(file.bytes, file.name, codec, {
+          memory: tileStore,
+          shared: tileStore.shared,
+        });
         this.workspace.add(doc, file.handle ?? null);
+        if (simplified.length > 0)
+          await this.#ui.alert(
+            `Opened “${file.name}” with simplifications`,
+            `This file uses features this version cannot keep yet: ${simplified.join('; ')}. Saving over it would lose them.`,
+          );
       } catch (error) {
         await this.#ui.alert(`Could not open “${file.name}”`, error instanceof Error ? error.message : String(error));
       }
     }
   }
 
-  /** Saves in place when the document came from a PNG it can be written back to; otherwise Save As. */
+  #jpegOptions: JpegSaveOptions = DEFAULT_JPEG_OPTIONS;
+  #webpOptions: WebpSaveOptions = DEFAULT_WEBP_OPTIONS;
+
+  /**
+   * The document as a file of `format` (layers kept in PSD; other formats get a
+   * flattened copy). JPEG asks for its options first; null when that is cancelled.
+   */
+  async #encode(doc: ImageDocument, format: FileFormat): Promise<Uint8Array | null> {
+    const { codec } = this.services;
+    if (format.id === 'psd') return encodeDocumentAsPsd(doc, codec);
+    if (format.id === 'png') return encodeDocumentAsPng(doc, codec);
+    if (format.id === 'webp') {
+      const options = await this.#ui.webpOptions({
+        options: this.#webpOptions,
+        lossySupported: await codec.canEncodeLossyWebp(),
+        estimate: async (o) => (await encodeDocumentAsWebp(doc, codec, o)).byteLength,
+      });
+      if (!options) return null;
+      this.#webpOptions = options;
+      return encodeDocumentAsWebp(doc, codec, options);
+    }
+    const background = doc.background;
+    const options = await this.#ui.jpegOptions({
+      options: this.#jpegOptions,
+      hasTransparency: !(background?.visible && background.opacity >= 1 && background.blendMode === 'normal'),
+      foreground: this.colors.foreground,
+      background: this.colors.background,
+      estimate: async (o) => (await encodeDocumentAsJpeg(doc, codec, o)).byteLength,
+    });
+    if (!options) return null;
+    this.#jpegOptions = options; // remembered for next time, as the reference app does
+    return encodeDocumentAsJpeg(doc, codec, options);
+  }
+
+  /** A flat image (one pixel layer) loses nothing in formats without layers. */
+  #isFlat(doc: ImageDocument): boolean {
+    return doc.layerCount === 1 && doc.root.children[0]?.kind === 'pixel';
+  }
+
+  /**
+   * Saves in place when the document came from a file it can be written back to
+   * without losing anything (a PSD, or a flat image in its own format); otherwise Save As.
+   */
   async save(session: DocumentSession): Promise<boolean> {
-    const flat = session.doc.layerCount === 1 && session.doc.root.children[0]?.kind === 'pixel';
+    const handle = session.fileHandle;
+    const format = handle ? formatFromFileName(handle.name) : undefined;
     if (
-      session.fileHandle &&
-      flat &&
-      session.fileHandle.name.toLowerCase().endsWith('.png') &&
-      !formatById('png').saveRestriction(session.doc)
+      handle &&
+      format?.canSave &&
+      !format.saveRestriction(session.doc) &&
+      (format.keepsLayers || this.#isFlat(session.doc))
     ) {
-      await writeToHandle(session.fileHandle, await encodeDocumentAsPng(session.doc, this.services.codec));
-      this.workspace.markSaved(session, session.fileHandle);
+      const bytes = await this.#encode(session.doc, format);
+      if (!bytes) return false;
+      await writeToHandle(handle, bytes);
+      this.workspace.markSaved(session, handle);
       return true;
     }
     return this.saveAs(session);
   }
 
+  /** File > Save As: asks for a name and format, then where to save. */
   async saveAs(session: DocumentSession): Promise<boolean> {
-    const png = formatById('png');
-    const restriction = png.saveRestriction(session.doc);
-    if (restriction) {
-      await this.#ui.alert('Cannot save as PNG', restriction);
+    const doc = session.doc;
+    const formats = FORMATS.filter((f) => f.canSave);
+    const current = formatFromFileName(doc.name);
+    const usable = (f: FileFormat | undefined) => !!f?.canSave && !f.saveRestriction(doc);
+    // The document's own format when it keeps everything; else PSD (layers kept); else the first that works.
+    const suggested =
+      (usable(current) && (current!.keepsLayers || this.#isFlat(doc)) ? current : undefined) ??
+      (usable(formatById('psd')) ? formatById('psd') : formats.find(usable));
+    if (!suggested) {
+      await this.#ui.alert(
+        'Cannot save',
+        formats
+          .map((f) => f.saveRestriction(doc))
+          .filter(Boolean)
+          .join('\n'),
+      );
       return false;
     }
-    const bytes = await encodeDocumentAsPng(session.doc, this.services.codec);
-    const outcome = await saveFileAs(bytes, withExtension(session.doc.name, '.png'), png.mimeType, '.png', 'PNG image');
+    const choice = await this.#ui.saveAs({
+      name: withExtension(doc.name, ''),
+      formats: formats.map((f) => ({
+        id: f.id,
+        label: `${f.name} (${f.extensions.join(', ')})`,
+        restriction: f.saveRestriction(doc),
+        keepsLayers: f.keepsLayers,
+      })),
+      format: suggested.id,
+      layered: !this.#isFlat(doc),
+    });
+    if (!choice) return false;
+    const format = formatById(choice.format as FileFormat['id']);
+    const bytes = await this.#encode(doc, format);
+    if (!bytes) return false;
+    const extension = format.extensions[0]!;
+    const outcome = await saveFileAs(
+      bytes,
+      withExtension(choice.name, extension),
+      format.mimeType,
+      extension,
+      `${format.name} file`,
+    );
     if (outcome.kind === 'cancelled') return false;
     this.workspace.markSaved(session, outcome.kind === 'saved' ? outcome.handle : null, outcome.name);
     return true;
