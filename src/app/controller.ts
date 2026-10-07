@@ -7,6 +7,8 @@ import { APP_NAME } from './brand';
 import { BLEND_MODE_LABELS, availableBlendModes, blendModeMenu, cycleBlendMode } from '../core/composite/blend';
 import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
+import { colorToSamples, type RGB } from '../core/color/color';
+import { ColorSwatches } from './colors';
 import {
   CommandCancelledError,
   CommandUnavailableError,
@@ -57,6 +59,8 @@ export interface UiBridge {
   startRename(layerId: string): void;
   /** The tool a toolbar group currently shows (last used in it), if any. */
   groupTool(groupId: string): string | undefined;
+  /** The Color Picker; null when cancelled. */
+  pickColor(title: string, color: RGB): Promise<RGB | null>;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -77,6 +81,7 @@ export class AppController {
   readonly platform: Platform = detectPlatform();
   readonly keymap = new Keymap(this.platform);
   readonly tools: ToolSet = createTools();
+  readonly colors = new ColorSwatches();
   readonly keyboard: KeyboardService;
   readonly #ui: UiBridge;
   #canvas: CanvasView | null = null;
@@ -143,6 +148,26 @@ export class AppController {
     const current = cycle.includes(active) ? active : this.#groupCurrentTool(group.id);
     const i = cycle.indexOf(current ?? '');
     return cycle[(i + 1) % cycle.length];
+  }
+
+  /** Clicking a toolbar swatch: picks a new foreground or background colour. */
+  async pickColor(which: 'foreground' | 'background'): Promise<void> {
+    const title = which === 'foreground' ? 'Color Picker (Foreground Color)' : 'Color Picker (Background Color)';
+    const picked = await this.#ui.pickColor(title, this.colors[which]);
+    if (!picked) return;
+    if (which === 'foreground') this.colors.setForeground(picked);
+    else this.colors.setBackground(picked);
+  }
+
+  /** The background colour as samples of a document (undefined where colours cannot be converted yet). */
+  #backgroundSamples(): number[] | undefined {
+    const doc = this.workspace.active?.doc;
+    if (!doc) return undefined;
+    try {
+      return colorToSamples(this.colors.background, doc.mode, doc.depth);
+    } catch {
+      return undefined;
+    }
   }
 
   /** Runs a document command for a tool, reporting problems (cancelling is not one). */
@@ -408,10 +433,11 @@ export class AppController {
       id: 'edit.clear',
       label: 'Clear',
       enabled: () => !toolBusy() && (ws.active?.doc.selection ? ws.canExecute('clear') : ws.canExecute('deleteLayers')),
-      run: () =>
-        ws.active?.doc.selection
-          ? ws.execute({ name: 'clear', params: {} })
-          : ws.execute({ name: 'deleteLayers', params: {} }),
+      run: () => {
+        if (!ws.active?.doc.selection) return ws.execute({ name: 'deleteLayers', params: {} });
+        const color = this.#backgroundSamples();
+        return ws.execute({ name: 'clear', params: color ? { color } : {} });
+      },
     });
 
     // Image
@@ -421,6 +447,10 @@ export class AppController {
       enabled: () => ws.canExecute('invert'),
       run: () => ws.execute({ name: 'invert', params: {} }),
     });
+
+    // Colours
+    add({ id: 'color.default', label: 'Default Foreground and Background Colors', run: () => this.colors.reset() });
+    add({ id: 'color.swap', label: 'Switch Foreground and Background Colors', run: () => this.colors.swap() });
 
     // Select
     for (const [id, label, command] of [
@@ -575,8 +605,11 @@ export class AppController {
       id: 'layer.backgroundFromLayer',
       label: 'Background from Layer',
       enabled: () => ws.canExecute('backgroundFromLayer'),
-      // Transparency is filled with the background colour (white by default).
-      run: exec('backgroundFromLayer'),
+      // Transparency is filled with the background colour.
+      run: () => {
+        const color = this.#backgroundSamples();
+        return ws.execute({ name: 'backgroundFromLayer', params: color ? { color } : {} });
+      },
     });
     add({
       id: 'layer.hide',

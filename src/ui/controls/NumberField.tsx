@@ -28,6 +28,8 @@ export interface NumberFieldProps {
    */
   onPreview?: (value: number) => void;
   disabled?: boolean;
+  /** Name read by screen readers when the visible label is ambiguous (e.g. "B:" for Blue). */
+  ariaLabel?: string;
 }
 
 export function NumberField({
@@ -45,6 +47,7 @@ export function NumberField({
   hideLabel,
   onPreview,
   disabled = false,
+  ariaLabel,
 }: NumberFieldProps) {
   const format = (v: number) => `${Number(v.toFixed(precision))}${suffix}`;
   // Text being typed; null when not editing (the field then shows the current value).
@@ -126,7 +129,7 @@ export function NumberField({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={onKeyDown}
-        aria-label={label}
+        aria-label={ariaLabel ?? label}
       />
     </label>
   );

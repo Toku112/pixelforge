@@ -217,6 +217,19 @@ const icons = {
       <rect x="9.5" y="9.5" width="5" height="5" fill="currentColor" fillOpacity="0.5" stroke="none" />
     </Svg>
   ),
+  swapColors: (p: IconProps) => (
+    <Svg {...p} strokeWidth={2}>
+      <path d="M5 9a7 7 0 0 1 10-5" />
+      <path d="m13 2 2 2-2 2M19 15a7 7 0 0 1-10 5" />
+      <path d="m11 22-2-2 2-2" />
+    </Svg>
+  ),
+  defaultColors: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="9" y="9" width="11" height="11" fill="#fff" stroke="#000" />
+      <rect x="4" y="4" width="11" height="11" fill="#000" stroke="#fff" />
+    </Svg>
+  ),
   trash: (p: IconProps) => (
     <Svg {...p}>
       <path d="M4.5 6.5h15M9.5 6.5V4.5h5v2" />

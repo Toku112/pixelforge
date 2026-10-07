@@ -840,3 +840,131 @@
   height: 100%;
   background: var(--accent);
 }
+
+/* Foreground/background swatches (toolbar) */
+.color-swatches {
+  position: relative;
+  width: 34px;
+  height: 36px;
+  margin-top: 10px;
+  flex: none;
+}
+.swatch {
+  position: absolute;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 1px solid #000;
+  border-radius: 0;
+  box-shadow: 0 0 0 1px #8a8a8a inset;
+}
+.swatch-fg {
+  left: 2px;
+  top: 2px;
+  z-index: 1;
+}
+.swatch-bg {
+  left: 12px;
+  top: 12px;
+}
+.swatch:hover:not(:disabled) {
+  outline: 1px solid var(--accent);
+}
+.swatch-tool {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+}
+.swatch-swap {
+  right: 0;
+  top: 0;
+}
+.swatch-default {
+  left: 0;
+  bottom: 0;
+}
+
+/* Color Picker */
+.modal.color-picker {
+  width: min(560px, calc(100vw - 32px));
+}
+.picker-body {
+  display: flex;
+  gap: 12px;
+}
+.picker-field {
+  position: relative;
+  flex: none;
+  width: 256px;
+  height: 256px;
+  background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
+  border: 1px solid var(--border);
+  cursor: crosshair;
+  touch-action: none;
+}
+.picker-marker {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -6px 0 0 -6px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #000;
+  pointer-events: none;
+}
+.picker-hue {
+  position: relative;
+  flex: none;
+  width: 20px;
+  height: 256px;
+  background: linear-gradient(to bottom, #f00, #f0f, #00f, #0ff, #0f0, #ff0, #f00);
+  border: 1px solid var(--border);
+  cursor: ns-resize;
+  touch-action: none;
+}
+.picker-hue-marker {
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  height: 4px;
+  margin-top: -3px;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px #000;
+  pointer-events: none;
+}
+.picker-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.picker-swatches {
+  display: grid;
+  grid-template-columns: 60px;
+  justify-items: center;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.picker-swatch {
+  width: 60px;
+  height: 30px;
+  border: 1px solid var(--border);
+}
+.picker-fields {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 12px;
+}
+.picker-hex {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.picker-hex input {
+  width: 64px;
+  font-family: ui-monospace, monospace;
+}

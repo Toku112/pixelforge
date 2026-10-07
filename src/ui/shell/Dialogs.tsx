@@ -1,49 +1,12 @@
-/** Modal dialogs requested through the UI store (alerts, unsaved-changes prompt, About). */
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+/** Modal dialogs requested through the UI store (alerts, prompts, layer dialogs, Color Picker, About). */
+import { useState, type FormEvent } from 'react';
 import { APP_NAME } from '../../app/brand';
 import { BLEND_MODE_LABELS } from '../../core/composite/blend';
 import type { BlendMode } from '../../core/document/layers';
 import { NumberField } from '../controls/NumberField';
+import { ColorPickerDialog } from './ColorPicker';
+import { Modal } from './Modal';
 import { remember, useUi, type DialogRequest } from '../state/ui-store';
-
-function Modal({ title, children, onCancel }: { title: string; children: ReactNode; onCancel: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    el?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        onCancel();
-      } else if (e.key === 'Tab' && el) {
-        // Keep focus inside the dialog.
-        const focusable = [...el.querySelectorAll<HTMLElement>('button, [href], input, select')].filter(
-          (f) => !f.hasAttribute('disabled'),
-        );
-        const first = focusable[0];
-        const last = focusable.at(-1);
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onCancel]);
-  return (
-    <div className="modal-backdrop">
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" ref={ref}>
-        <h2 id="modal-title">{title}</h2>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 /** Blend-mode menu options, grouped like the reference app's menu (separators between families). */
 export function BlendModeOptions({ modes }: { modes: readonly BlendMode[] }) {
@@ -229,6 +192,8 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <DuplicateLayerDialog dialog={dialog} />;
     case 'confirm':
       return <ConfirmDialog dialog={dialog} />;
+    case 'color-picker':
+      return <ColorPickerDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (

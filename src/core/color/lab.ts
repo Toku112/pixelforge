@@ -46,3 +46,36 @@ export function linearSrgbToLab(r: number, g: number, b: number, out: Lab = { L:
   out.b = 200 * (fy - fz);
   return out;
 }
+
+/** Inverse of M (XYZ D50 → linear sRGB), computed once. */
+const M_INV = (() => {
+  const [a, b, c] = M[0];
+  const [d, e, f] = M[1];
+  const [g, h, i] = M[2];
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  return [
+    [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
+    [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
+    [(d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det],
+  ];
+})();
+
+function fInverse(t: number): number {
+  return t ** 3 > EPSILON ? t ** 3 : (116 * t - 16) / KAPPA;
+}
+
+/** Converts L*a*b* (D50) to linear-light sRGB (values outside 0–1 are out of the sRGB gamut). */
+export function labToLinearSrgb(lab: Lab): [number, number, number] {
+  const fy = (lab.L + 16) / 116;
+  const fx = fy + lab.a / 500;
+  const fz = fy - lab.b / 200;
+  const X = fInverse(fx) * D50_WHITE.X;
+  const Y = (lab.L > KAPPA * EPSILON ? fy ** 3 : lab.L / KAPPA) * D50_WHITE.Y;
+  const Z = fInverse(fz) * D50_WHITE.Z;
+  const m = M_INV;
+  return [
+    m[0]![0]! * X + m[0]![1]! * Y + m[0]![2]! * Z,
+    m[1]![0]! * X + m[1]![1]! * Y + m[1]![2]! * Z,
+    m[2]![0]! * X + m[2]![1]! * Y + m[2]![2]! * Z,
+  ];
+}

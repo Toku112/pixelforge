@@ -335,3 +335,18 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   still when the user prefers reduced motion.
 - Not in this item: Alt/Option temporarily switching the Lasso to straight segments (later, with the Magnetic Lasso in
   Phase 3), Select > Modify / Transform Selection (Phase 3), Hide Extras (View menu work).
+
+## D-027 — 2026-10-07 — Foreground/background colours and the Color Picker
+
+**Decision:**
+
+- The swatch colours belong to the app (not a document) and are sRGB until colour management (Phase 7). Converting
+  to a document: RGB as is (32-bit: linear light), Grayscale as the luma 0.299 R + 0.587 G + 0.114 B. Modes that need
+  ICC conversions (CMYK, Lab, …) use white where a background colour is needed, until Phase 7.
+- The Color Picker keeps hue, saturation and brightness as its state, so a grey or black keeps the hue it had; RGB,
+  L*a*b* (D50) and hex fields follow and can be edited; out-of-gamut Lab values are clipped to sRGB.
+- The picker's field always shows saturation × brightness for the current hue (the reference app's default);
+  choosing another component for the field, web-safe colours, gamut warnings, swatches and colour libraries come
+  with the full picker (Part B).
+- The modal dialog frame no longer refocuses its first field on every re-render (it did so whenever a dialog's state
+  changed); it keeps the latest cancel handler in a ref instead.
