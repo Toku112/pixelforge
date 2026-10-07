@@ -113,7 +113,10 @@ export class KeyboardService {
     const chord = chordFromEvent(e, this.#o.platform);
     if (!chord) return;
     const plain = !chord.mod && !chord.ctrl && !chord.alt;
-    if (isEditable(e.target) && (plain || (TEXT_EDITING_KEYS.has(chord.key) && !chord.alt))) return;
+    // In text fields, keys without Mod/Ctrl type text (Option/Alt + letter types accented
+    // characters on macOS), and the text-editing chords edit the field.
+    const typing = !chord.mod && !chord.ctrl;
+    if (isEditable(e.target) && (typing || (TEXT_EDITING_KEYS.has(chord.key) && !chord.alt))) return;
 
     if (plain && this.#handleToolKey(chord, e)) return;
 

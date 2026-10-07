@@ -1,6 +1,7 @@
 // Synthetic test documents for rendering tests (shared by harness pages).
 import { ImageDocument } from '../../../src/core/document/document';
-import type { PixelLayer } from '../../../src/core/document/layers';
+import { PixelLayer, type LayerBlendMode } from '../../../src/core/document/layers';
+import { TiledBuffer } from '../../../src/core/document/tiled-buffer';
 import type { BitDepth, ColorMode } from '../../../src/core/document/pixel-format';
 import { maxSampleValue, createSampleArray } from '../../../src/core/document/pixel-format';
 
@@ -62,6 +63,62 @@ export function layeredScene(depth: BitDepth = 8, mode: ColorMode = 'rgb', backg
   doc.updateLayer(p.id, { opacity: 0.7 });
   const e = addLayer(doc, p.id);
   paint(e, { x: 200, y: 100, w: 300, h: 150 }, (x, y) => col(0.9, 0.1, 0.8, ((x + y) % 64) / 63));
+  return doc;
+}
+
+/**
+ * Every place a blend mode can apply: a layer (partial alpha, opacity and fill,
+ * offset across tile edges) over a backdrop whose colour and alpha both vary, an
+ * isolated group and a layer inside a Pass Through group, and a layer whose
+ * unallocated area is an opaque default colour. 32-bit scenes include values above 1.
+ */
+export function blendScene(mode: LayerBlendMode, depth: BitDepth = 8, colorMode: ColorMode = 'rgb'): ImageDocument {
+  const doc = new ImageDocument({ width: 600, height: 300, depth, mode: colorMode });
+  const gray = colorMode === 'grayscale';
+  const hi = depth === 32 ? 2.5 : 1;
+  const col = (r: number, g: number, b: number, a: number) =>
+    gray ? [0.3 * r + 0.59 * g + 0.11 * b, a] : [r, g, b, a];
+
+  // Backdrop: opaque on the left, fading to transparent (and empty) on the right.
+  const base = addLayer(doc);
+  paint(base, { x: 0, y: 0, w: 520, h: 300 }, (x, y) =>
+    col((x / 519) * hi, y / 299, ((x >> 3) + (y >> 3)) & 1 ? 0.85 : 0.15, x < 300 ? 1 : 1 - (x - 300) / 220),
+  );
+
+  const layer = addLayer(doc);
+  paint(layer, { x: 0, y: 0, w: 420, h: 260 }, (x, y) =>
+    col(y / 259, 1 - x / 419, (((x + y) % 97) / 96) * hi, 0.3 + (0.7 * ((x * 7 + y * 3) % 50)) / 49),
+  );
+  doc.updateLayer(layer.id, { offsetX: 40, offsetY: 25, blendMode: mode, opacity: 0.8, fillOpacity: 0.7 });
+
+  const group = doc.createGroup('Isolated');
+  doc.insertLayer(group);
+  doc.updateLayer(group.id, { blendMode: mode, opacity: 0.9, fillOpacity: 0.6 });
+  const inner = addLayer(doc, group.id);
+  paint(inner, { x: 0, y: 0, w: 200, h: 200 }, (x, y) => col(0.9, x / 199, 1 - y / 199, 0.4 + 0.6 * (y / 199)));
+  doc.updateLayer(inner.id, { offsetX: 330, offsetY: 60 });
+
+  const pass = doc.createGroup('Pass');
+  doc.insertLayer(pass);
+  doc.updateLayer(pass.id, { opacity: 0.6 });
+  const passed = addLayer(doc, pass.id);
+  paint(passed, { x: 0, y: 0, w: 150, h: 300 }, (x, y) => col(x / 149, 0.5, y / 299, 0.75));
+  doc.updateLayer(passed.id, { offsetX: 200, blendMode: mode });
+
+  // Opaque default colour with one painted tile: both solid and tile blend passes.
+  const fill = new PixelLayer(
+    doc.newLayerId(),
+    'Solid',
+    new TiledBuffer(doc.layerFormat(true), {
+      memory: doc.memory,
+      defaultPixel: (gray ? [0.4, 0.5] : [0.25, 0.6, 0.45, 0.5]).map((v) =>
+        depth === 32 ? v : Math.round(v * maxSampleValue(depth)),
+      ),
+    }),
+  );
+  doc.insertLayer(fill);
+  paint(fill, { x: 256, y: 0, w: 256, h: 256 }, (x, y) => col(1 - y / 255, 0.2, x / 255, 0.65));
+  doc.updateLayer(fill.id, { blendMode: mode, opacity: 0.5 });
   return doc;
 }
 

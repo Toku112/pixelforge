@@ -6,8 +6,10 @@
  *     version) — 8-bit as normalised, 16-bit as unsigned-integer, 32-bit as float
  *     textures, read exactly with texelFetch.
  *  2. Composite tiles (256 × 256, document resolution = level 0) blend the visible
- *     layers with the Normal mode via premultiplied hardware blending into RGBA16F
- *     targets (RGBA8 if float targets are unavailable).
+ *     layers into RGBA16F targets (RGBA8 if float targets are unavailable). Normal
+ *     and Dissolve use premultiplied hardware blending; the other blend modes run a
+ *     shader pass that reads the backdrop and writes into a second texture
+ *     (ping-pong), using the same formulas as core/composite/blend.ts.
  *  3. A pyramid of coarser levels (level L tile = 256·2^L document pixels) is built
  *     by 2×2 averaging, so zoomed-out views draw a few small textures instead of
  *     every full-resolution tile.
@@ -21,7 +23,14 @@
  */
 import type { ImageDocument } from '../../core/document/document';
 import { intersectRects, isEmptyRect, type Rect } from '../../core/document/geometry';
-import type { LayerNode, PixelLayer } from '../../core/document/layers';
+import { SPECIAL_EIGHT } from '../../core/composite/blend';
+import {
+  LAYER_BLEND_MODES,
+  type BlendMode,
+  type LayerBlendMode,
+  type LayerNode,
+  type PixelLayer,
+} from '../../core/document/layers';
 import { maxSampleValue, samplesPerPixel } from '../../core/document/pixel-format';
 import { TILE_SIZE, tileIndex, type Tile } from '../../core/document/tile';
 import { DirtyTracker } from '../tiles/dirty-tracker';
@@ -31,10 +40,14 @@ import {
   COPY_FS,
   DISPLAY_FS,
   DISPLAY_VS,
+  DISSOLVE_PREMUL_FS,
+  DISSOLVE_SOLID_FS,
   DOWNSAMPLE_FS,
   MIX_FS,
   SOLID_FS,
   TARGET_RECT_VS,
+  blendFS,
+  dissolveTileFS,
   layerTileFS,
 } from './shaders';
 
@@ -140,7 +153,6 @@ export class Renderer {
     complete: true,
     floatTargets: false,
   };
-  readonly #warned = new Set<string>();
 
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas, options: RendererOptions = {}) {
     this.canvas = canvas;
@@ -556,57 +568,112 @@ export class Renderer {
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    this.#compositeNodes(
-      doc,
-      doc.root.children,
-      { x: tx * TILE_SIZE, y: ty * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE },
-      entry.tex,
-    );
+    const tileRect = { x: tx * TILE_SIZE, y: ty * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE };
+    // Blend passes ping-pong between textures (returning replaced ones to the pool);
+    // the entry keeps whichever holds the result.
+    entry.tex = this.#compositeNodes(doc, doc.root.children, tileRect, entry.tex);
     gl.disable(gl.BLEND);
     this.#stats.composites++;
   }
 
-  #compositeNodes(doc: ImageDocument, nodes: readonly LayerNode[], tileRect: Rect, target: WebGLTexture): void {
+  /**
+   * Composites `nodes` onto `target` and returns the texture holding the result.
+   * Takes ownership of `target`: when a blend pass replaces it, the old texture goes
+   * back to the pool. Normal and Dissolve use hardware blending in place; other
+   * modes read the backdrop and write into a fresh texture.
+   */
+  #compositeNodes(doc: ImageDocument, nodes: readonly LayerNode[], tileRect: Rect, target: WebGLTexture): WebGLTexture {
     const gl = this.#gl;
     const programs = this.#programs!;
+    let current = target;
     for (const node of nodes) {
       if (!node.visible || node.opacity === 0) continue;
       if (node.kind === 'pixel') {
-        this.#checkMode(node.blendMode);
-        this.#drawLayer(doc, node, tileRect);
+        if (node.blendMode === 'normal' || node.blendMode === 'dissolve' || node.blendMode === 'pass-through') {
+          this.#bindTarget(current);
+          gl.enable(gl.BLEND);
+          this.#drawLayer(doc, node, tileRect, null);
+        } else {
+          current = this.#blendPass(current, (backdrop) => this.#drawLayer(doc, node, tileRect, backdrop));
+        }
       } else if (node.blendMode === 'pass-through') {
         if (node.opacity >= 1) {
-          this.#compositeNodes(doc, node.children, tileRect, target);
+          current = this.#compositeNodes(doc, node.children, tileRect, current);
           continue;
         }
         // Mix between the backdrop before and after the group.
         const before = this.#acquireTemp();
-        const after = this.#acquireTemp();
-        this.#copy(target, before, 1, false);
-        this.#bindTarget(target);
-        this.#compositeNodes(doc, node.children, tileRect, target);
-        this.#bindTarget(after);
+        this.#copy(current, before, 1, false);
+        this.#bindTarget(current);
+        current = this.#compositeNodes(doc, node.children, tileRect, current);
+        const mixed = this.#acquireTemp();
+        this.#bindTarget(mixed);
         gl.disable(gl.BLEND);
         programs.mix.use();
         this.#bindSampler(0, before, programs.mix, 'u_before');
-        this.#bindSampler(1, target, programs.mix, 'u_after');
+        this.#bindSampler(1, current, programs.mix, 'u_after');
         gl.uniform1f(programs.mix.loc('u_opacity'), node.opacity);
         this.#drawRect(programs.mix, 0, 0, TILE_SIZE, TILE_SIZE);
         this.#unbindSamplers(2);
-        this.#copy(after, target, 1, false);
         gl.enable(gl.BLEND);
-        this.#tempPool.push(before, after);
+        this.#tempPool.push(before, current);
+        current = mixed;
       } else {
-        this.#checkMode(node.blendMode);
         const group = this.#acquireTemp();
         this.#bindTarget(group);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
-        this.#compositeNodes(doc, node.children, tileRect, group);
-        this.#copy(group, target, node.opacity, true);
-        this.#tempPool.push(group);
+        gl.enable(gl.BLEND);
+        const result = this.#compositeNodes(doc, node.children, tileRect, group);
+        const strength = node.opacity * node.fillOpacity;
+        if (node.blendMode === 'normal') {
+          this.#copy(result, current, strength, true);
+        } else if (node.blendMode === 'dissolve') {
+          this.#bindTarget(current);
+          gl.enable(gl.BLEND);
+          const program = this.#program('dissolve:premul', () => DISSOLVE_PREMUL_FS).use();
+          this.#bindSampler(0, result, program, 'u_src');
+          gl.uniform1f(program.loc('u_opacity'), strength);
+          gl.uniform2i(program.loc('u_docOrigin'), tileRect.x, tileRect.y);
+          this.#drawRect(program, 0, 0, TILE_SIZE, TILE_SIZE);
+          this.#unbindSamplers(1);
+        } else {
+          const mode = node.blendMode;
+          current = this.#blendPass(current, (backdrop) => {
+            const program = this.#program('blend:premul', () => blendFS({ kind: 'premultiplied' })).use();
+            this.#bindSampler(0, result, program, 'u_src');
+            this.#bindSampler(1, backdrop, program, 'u_backdrop');
+            this.#setBlendUniforms(program, mode, node.opacity, node.fillOpacity, doc.depth === 32);
+            this.#drawRect(program, 0, 0, TILE_SIZE, TILE_SIZE);
+          });
+        }
+        this.#tempPool.push(result);
       }
     }
+    return current;
+  }
+
+  /** Runs a blend pass: copies `current` into a new texture, draws over it reading `current` as the backdrop. */
+  #blendPass(current: WebGLTexture, draw: (backdrop: WebGLTexture) => void): WebGLTexture {
+    const gl = this.#gl;
+    const next = this.#acquireTemp();
+    this.#copy(current, next, 1, false);
+    this.#bindTarget(next);
+    gl.disable(gl.BLEND);
+    draw(current);
+    this.#unbindSamplers(2);
+    gl.enable(gl.BLEND);
+    this.#tempPool.push(current);
+    return next;
+  }
+
+  #setBlendUniforms(program: Program, mode: BlendMode, opacity: number, fill: number, hdr: boolean): void {
+    const gl = this.#gl;
+    gl.uniform1i(program.loc('u_mode'), LAYER_BLEND_MODES.indexOf(mode as LayerBlendMode));
+    gl.uniform1f(program.loc('u_opacity'), opacity);
+    gl.uniform1f(program.loc('u_fill'), fill);
+    gl.uniform1i(program.loc('u_special'), SPECIAL_EIGHT.has(mode) ? 1 : 0);
+    gl.uniform1i(program.loc('u_hdr'), hdr ? 1 : 0);
   }
 
   /** Draws `src` onto `dst` scaled by `opacity`, blended (Normal) or replacing. */
@@ -639,23 +706,25 @@ export class Renderer {
     }
   }
 
-  #checkMode(mode: string): void {
-    if (mode === 'normal' || this.#warned.has(mode)) return;
-    this.#warned.add(mode);
-    console.warn(`The ${mode} blend mode is not supported yet; showing it as Normal.`);
-  }
-
-  #drawLayer(doc: ImageDocument, layer: PixelLayer, tileRect: Rect): void {
+  /**
+   * Draws a layer's tiles covering a composite tile into the bound target. With a
+   * `backdrop` (blend modes other than Normal/Dissolve) the shader composites the
+   * full result itself; otherwise hardware blending does Normal "over".
+   */
+  #drawLayer(doc: ImageDocument, layer: PixelLayer, tileRect: Rect, backdrop: WebGLTexture | null): void {
     const gl = this.#gl;
     const buffer = layer.buffer;
     const format = buffer.format;
     const spp = samplesPerPixel(format);
     if (spp > 4) throw new Error(`Displaying ${doc.mode} documents is not supported yet`);
-    const opacity = layer.opacity * layer.fillOpacity;
+    const strength = layer.opacity * layer.fillOpacity;
     const scale = format.depth === 16 ? 1 / 65535 : 1;
     const max = maxSampleValue(format.depth);
     const alphaIndex = format.colorChannels;
     const defaultAlpha = format.hasAlpha ? buffer.defaultPixel[alphaIndex]! / max : 1;
+    const dissolve = layer.blendMode === 'dissolve';
+    const tileKind = `${format.depth}:${spp}:${format.colorChannels}`;
+    const source = { kind: 'tile', depth: format.depth, spp, colorChannels: format.colorChannels } as const;
 
     // The composite tile in the layer's own pixel space.
     const local = { x: tileRect.x - layer.offsetX, y: tileRect.y - layer.offsetY, w: TILE_SIZE, h: TILE_SIZE };
@@ -666,31 +735,55 @@ export class Renderer {
         const x = span.x - local.x;
         const y = span.y - local.y;
         const tile = buffer.getTile(ltx, lty);
+        const defaultColor = (i: number) =>
+          (format.colorChannels === 1 ? buffer.defaultPixel[0]! : buffer.defaultPixel[i]!) / max;
         if (tile) {
-          const program = this.#layerProgram(format.depth, spp, format.colorChannels);
+          const program = backdrop
+            ? this.#program(`blend:tile:${tileKind}`, () => blendFS(source))
+            : dissolve
+              ? this.#program(`dissolve:${tileKind}`, () => dissolveTileFS(format.depth, spp, format.colorChannels))
+              : this.#program(`normal:${tileKind}`, () => layerTileFS(format.depth, spp, format.colorChannels));
           program.use();
           this.#bindSampler(0, this.#layerTexture(tile, format.depth, spp), program, 'u_tile');
           gl.uniform2i(program.loc('u_srcOffset'), local.x - ltx * TILE_SIZE, local.y - lty * TILE_SIZE);
           gl.uniform1f(program.loc('u_scale'), format.depth === 8 ? 1 : scale);
-          gl.uniform1f(program.loc('u_opacity'), opacity);
+          if (backdrop) {
+            this.#bindSampler(1, backdrop, program, 'u_backdrop');
+            this.#setBlendUniforms(program, layer.blendMode, layer.opacity, layer.fillOpacity, doc.depth === 32);
+          } else {
+            gl.uniform1f(program.loc('u_opacity'), strength);
+            if (dissolve) gl.uniform2i(program.loc('u_docOrigin'), tileRect.x, tileRect.y);
+          }
           this.#drawRect(program, x, y, span.w, span.h);
         } else if (defaultAlpha > 0) {
-          const program = this.#programs!.solid.use();
-          const a = defaultAlpha * opacity;
-          const c = (i: number) =>
-            (format.colorChannels === 1 ? buffer.defaultPixel[0]! : buffer.defaultPixel[i]!) / max;
-          gl.uniform4f(program.loc('u_color'), c(0) * a, c(1) * a, c(2) * a, a);
-          this.#drawRect(program, x, y, span.w, span.h);
+          if (backdrop) {
+            const program = this.#program('blend:solid', () => blendFS({ kind: 'solid' })).use();
+            gl.uniform4f(program.loc('u_color'), defaultColor(0), defaultColor(1), defaultColor(2), defaultAlpha);
+            this.#bindSampler(1, backdrop, program, 'u_backdrop');
+            this.#setBlendUniforms(program, layer.blendMode, layer.opacity, layer.fillOpacity, doc.depth === 32);
+            this.#drawRect(program, x, y, span.w, span.h);
+          } else if (dissolve) {
+            const program = this.#program('dissolve:solid', () => DISSOLVE_SOLID_FS).use();
+            gl.uniform4f(program.loc('u_color'), defaultColor(0), defaultColor(1), defaultColor(2), defaultAlpha);
+            gl.uniform1f(program.loc('u_opacity'), strength);
+            gl.uniform2i(program.loc('u_docOrigin'), tileRect.x, tileRect.y);
+            this.#drawRect(program, x, y, span.w, span.h);
+          } else {
+            const program = this.#programs!.solid.use();
+            const a = defaultAlpha * strength;
+            gl.uniform4f(program.loc('u_color'), defaultColor(0) * a, defaultColor(1) * a, defaultColor(2) * a, a);
+            this.#drawRect(program, x, y, span.w, span.h);
+          }
         }
       }
     }
   }
 
-  #layerProgram(depth: 8 | 16 | 32, spp: number, colorChannels: number): Program {
-    const key = `${depth}:${spp}:${colorChannels}`;
+  /** A compiled program from the cache, built by `fragment()` on first use. */
+  #program(key: string, fragment: () => string): Program {
     let program = this.#layerPrograms.get(key);
     if (!program) {
-      program = new Program(this.#gl, TARGET_RECT_VS, layerTileFS(depth, spp, colorChannels));
+      program = new Program(this.#gl, TARGET_RECT_VS, fragment());
       this.#layerPrograms.set(key, program);
     }
     return program;

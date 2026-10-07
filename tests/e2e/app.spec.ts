@@ -282,6 +282,34 @@ test('tool keys switch tools; holding a tool key borrows it', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Zoom Tool' })).toHaveAttribute('aria-pressed', 'true');
 });
 
+test("blend-mode shortcuts change the selected layer's mode", async ({ page }) => {
+  await openFile(page, 'rgb8.png');
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+N'); // New Layer (no dialog)
+  const mode = () =>
+    page.evaluate(() => {
+      const d = (window as unknown as AppWindow).__pixelforge.workspace.active!.doc;
+      return d.getLayer(d.activeLayerId!)!.blendMode;
+    });
+  await page.keyboard.press('Alt+Shift+M');
+  expect(await mode()).toBe('multiply');
+  await page.keyboard.press('Shift+Equal');
+  expect(await mode()).toBe('color-burn');
+  await page.keyboard.press('Shift+Minus');
+  await page.keyboard.press('Shift+Minus');
+  expect(await mode()).toBe('darken');
+  await page.keyboard.press('Alt+Shift+K'); // already Darken: no new history step
+  const history = page.getByRole('listbox', { name: 'History states' });
+  await expect(history.getByRole('option')).toHaveText([
+    'Open',
+    'New Layer',
+    ...Array<string>(4).fill('Blend Mode Change'),
+  ]);
+  // In a text field the same chord types instead.
+  await page.getByLabel('Zoom level').focus();
+  await page.keyboard.press('Alt+Shift+S');
+  expect(await mode()).toBe('darken');
+});
+
 test('dropping an image on the canvas opens it; non-images report an error', async ({ page }) => {
   const drop = (name: string, bytes: number[]) =>
     page.evaluate(

@@ -4,6 +4,8 @@
  * `UiBridge` (dialogs, panels, tool state) and attaches the canvas.
  */
 import { APP_NAME } from './brand';
+import { BLEND_MODE_LABELS, availableBlendModes, blendModeMenu, cycleBlendMode } from '../core/composite/blend';
+import { LAYER_BLEND_MODES, layerCapabilities, type BlendMode, type LayerNode } from '../core/document/layers';
 import { AppCommandRegistry } from './commands/app-commands';
 import { detectPlatform, type Platform } from './keymap/chord';
 import { KeyboardService } from './keymap/keyboard-service';
@@ -275,6 +277,52 @@ export class AppController {
         return ws.execute({ name: 'setLayerProps', params: { layerIds: ids, props: { visible: !anyVisible } } });
       },
     });
+
+    // Blend modes (Alt+Shift+letter, Shift+Plus/Minus) for the selected layers.
+    // (Once painting tools exist, they change the tool's mode while one is active.)
+    const blendTargets = (): LayerNode[] => {
+      const d = doc();
+      if (!d) return [];
+      return selected()
+        .map((id) => d.getLayer(id))
+        .filter((l): l is LayerNode => l !== undefined && layerCapabilities(l).changeBlendMode);
+    };
+    const setBlendMode = (mode: BlendMode) => {
+      const ids = blendTargets()
+        .filter((l) => l.blendMode !== mode)
+        .map((l) => l.id);
+      if (ids.length === 0) return;
+      return ws.execute({ name: 'setLayerProps', params: { layerIds: ids, props: { blendMode: mode } } });
+    };
+    for (const [id, label, step] of [
+      ['blend.next', 'Next Blend Mode', 1],
+      ['blend.previous', 'Previous Blend Mode', -1],
+    ] as const) {
+      add({
+        id,
+        label,
+        enabled: () => blendTargets().length > 0,
+        run: () => {
+          const d = doc();
+          const targets = blendTargets();
+          if (!d || targets.length === 0) return;
+          const active = targets.find((l) => l.id === d.activeLayerId) ?? targets[0]!;
+          const kind = targets.every((l) => l.kind === 'group') ? 'group' : 'pixel';
+          return setBlendMode(cycleBlendMode(blendModeMenu(kind, d.mode, d.depth), active.blendMode, step));
+        },
+      });
+    }
+    for (const mode of LAYER_BLEND_MODES) {
+      add({
+        id: `blend.set.${mode}`,
+        label: BLEND_MODE_LABELS[mode],
+        enabled: () => {
+          const d = doc();
+          return !!d && availableBlendModes(d.mode, d.depth).includes(mode) && blendTargets().length > 0;
+        },
+        run: () => setBlendMode(mode),
+      });
+    }
 
     // View
     add({

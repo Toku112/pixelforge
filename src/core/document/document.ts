@@ -346,12 +346,19 @@ export class ImageDocument {
     const layer = this.requireLayer(id);
     const can = layerCapabilities(layer);
     const previous: Record<string, unknown> = {};
+    const background = layer.kind === 'pixel' && layer.isBackground;
+    const current = layer as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(props) as [keyof (PixelLayerProps & GroupLayerProps), unknown][]) {
-      if ((key === 'opacity' || key === 'fillOpacity') && !can.changeOpacity && value !== 1) {
-        throw new Error('The Background layer is always fully opaque');
+      if ((key === 'opacity' || key === 'fillOpacity') && !can.changeOpacity && value !== current[key]) {
+        throw new Error(background ? 'The Background layer is always fully opaque' : `"${layer.name}" is locked`);
       }
-      if (key === 'blendMode' && !can.changeBlendMode && value !== 'normal') {
-        throw new Error('The Background layer always uses the Normal blend mode');
+      if (key === 'blendMode' && !can.changeBlendMode && value !== current[key]) {
+        throw new Error(
+          background ? 'The Background layer always uses the Normal blend mode' : `"${layer.name}" is locked`,
+        );
+      }
+      if (key === 'blendMode' && value === 'pass-through' && layer.kind === 'pixel') {
+        throw new Error('Pass Through applies to groups only');
       }
       if ((key === 'offsetX' || key === 'offsetY') && layer.kind === 'pixel') {
         if (layer.isBackground && value !== 0) throw new Error('The Background layer cannot be moved');
@@ -361,7 +368,7 @@ export class ImageDocument {
         throw new Error(`${key} must be between 0 and 1`);
       }
       if (!(key in layer)) throw new Error(`Layer ${id} has no property ${key}`);
-      previous[key] = (layer as unknown as Record<string, unknown>)[key];
+      previous[key] = current[key];
     }
     Object.assign(layer, props);
     this.changes.emit({ kind: 'layer', layerId: id, props: Object.keys(props) });

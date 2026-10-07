@@ -134,6 +134,7 @@ export type LayerNode = PixelLayer | GroupLayer;
 /**
  * What may be done to a layer. The Background layer behaves like the reference app's:
  * always at the bottom, opaque, and its position, opacity, fill and blend mode are fixed.
+ * Lock All also fixes opacity, fill and blend mode.
  */
 export interface LayerCapabilities {
   move: boolean;
@@ -148,8 +149,8 @@ export function layerCapabilities(layer: LayerNode): LayerCapabilities {
   return {
     move: !background && !layer.locks.position && !layer.locks.all,
     reorder: !background,
-    changeOpacity: !background,
-    changeBlendMode: !background,
+    changeOpacity: !background && !layer.locks.all,
+    changeBlendMode: !background && !layer.locks.all,
     editPixels: layer.kind === 'pixel' && !layer.locks.pixels && !layer.locks.all,
   };
 }

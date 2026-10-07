@@ -124,3 +124,187 @@ void main() {
   }
   outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }`;
+
+/**
+ * Blend-mode library: the same formulas as core/composite/blend.ts. Mode numbers
+ * follow LAYER_BLEND_MODES (0 = normal … 26 = luminosity).
+ */
+const BLEND_LIB = `
+uniform int u_mode;
+uniform float u_opacity;
+uniform float u_fill;
+uniform bool u_special;
+uniform bool u_hdr;
+
+float colorBurn(float b, float s) { if (b >= 1.0) return 1.0; if (s <= 0.0) return 0.0; return 1.0 - min(1.0, (1.0 - b) / s); }
+float colorDodge(float b, float s) { if (b <= 0.0) return 0.0; if (s >= 1.0) return 1.0; return min(1.0, b / (1.0 - s)); }
+float fillSrc(float s) {
+  float n = (u_mode == 4 || u_mode == 5) ? 1.0 : ((u_mode == 15 || u_mode == 16) ? 0.5 : 0.0);
+  return n + (s - n) * (u_special ? u_fill : 1.0);
+}
+float blendCh(float b, float s) {
+  switch (u_mode) {
+    case 2: return min(b, s);
+    case 3: return b * s;
+    case 4: return colorBurn(b, fillSrc(s));
+    case 5: return max(0.0, b + fillSrc(s) - 1.0);
+    case 7: return max(b, s);
+    case 8: return b + s - b * s;
+    case 9: return colorDodge(b, fillSrc(s));
+    case 10: { float v = b + fillSrc(s); return u_hdr ? v : min(1.0, v); }
+    case 12: return b <= 0.5 ? 2.0 * b * s : 1.0 - 2.0 * (1.0 - b) * (1.0 - s);
+    case 13: return s <= 0.5 ? b - (1.0 - 2.0 * s) * b * (1.0 - b) : b + (2.0 * s - 1.0) * (sqrt(b) - b);
+    case 14: return s <= 0.5 ? 2.0 * b * s : 1.0 - 2.0 * (1.0 - b) * (1.0 - s);
+    case 15: { float f = fillSrc(s); return f <= 0.5 ? colorBurn(b, 2.0 * f) : colorDodge(b, 2.0 * (f - 0.5)); }
+    case 16: return clamp(b + 2.0 * fillSrc(s) - 1.0, 0.0, 1.0);
+    case 17: return s <= 0.5 ? min(b, 2.0 * s) : max(b, 2.0 * s - 1.0);
+    case 18: {
+      float f = u_special ? u_fill : 1.0;
+      if (f >= 1.0) return b + s >= 1.0 ? 1.0 : 0.0;
+      return clamp((b - f * (1.0 - s)) / (1.0 - f), 0.0, 1.0);
+    }
+    case 19: return abs(b - fillSrc(s));
+    case 20: return b + s - 2.0 * b * s;
+    case 21: return max(0.0, b - s);
+    case 22: {
+      if (s <= 0.0) return b <= 0.0 ? 0.0 : (u_hdr ? 65504.0 : 1.0);
+      return min(u_hdr ? 65504.0 : 1.0, b / s);
+    }
+  }
+  return s;
+}
+float lumOf(vec3 c) { return dot(c, vec3(0.3, 0.59, 0.11)); }
+vec3 clipColor(vec3 c) {
+  float l = lumOf(c);
+  float n = min(min(c.r, c.g), c.b);
+  float x = max(max(c.r, c.g), c.b);
+  if (n < 0.0) c = l + (c - l) * l / (l - n);
+  if (x > 1.0 && !u_hdr) c = l + (c - l) * (1.0 - l) / (x - l);
+  return c;
+}
+vec3 setLum(vec3 c, float l) { return clipColor(c + (l - lumOf(c))); }
+float satOf(vec3 c) { return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b); }
+vec3 setSat(vec3 c, float s) {
+  float lo = min(min(c.r, c.g), c.b);
+  float hi = max(max(c.r, c.g), c.b);
+  return hi > lo ? (c - lo) * s / (hi - lo) : vec3(0.0);
+}
+vec3 blendColor(vec3 b, vec3 s) {
+  switch (u_mode) {
+    case 6: return s.r + s.g + s.b < b.r + b.g + b.b ? s : b;
+    case 11: return s.r + s.g + s.b > b.r + b.g + b.b ? s : b;
+    case 23: return setLum(setSat(s, satOf(b)), lumOf(b));
+    case 24: return setLum(setSat(b, satOf(s)), lumOf(b));
+    case 25: return setLum(s, lumOf(b));
+    case 26: return setLum(b, lumOf(s));
+  }
+  return vec3(blendCh(b.r, s.r), blendCh(b.g, s.g), blendCh(b.b, s.b));
+}
+/** Composites straight colour cs with alpha ap onto premultiplied backdrop (see flatten.ts). */
+vec4 compositeOver(vec4 back, vec3 cs, float ap) {
+  float ab = back.a;
+  vec3 cb = ab > 0.0 ? back.rgb / ab : vec3(0.0);
+  float asB = ap * u_opacity * (u_special ? 1.0 : u_fill);
+  float asT = u_special ? asB * u_fill : asB;
+  vec3 B = ab > 0.0 ? blendColor(cb, cs) : vec3(0.0);
+  return vec4(asT * (1.0 - ab) * cs + asB * ab * B + (1.0 - asB) * back.rgb, ab + (1.0 - ab) * asT);
+}
+`;
+
+/** Where a blend pass reads its source colour from. */
+export type BlendSource =
+  | { kind: 'tile'; depth: 8 | 16 | 32; spp: number; colorChannels: number }
+  | { kind: 'premultiplied' }
+  | { kind: 'solid' };
+
+/**
+ * Blend pass for every mode other than Normal/Dissolve: reads the backdrop (the
+ * current composite) and writes the full composite result into another texture.
+ */
+export function blendFS(source: BlendSource): string {
+  let fetch: string;
+  let decl: string;
+  if (source.kind === 'tile') {
+    const sampler = source.depth === 16 ? 'usampler2D' : 'sampler2D';
+    const hasAlpha = source.spp > source.colorChannels;
+    const rgb = source.colorChannels === 1 ? 't.rrr' : 't.rgb';
+    const alpha = hasAlpha ? (source.colorChannels === 1 ? 't.g' : 't.a') : '1.0';
+    decl = `uniform ${sampler} u_tile;\nuniform ivec2 u_srcOffset;\nuniform float u_scale;`;
+    fetch = `vec4 t = vec4(texelFetch(u_tile, p + u_srcOffset, 0)) * u_scale;\n  vec3 cs = ${rgb};\n  float ap = ${alpha};`;
+  } else if (source.kind === 'premultiplied') {
+    decl = 'uniform sampler2D u_src;';
+    fetch = 'vec4 t = texelFetch(u_src, p, 0);\n  float ap = t.a;\n  vec3 cs = ap > 0.0 ? t.rgb / ap : vec3(0.0);';
+  } else {
+    decl = 'uniform vec4 u_color; // straight colour + alpha';
+    fetch = 'vec3 cs = u_color.rgb;\n  float ap = u_color.a;';
+  }
+  return `${HEADER}
+${decl}
+uniform sampler2D u_backdrop;
+${BLEND_LIB}
+out vec4 outColor;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  ${fetch}
+  outColor = compositeOver(texelFetch(u_backdrop, p, 0), cs, ap);
+}`;
+}
+
+/** Shared integer hash for Dissolve (same as dissolveNoise in core/composite/blend.ts). */
+export const DISSOLVE_NOISE = `
+float dissolveNoise(ivec2 q) {
+  uint h = (uint(q.x) * 0x27d4eb2du) ^ (uint(q.y) * 0x165667b1u);
+  h = (h ^ (h >> 15u)) * 0x2c1b3c6du;
+  h = (h ^ (h >> 12u)) * 0x297a2d39u;
+  h = h ^ (h >> 15u);
+  return float(h) / 4294967296.0;
+}`;
+
+/** Dissolve: a pixel shows fully (alpha 1) when the noise is below its opacity; hardware-blended like Normal. */
+export function dissolveTileFS(depth: 8 | 16 | 32, spp: number, colorChannels: number): string {
+  const sampler = depth === 16 ? 'usampler2D' : 'sampler2D';
+  const hasAlpha = spp > colorChannels;
+  const rgb = colorChannels === 1 ? 't.rrr' : 't.rgb';
+  const alpha = hasAlpha ? (colorChannels === 1 ? 't.g' : 't.a') : '1.0';
+  return `${HEADER}
+uniform ${sampler} u_tile;
+uniform ivec2 u_srcOffset;
+uniform float u_scale;
+uniform float u_opacity;   // opacity × fill
+uniform ivec2 u_docOrigin; // document position of the target's pixel (0, 0)
+${DISSOLVE_NOISE}
+out vec4 outColor;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec4 t = vec4(texelFetch(u_tile, p + u_srcOffset, 0)) * u_scale;
+  float a = ${alpha} * u_opacity;
+  if (dissolveNoise(u_docOrigin + p) >= a) discard;
+  outColor = vec4(${rgb}, 1.0);
+}`;
+}
+
+/** Dissolve for a solid straight colour (the default pixel of unallocated tiles). */
+export const DISSOLVE_SOLID_FS = `${HEADER}
+uniform vec4 u_color;      // straight colour + alpha
+uniform float u_opacity;   // opacity × fill
+uniform ivec2 u_docOrigin;
+${DISSOLVE_NOISE}
+out vec4 outColor;
+void main() {
+  if (dissolveNoise(u_docOrigin + ivec2(gl_FragCoord.xy)) >= u_color.a * u_opacity) discard;
+  outColor = vec4(u_color.rgb, 1.0);
+}`;
+
+/** Dissolve for a premultiplied source (an isolated group). */
+export const DISSOLVE_PREMUL_FS = `${HEADER}
+uniform sampler2D u_src;
+uniform float u_opacity;
+uniform ivec2 u_docOrigin;
+${DISSOLVE_NOISE}
+out vec4 outColor;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec4 t = texelFetch(u_src, p, 0);
+  if (t.a <= 0.0 || dissolveNoise(u_docOrigin + p) >= t.a * u_opacity) discard;
+  outColor = vec4(t.rgb / t.a, 1.0);
+}`;

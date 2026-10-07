@@ -2,11 +2,13 @@
 import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
 import { CommandRegistry } from '../../../src/core/commands/registry';
 import type { ImageDocument } from '../../../src/core/document/document';
-import { flatten, planFromDocument } from '../../../src/engine/cpu/flatten';
+import { flatten, planFromDocument } from '../../../src/core/composite/flatten';
 import { Renderer } from '../../../src/engine/gl/renderer';
 import { createPixelWorker } from '../../../src/workers/pixel-client';
 import { createWorkerPixelOps } from '../../../src/workers/pixel-ops-client';
-import { hdrScene, layeredScene, patternScene } from './scenes';
+import { availableBlendModes } from '../../../src/core/composite/blend';
+import type { BitDepth, ColorMode } from '../../../src/core/document/pixel-format';
+import { blendScene, hdrScene, layeredScene, patternScene } from './scenes';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const renderer = new Renderer(canvas, { preserveDrawingBuffer: true });
@@ -54,25 +56,43 @@ function overChecker(
   });
 }
 
-const harness = {
-  /** Max difference between the GPU composite and the CPU reference (premultiplied, 0–1 units). */
-  compareComposite(scene: string) {
-    const doc = scenes[scene]!();
-    renderer.setDocument(doc);
-    const gpu = renderer.readComposite(doc.canvasRect);
-    const cpu = flatten(planFromDocument(doc));
-    const cc = cpu.colorChannels;
-    let maxDiff = 0;
-    let maxRel = 0;
-    for (let p = 0; p < doc.width * doc.height; p++) {
-      for (let c = 0; c < 4; c++) {
-        const ref = cc === 1 ? cpu.data[p * 2 + (c === 3 ? 1 : 0)]! : cpu.data[p * 4 + c]!;
-        const d = Math.abs(gpu[p * 4 + c]! - ref);
-        maxDiff = Math.max(maxDiff, d);
-        maxRel = Math.max(maxRel, d / Math.max(1, Math.abs(ref)));
-      }
+/** Max and typical difference between the GPU composite and the CPU reference (premultiplied, 0–1 units). */
+function compareDocument(doc: ImageDocument) {
+  renderer.setDocument(doc);
+  const gpu = renderer.readComposite(doc.canvasRect);
+  const cpu = flatten(planFromDocument(doc));
+  const cc = cpu.colorChannels;
+  let maxDiff = 0;
+  let maxRel = 0;
+  let outliers = 0;
+  for (let p = 0; p < doc.width * doc.height; p++) {
+    for (let c = 0; c < 4; c++) {
+      const ref = cc === 1 ? cpu.data[p * 2 + (c === 3 ? 1 : 0)]! : cpu.data[p * 4 + c]!;
+      const d = Math.abs(gpu[p * 4 + c]! - ref);
+      maxDiff = Math.max(maxDiff, d);
+      maxRel = Math.max(maxRel, d / Math.max(1, Math.abs(ref)));
+      if (d / Math.max(1, Math.abs(ref)) > 1 / 255) outliers++;
     }
-    return { maxDiff, maxRel, floatTargets: renderer.stats.floatTargets };
+  }
+  return {
+    maxDiff,
+    maxRel,
+    outliers: outliers / (doc.width * doc.height * 4),
+    floatTargets: renderer.stats.floatTargets,
+  };
+}
+
+const harness = {
+  compareComposite(scene: string) {
+    return compareDocument(scenes[scene]!());
+  },
+
+  /** compareComposite for the blend-mode scene in every mode the document offers. */
+  compareBlendModes(depth: BitDepth, colorMode: ColorMode = 'rgb') {
+    return availableBlendModes(colorMode, depth).map((mode) => ({
+      mode,
+      ...compareDocument(blendScene(mode, depth, colorMode)),
+    }));
   },
 
   /**

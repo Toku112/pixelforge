@@ -89,19 +89,100 @@ the compositor works premultiplied internally.
 With layer alpha `α`, layer opacity `o` and fill opacity `f`: `a = α·o·f`; premultiplied colour
 `C' = C·a + C_b·(1 − a)`; alpha `A' = a + A_b·(1 − a)`. A Background layer is opaque everywhere.
 
-### 3.2 Groups
+### 3.2 Blend modes: the general formula
 
-Groups with a blend mode other than Pass Through are isolated: children are composited onto a transparent buffer, which
-is then composited onto the backdrop with the group's opacity. Pass Through groups composite their children directly
-onto the backdrop, and the group opacity mixes between the backdrop before and after the group. With only the Normal
-mode the two give identical results; they differ once other modes are used.
+`b` is the backdrop colour (straight, from the composite so far, alpha `A_b`), `s` the layer colour (straight), both
+0–1 per channel. `B(b, s)` is the mode's blend function (§3.3, §3.4). Where the backdrop is transparent the layer shows
+as in Normal; where it is opaque the result is `B`; in between the two are weighted by the backdrop alpha:
 
-### 3.3 GPU composite precision
+- `a_B = α·o` (times `f` too, except for the "special eight" — §3.5) — strength of the blended part
+- `a_T = a_B` (times `f` for the special eight) — how much the layer adds to the coverage
+- premultiplied colour `C' = a_T·(1 − A_b)·s + a_B·A_b·B(b, s) + (1 − a_B)·C_b`
+- alpha `A' = A_b + (1 − A_b)·a_T`
 
-The GPU compositor stores composites as half floats (RGBA16F). Accumulated rounding over several blends stays below
-0.0025 (≈ 0.65 of an 8-bit step) in the tests; 32-bit documents keep values above 1.0.
+With `B(b, s) = s` this reduces exactly to Normal. Code: `blendInto` in `core/composite/flatten.ts` (CPU) and
+`compositeOver` in `engine/gl/shaders.ts` (GPU).
 
-_Other blend modes are documented as they are implemented (Phase 1)._
+**CMYK** documents store ink amounts; the modes are defined on additive values, so `b`, `s` and the result are
+inverted (`1 − v`) around `B`. (Multiply therefore darkens a CMYK image the same way it darkens RGB.)
+
+### 3.3 Separable modes (per channel)
+
+| Mode               | `B(b, s)`                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| Normal, Dissolve   | `s`                                                                                         |
+| Darken / Lighten   | `min(b, s)` / `max(b, s)`                                                                   |
+| Multiply           | `b·s`                                                                                       |
+| Screen             | `b + s − b·s`                                                                               |
+| Color Burn         | `1` if `b = 1`; `0` if `s = 0`; else `1 − min(1, (1 − b)/s)`                                |
+| Linear Burn        | `max(0, b + s − 1)`                                                                         |
+| Color Dodge        | `0` if `b = 0`; `1` if `s = 1`; else `min(1, b/(1 − s))`                                    |
+| Linear Dodge (Add) | `min(1, b + s)` (32-bit: unclamped)                                                         |
+| Overlay            | `2bs` if `b ≤ ½`, else `1 − 2(1 − b)(1 − s)`                                                |
+| Soft Light         | `b − (1 − 2s)·b·(1 − b)` if `s ≤ ½`, else `b + (2s − 1)·(√b − b)`                           |
+| Hard Light         | Overlay with `b` and `s` swapped                                                            |
+| Vivid Light        | Color Burn with `2s` if `s ≤ ½`, else Color Dodge with `2(s − ½)`                           |
+| Linear Light       | `clamp(b + 2s − 1)`                                                                         |
+| Pin Light          | `min(b, 2s)` if `s ≤ ½`, else `max(b, 2s − 1)`                                              |
+| Hard Mix           | `1` if `b + s ≥ 1`, else `0` (see §3.5 for Fill)                                            |
+| Difference         | `\|b − s\|`                                                                                 |
+| Exclusion          | `b + s − 2bs`                                                                               |
+| Subtract           | `max(0, b − s)`                                                                             |
+| Divide             | `min(1, b/s)`; `s = 0` gives `0` for `b = 0`, else `1` (32-bit: unclamped, capped at 65504) |
+
+### 3.4 Whole-colour modes
+
+These use the luminosity `Lum(c) = 0.3·r + 0.59·g + 0.11·b` and saturation `Sat(c) = max(c) − min(c)`.
+`SetLum(c, l)` shifts all channels by `l − Lum(c)`, then pulls out-of-range colours back towards their luminosity
+(below 0 always; above 1 except in 32-bit documents, where bright values are legitimate). `SetSat(c, s)` rescales the
+channels so that min → 0, max → `s`, keeping the middle channel's relative position.
+
+| Mode          | `B(b, s)`                                                        |
+| ------------- | ---------------------------------------------------------------- |
+| Darker Color  | whichever of `b`, `s` has the smaller channel sum (`b` on a tie) |
+| Lighter Color | whichever has the larger channel sum (`b` on a tie)              |
+| Hue           | `SetLum(SetSat(s, Sat(b)), Lum(b))`                              |
+| Saturation    | `SetLum(SetSat(b, Sat(s)), Lum(b))`                              |
+| Color         | `SetLum(s, Lum(b))`                                              |
+| Luminosity    | `SetLum(b, Lum(s))`                                              |
+
+In single-channel documents Darker/Lighter Color are min/max, and Hue/Saturation/Color/Luminosity are not offered.
+
+### 3.5 Fill opacity and the "special eight"
+
+For most modes Fill and Opacity both just scale the layer's alpha. For Color Burn, Linear Burn, Color Dodge, Linear
+Dodge, Vivid Light, Linear Light, Hard Mix and Difference, Fill instead acts inside the formula: the layer colour is
+first moved towards the mode's neutral colour — `s_f = n + (s − n)·f` with `n = 1` for the burns, `½` for Vivid/Linear
+Light and `0` for the dodges and Difference — and only Opacity fades the result. Hard Mix with Fill `f < 1` becomes a
+contrast ramp, `clamp((b − f·(1 − s)) / (1 − f))`, which is the full threshold at `f = 1`.
+
+### 3.6 Dissolve
+
+Each pixel is shown fully opaque or not at all: it shows when `noise(x, y) < α·o·f`, where `noise` is a fixed integer
+hash of the document coordinates (`dissolveNoise` in `core/composite/blend.ts`, identical on the GPU), so the pattern
+stays put when the document is panned, re-rendered or flattened.
+
+### 3.7 Groups
+
+Groups with a blend mode other than Pass Through are isolated: children are composited onto a transparent buffer,
+which is then blended onto the backdrop as if it were one layer, with the group's mode, opacity and fill. Pass Through
+groups composite their children directly onto the backdrop (so their modes see the layers below the group), and the
+group opacity mixes between the backdrop before and after the group.
+
+### 3.8 32-bit documents
+
+Only Normal, Dissolve, Darken, Multiply, Lighten, Linear Dodge, Difference, Subtract, Divide, Darker/Lighter Color,
+Hue, Saturation, Color and Luminosity are offered, as in the reference app. Results are not clamped at 1 where the
+formula allows brighter values (Linear Dodge, Divide, whole-colour modes); Divide by black is capped at 65504.
+
+### 3.9 GPU composite precision
+
+The GPU compositor stores composites as half floats (RGBA16F); the CPU compositor (used for saving, merging and as
+the test reference) works in 32/64-bit floats. Normal and Dissolve use hardware blending; every other mode runs a
+shader pass that reads the backdrop and writes into a second texture. Across all modes the two agree to well within
+one 8-bit step, except at a few pixels sitting exactly on a mode's threshold (Darker/Lighter Color ties, Hard Mix,
+Dissolve) or near a division by almost zero (burns, dodges, Divide, Saturation), where the half-float backdrop can
+tip the result: fewer than 0.25 % of values for threshold modes and 0.1 % for dividing modes in the tests.
 
 ## 4. File formats
 

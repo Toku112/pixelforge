@@ -24,6 +24,38 @@ test.describe('GPU composite matches the CPU reference compositor', () => {
   });
 });
 
+test.describe('blend modes: GPU matches the CPU reference in every mode', () => {
+  // The GPU keeps the backdrop in half floats, so its rounding differs slightly from
+  // the CPU's. Modes that divide by a colour (burns, dodges, Divide, Saturation) magnify
+  // that at a handful of near-black pixels; modes with a hard threshold (Darker/Lighter
+  // Color, Hard Mix, Dissolve) can flip pixels sitting exactly on it. Everywhere else the
+  // two must agree to well within one 8-bit step.
+  const dividing = new Set(['color-burn', 'color-dodge', 'vivid-light', 'divide', 'saturation']);
+  const threshold = new Set(['dissolve', 'darker-color', 'lighter-color', 'hard-mix']);
+  for (const [depth, mode] of [
+    [8, 'rgb'],
+    [16, 'rgb'],
+    [32, 'rgb'],
+    [8, 'grayscale'],
+  ] as const) {
+    test(`${depth}-bit ${mode}`, async ({ page }) => {
+      const results = await page.evaluate(([d, m]) => window.__render!.compareBlendModes(d, m), [depth, mode] as const);
+      expect(results.length).toBeGreaterThanOrEqual(depth === 32 ? 15 : 23);
+      for (const r of results) {
+        const label = `${r.mode}: maxRel ${r.maxRel}, outliers ${r.outliers}`;
+        if (threshold.has(r.mode)) {
+          expect(r.outliers, label).toBeLessThan(2.5e-3);
+        } else if (dividing.has(r.mode)) {
+          expect(r.outliers, label).toBeLessThan(1e-3);
+        } else {
+          expect(r.outliers, label).toBe(0);
+          expect(r.maxRel, label).toBeLessThan(4e-3);
+        }
+      }
+    });
+  }
+});
+
 test.describe('display', () => {
   test('100 %: every canvas pixel equals the composite over the checkerboard', async ({ page }) => {
     const r = await page.evaluate(() =>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ImageDocument, type DocumentChange } from '../../../../src/core/document/document';
-import { layerCapabilities, LAYER_BLEND_MODES } from '../../../../src/core/document/layers';
+import { layerCapabilities, LAYER_BLEND_MODES, NO_LOCKS } from '../../../../src/core/document/layers';
 
 function docWithBackground(init: Partial<ConstructorParameters<typeof ImageDocument>[0]> = {}) {
   const doc = new ImageDocument({ width: 640, height: 480, ...init });
@@ -98,6 +98,24 @@ describe('ImageDocument', () => {
     expect(() => doc.updateLayer(id, { offsetX: 3 })).toThrow('cannot be moved');
     expect(doc.updateLayer(id, { name: 'Paper', visible: false })).toEqual({ name: 'Background', visible: true });
     expect(layerCapabilities(doc.background!)).toMatchObject({ move: false, reorder: false, changeOpacity: false });
+  });
+
+  it('Lock All fixes opacity, fill and blend mode; Pass Through is for groups only', () => {
+    const doc = docWithBackground();
+    const layer = doc.createPixelLayer('Locked');
+    doc.insertLayer(layer);
+    doc.updateLayer(layer.id, { locks: { ...NO_LOCKS, all: true } });
+    expect(() => doc.updateLayer(layer.id, { opacity: 0.5 })).toThrow('"Locked" is locked');
+    expect(() => doc.updateLayer(layer.id, { fillOpacity: 0.5 })).toThrow('is locked');
+    expect(() => doc.updateLayer(layer.id, { blendMode: 'screen' })).toThrow('is locked');
+    expect(doc.updateLayer(layer.id, { blendMode: 'normal', opacity: 1 })).toEqual({ blendMode: 'normal', opacity: 1 });
+    doc.updateLayer(layer.id, { locks: NO_LOCKS });
+    expect(doc.updateLayer(layer.id, { blendMode: 'screen' })).toEqual({ blendMode: 'normal' });
+    expect(() => doc.updateLayer(layer.id, { blendMode: 'pass-through' })).toThrow('groups only');
+    const group = doc.createGroup();
+    doc.insertLayer(group);
+    expect(doc.updateLayer(group.id, { blendMode: 'multiply' })).toEqual({ blendMode: 'pass-through' });
+    expect(doc.updateLayer(group.id, { blendMode: 'pass-through' })).toEqual({ blendMode: 'multiply' });
   });
 
   it('updates layer properties, returning previous values for undo', () => {

@@ -3,7 +3,7 @@
  * saving, so no pixel work happens on the main thread.
  */
 import { TILE_PIXELS, TILE_SIZE } from '../core/document/tile';
-import { compositeToSamples, flatten, isOpaque, type FlattenPlan } from '../engine/cpu/flatten';
+import { compositeToSamples, flatten, isOpaque, type FlattenPlan } from '../core/composite/flatten';
 import init, * as codecs from '../wasm/pkg/codecs-st/codecs.js';
 import { exposeApi, transfer } from './rpc';
 

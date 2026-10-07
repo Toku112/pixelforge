@@ -241,3 +241,27 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   re-inserted by id, so undo/redo stays correct after history snapshot restores.
 - Converting the Background (Layer from Background, duplicating it) runs in the pixel worker: every allocated tile and
   every canvas tile gets an opaque alpha channel.
+
+## D-023 — 2026-10-07 — Blend modes
+
+**Decision:**
+
+- All 27 layer blend modes plus Pass Through are implemented with the formulas in FORMAT_NOTES §3, identically in the
+  CPU compositor (saving, merging, reference) and the GPU renderer (display).
+- Fill acts inside the formula for the "special eight" modes by moving the layer colour towards the mode's neutral
+  colour; for Hard Mix a lowered Fill turns the threshold into a contrast ramp. This reproduces the reference app's
+  well-known behaviour (Fill and Opacity look different for these modes) but its exact internal formula is not
+  published, so outputs may differ slightly from it at partial Fill until compared with real reference files.
+- Dissolve uses a fixed hash of document coordinates, so the pattern is stable (the reference app's pattern is
+  random-looking too but cannot be matched pixel for pixel).
+- 32-bit documents offer the same reduced set of modes as the reference app and keep values above 1; Divide by black
+  is capped at 65504 (the largest half-float) instead of producing infinity, and the whole-colour modes skip the
+  upper clip so HDR highlights survive.
+- The GPU keeps composites in half floats. Rather than doubling GPU memory with 32-bit float targets, we accept that
+  pixels exactly on a mode's threshold can differ between display and saved file (tested limits in FORMAT_NOTES §3.9).
+- CMYK display arrives with colour management (Phase 7); the CPU compositor already blends CMYK on inverted values.
+- Shortcuts: Alt/Option + Shift + letter sets a mode and Shift + Plus/Minus cycles through the layer's menu (wrapping
+  around; groups include Pass Through) on all selected layers that can change mode, as one history step. While typing
+  in a text field these chords type characters instead. Once painting tools exist they will target the tool's mode
+  while a painting tool is active, as in the reference app.
+- Lock All now also fixes a layer's opacity, fill and blend mode, and Pass Through is refused for pixel layers.

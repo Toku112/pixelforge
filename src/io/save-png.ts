@@ -1,5 +1,5 @@
 import type { ImageDocument } from '../core/document/document';
-import { planFromDocument } from '../engine/cpu/flatten';
+import { planFromDocument } from '../core/composite/flatten';
 import type { CodecWorkerClient } from '../workers/codec-client';
 import { formatById } from './formats';
 

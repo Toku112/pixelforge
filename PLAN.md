@@ -11,7 +11,7 @@
 _Update this section at the end of every session._
 
 - Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D item 1 (layer model and commands)
+- Last completed: Part D item 3 (all 27 blend modes, CPU + GPU, with shortcuts); item 1 before it
 - Next up: Part D item 2 (Layers panel)
 - Blockers: none. CI needs a GitHub remote to run.
 
@@ -582,11 +582,13 @@ scope (all modes, masks, etc.) is complete.
 - [x] Layer model and commands: multi-layer selection; New/Delete/Duplicate/Rename layer; New Group, Group/Ungroup; reorder and Arrange (bring forward/to front, send backward/to back); visibility, locks, opacity, fill, blend mode; Layer from Background
   ↳ note: Background from Layer moved to the merge/flatten item (it needs the same compositing step); the New Layer / Duplicate Layer dialogs come with the Layers panel.
 - [ ] Layers panel: thumbnails, visibility (Alt-click solo), rename, blend mode menu, Opacity/Fill fields, lock buttons, new/delete/group buttons, drag to reorder, multi-select, group expand/collapse
-- [ ] All 27 blend modes with Photoshop math in the CPU and GPU compositors (incl. Dissolve, Darker/Lighter Color, Hue/Saturation/Color/Luminosity, Fill vs Opacity for the "special eight"); Shift+/− and Alt+Shift+letter blend-mode shortcuts
+- [x] All 27 blend modes with Photoshop math in the CPU and GPU compositors (incl. Dissolve, Darker/Lighter Color, Hue/Saturation/Color/Luminosity, Fill vs Opacity for the "special eight"); Shift+/− and Alt+Shift+letter blend-mode shortcuts
+  ↳ note: formulas in FORMAT_NOTES §3, choices in D-023. The blend-mode menu itself comes with the Layers panel; PSD blend-mode keys with the PSD item; CMYK on screen with Phase 7. The Special-eight Fill formula should be re-checked against real reference files when the owner provides them.
 - [ ] Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer (composited off the main thread)
 - [ ] Selections: selection mask model; Select All/Deselect/Reselect/Inverse; Rectangular, Elliptical, Single Row/Column Marquee; Lasso and Polygonal Lasso (new/add/subtract/intersect, feather, anti-alias); marching ants; selection-aware Invert and Delete
 - [ ] Foreground/background colours in the toolbar (X swap, D default) and a Color Picker dialog
 - [ ] Brush and Eraser (simple round brush: size, hardness, opacity, flow, spacing, pen pressure; [ ] { } and number-key shortcuts), painting off the main thread with tile-diff undo
+  ↳ note: while a painting tool is active, the blend-mode shortcuts (Alt+Shift+letter, Shift+/−) must change the tool's mode instead of the layer's (D-023).
 - [ ] Edit > Fill (foreground/background/colour/black/white/50% gray, mode, opacity, preserve transparency) and Delete/Backspace fills
 - [ ] Move tool: move layers (and selected pixels), auto-select, arrow nudge (Shift = 10 px), Alt-drag duplicate
 - [ ] Crop tool and Image > Crop; Image Size (resample methods); Canvas Size (anchor, relative); Image Rotation (180°, 90° CW/CCW, Flip Canvas)

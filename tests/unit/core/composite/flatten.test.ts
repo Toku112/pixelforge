@@ -6,7 +6,7 @@ import {
   isOpaque,
   planFromDocument,
   UnsupportedBlendModeError,
-} from '../../../../src/engine/cpu/flatten';
+} from '../../../../src/core/composite/flatten';
 
 function doc8(withBackground = true) {
   const doc = new ImageDocument({ width: 4, height: 2 });
@@ -116,10 +116,19 @@ describe('CPU flatten (Normal blend)', () => {
     expect([...compositeToSamples(c, 8, true)]).toEqual([0, 0, 0, 255]);
   });
 
-  it('refuses blend modes that are not implemented yet', () => {
+  it('applies blend modes: 50% grey Multiply over white gives 50% grey', () => {
     const doc = doc8();
-    const l = paint(doc, [0, 0, 0, 255]);
+    const l = paint(doc, [128, 128, 128, 255]);
     doc.updateLayer(l.id, { blendMode: 'multiply' });
+    expect(pixel(doc, 0, 0)).toEqual([128, 128, 128, 255]);
+    doc.updateLayer(l.id, { blendMode: 'screen' });
+    expect(pixel(doc, 0, 0)).toEqual([255, 255, 255, 255]);
+  });
+
+  it('refuses Pass Through on a pixel layer (the document never allows it)', () => {
+    const doc = doc8();
+    const l = paint(doc, [128, 128, 128, 255]);
+    l.blendMode = 'pass-through'; // bypassing updateLayer's check
     expect(() => flatten(planFromDocument(doc))).toThrow(UnsupportedBlendModeError);
   });
 });
