@@ -749,8 +749,9 @@ export class AppController {
       },
     });
 
-    // Blend modes (Alt+Shift+letter, Shift+Plus/Minus) for the selected layers.
-    // (Once painting tools exist, they change the tool's mode while one is active.)
+    // Blend modes (Alt+Shift+letter, Shift+Plus/Minus) for the selected layers. With the
+    // Brush/Eraser active they are the tool's mode in the reference app; until brush modes
+    // exist (Phase 2) they do nothing then, rather than change the layer by surprise.
     const blendTargets = (): LayerNode[] => {
       const d = doc();
       if (!d) return [];
@@ -772,7 +773,7 @@ export class AppController {
       add({
         id,
         label,
-        enabled: () => blendTargets().length > 0,
+        enabled: () => this.#paintTool() === null && blendTargets().length > 0,
         run: () => {
           const d = doc();
           const targets = blendTargets();
@@ -789,7 +790,12 @@ export class AppController {
         label: BLEND_MODE_LABELS[mode],
         enabled: () => {
           const d = doc();
-          return !!d && availableBlendModes(d.mode, d.depth).includes(mode) && blendTargets().length > 0;
+          return (
+            !!d &&
+            this.#paintTool() === null &&
+            availableBlendModes(d.mode, d.depth).includes(mode) &&
+            blendTargets().length > 0
+          );
         },
         run: () => setBlendMode(mode),
       });
