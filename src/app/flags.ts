@@ -15,7 +15,8 @@ function readFlags(): Set<string> {
   try {
     const fromUrl = new URLSearchParams(window.location.search).get('flags');
     const fromStorage = window.localStorage.getItem('pixelforge.flags');
-    for (const list of [fromUrl, fromStorage]) for (const f of (list ?? '').split(',')) if (f.trim()) flags.add(f.trim());
+    for (const list of [fromUrl, fromStorage])
+      for (const f of (list ?? '').split(',')) if (f.trim()) flags.add(f.trim());
   } catch {
     // Storage may be unavailable (private mode); flags are optional.
   }

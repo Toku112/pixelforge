@@ -29,9 +29,16 @@ function useMenuModel(): { id: string; label: string; rows: RowModel[] }[] {
     entries.flatMap((entry, i): RowModel[] => {
       const key = `${prefix}-${i}`;
       if (entry.kind === 'separator') return [{ key, label: '-', enabled: false }];
-      if (entry.kind === 'submenu') return [{ key, label: entry.label, enabled: true, submenu: toRows(entry.items, key) }];
+      if (entry.kind === 'submenu')
+        return [{ key, label: entry.label, enabled: true, submenu: toRows(entry.items, key) }];
       if (entry.kind === 'dynamic') {
-        return sessions.map((s) => ({ key: `${key}-${s.id}`, label: s.name, enabled: true, checked: s.active, run: () => controller.workspace.activate(s.id) }));
+        return sessions.map((s) => ({
+          key: `${key}-${s.id}`,
+          label: s.name,
+          enabled: true,
+          checked: s.active,
+          run: () => controller.workspace.activate(s.id),
+        }));
       }
       const command = controller.commands.get(entry.command);
       return [
@@ -46,7 +53,11 @@ function useMenuModel(): { id: string; label: string; rows: RowModel[] }[] {
       ];
     });
 
-  return MENUS.map((menu) => ({ id: menu.id, label: menu.label, rows: toRows(visibleEntries(menu.items, filter), menu.id) }));
+  return MENUS.map((menu) => ({
+    id: menu.id,
+    label: menu.label,
+    rows: toRows(visibleEntries(menu.items, filter), menu.id),
+  }));
 }
 
 const selectable = (row: RowModel) => row.label !== '-' && (row.enabled || !!row.submenu);
@@ -56,6 +67,7 @@ export function MenuBar() {
   const [open, setOpen] = useState<number | null>(null);
   const [active, setActive] = useState<number[]>([]); // highlighted row path, e.g. [3] or [3, 1]
   const barRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const close = useCallback(() => {
     setOpen(null);
     setActive([]);
@@ -84,6 +96,8 @@ export function MenuBar() {
     if (menus[index]!.rows.length === 0) return;
     setOpen(index);
     setActive([]);
+    // Keyboard navigation needs focus in the menu bar (Safari does not focus buttons on click).
+    buttonRefs.current[index]?.focus({ preventScroll: true });
   };
 
   const onKeyDown = (e: ReactKeyboardEvent) => {
@@ -146,6 +160,9 @@ export function MenuBar() {
         return (
           <div key={menu.id} className="menubar-item">
             <button
+              ref={(el) => {
+                buttonRefs.current[i] = el;
+              }}
               type="button"
               role="menuitem"
               aria-haspopup="menu"
@@ -157,7 +174,16 @@ export function MenuBar() {
             >
               {menu.label}
             </button>
-            {open === i && <MenuList rows={menu.rows} path={[]} active={active} setActive={setActive} activate={activate} label={menu.label} />}
+            {open === i && (
+              <MenuList
+                rows={menu.rows}
+                path={[]}
+                active={active}
+                setActive={setActive}
+                activate={activate}
+                label={menu.label}
+              />
+            )}
           </div>
         );
       })}
@@ -165,7 +191,21 @@ export function MenuBar() {
   );
 }
 
-function MenuList({ rows, path, active, setActive, activate, label }: { rows: RowModel[]; path: number[]; active: number[]; setActive: (p: number[]) => void; activate: (r: RowModel) => void; label: string }) {
+function MenuList({
+  rows,
+  path,
+  active,
+  setActive,
+  activate,
+  label,
+}: {
+  rows: RowModel[];
+  path: number[];
+  active: number[];
+  setActive: (p: number[]) => void;
+  activate: (r: RowModel) => void;
+  label: string;
+}) {
   return (
     <div className={path.length ? 'menu submenu' : 'menu'} role="menu" aria-label={label}>
       {rows.map((row, i) => {
@@ -187,9 +227,20 @@ function MenuList({ rows, path, active, setActive, activate, label }: { rows: Ro
             >
               <span className="menu-check">{row.checked && <Icon name="check" size={12} />}</span>
               <span className="menu-label">{row.label}</span>
-              <span className="menu-shortcut">{row.submenu ? <Icon name="chevronRight" size={12} /> : row.shortcut}</span>
+              <span className="menu-shortcut">
+                {row.submenu ? <Icon name="chevronRight" size={12} /> : row.shortcut}
+              </span>
             </div>
-            {row.submenu && highlighted && <MenuList rows={row.submenu} path={here} active={active} setActive={setActive} activate={activate} label={row.label} />}
+            {row.submenu && highlighted && (
+              <MenuList
+                rows={row.submenu}
+                path={here}
+                active={active}
+                setActive={setActive}
+                activate={activate}
+                label={row.label}
+              />
+            )}
           </div>
         );
       })}

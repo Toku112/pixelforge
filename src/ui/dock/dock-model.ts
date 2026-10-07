@@ -140,7 +140,9 @@ export function openPanel(layout: DockLayout, panel: PanelId): DockLayout {
   const column = layout.columns[0];
   if (!column) return movePanel(layout, panel, { kind: 'float', x: 120, y: 120 });
   const first = column.groups[0];
-  return first ? movePanel(layout, panel, { kind: 'group', groupId: first.id, index: first.panels.length }) : movePanel(layout, panel, { kind: 'new-group', columnId: column.id, index: 0 });
+  return first
+    ? movePanel(layout, panel, { kind: 'group', groupId: first.id, index: first.panels.length })
+    : movePanel(layout, panel, { kind: 'new-group', columnId: column.id, index: 0 });
 }
 
 export function togglePanel(layout: DockLayout, panel: PanelId): DockLayout {
@@ -187,7 +189,13 @@ export function resizeGroups(layout: DockLayout, columnId: string, index: number
   return next;
 }
 
-export function moveFloating(layout: DockLayout, floatId: string, x: number, y: number, bounds?: { width: number; height: number }): DockLayout {
+export function moveFloating(
+  layout: DockLayout,
+  floatId: string,
+  x: number,
+  y: number,
+  bounds?: { width: number; height: number },
+): DockLayout {
   const next = clone(layout);
   const f = next.floating.find((w) => w.id === floatId);
   if (!f) return layout;

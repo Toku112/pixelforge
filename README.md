@@ -27,6 +27,11 @@ Node.js ≥ 22.12, pnpm, Rust (via rustup) with the `wasm32-unknown-unknown` tar
 | `pnpm test:rust`        | Rust unit tests                                  |
 | `pnpm wasm`             | Build the Rust crates to WebAssembly             |
 
+## Development flags
+
+Add `?flags=show-unimplemented` to the URL to see the complete menu structure, with items that are not built yet shown
+greyed out.
+
 ## Golden-image tests
 
 Visual results are checked against approved images in `tests/golden/<feature>/<case>.expected.png` using the CIEDE2000

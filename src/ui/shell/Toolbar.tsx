@@ -28,7 +28,10 @@ export function Toolbar() {
   return (
     <nav className="toolbar" aria-label="Tools">
       {controller.tools.groups.map((group) => {
-        const current = group.tools.find((t) => t.id === activeToolId) ?? group.tools.find((t) => t.id === groupTool[group.id]) ?? group.tools[0]!;
+        const current =
+          group.tools.find((t) => t.id === activeToolId) ??
+          group.tools.find((t) => t.id === groupTool[group.id]) ??
+          group.tools[0]!;
         const active = group.tools.some((t) => t.id === activeToolId);
         const multiple = group.tools.length > 1;
         return (
@@ -64,7 +67,14 @@ export function Toolbar() {
             {flyout === group.id && (
               <div className="tool-flyout" role="menu" aria-label="Tool group" onPointerLeave={() => setFlyout(null)}>
                 {group.tools.map((tool) => (
-                  <button key={tool.id} type="button" role="menuitemradio" aria-checked={tool.id === current.id} className="tool-flyout-row" onClick={() => select(tool.id, group.id)}>
+                  <button
+                    key={tool.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={tool.id === current.id}
+                    className="tool-flyout-row"
+                    onClick={() => select(tool.id, group.id)}
+                  >
                     <Icon name={TOOL_ICONS[tool.id] ?? 'hand'} size={16} />
                     <span>{tool.name}</span>
                     <span className="menu-shortcut">{tool.key}</span>

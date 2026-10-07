@@ -20,7 +20,8 @@ const bridge: UiBridge = {
   togglePanel: (id) => ui().setDock(togglePanel(ui().dock, id)),
   resetWorkspace: () => resetDock(),
   alert: (title, message) => new Promise((resolve) => ui().pushDialog({ kind: 'alert', title, message, resolve })),
-  confirmSave: (documentName) => new Promise((resolve) => ui().pushDialog({ kind: 'confirm-save', documentName, resolve })),
+  confirmSave: (documentName) =>
+    new Promise((resolve) => ui().pushDialog({ kind: 'confirm-save', documentName, resolve })),
   about: () => new Promise((resolve) => ui().pushDialog({ kind: 'about', resolve })),
 };
 

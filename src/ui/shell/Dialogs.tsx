@@ -83,7 +83,10 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
             {APP_NAME} {__APP_VERSION__}
           </p>
           <p>A professional raster image editor that runs in your browser. Your images stay on your computer.</p>
-          <p className="hint">Built with open-source software including React, Zustand, Vite, Rust, wasm-bindgen, rayon, png, zune-jpeg and image-webp (MIT / Apache-2.0 licences).</p>
+          <p className="hint">
+            Built with open-source software including React, Zustand, Vite, Rust, wasm-bindgen, rayon, png, zune-jpeg
+            and image-webp (MIT / Apache-2.0 licences).
+          </p>
           <div className="modal-buttons">
             <button type="button" className="primary-button" data-autofocus onClick={done}>
               OK

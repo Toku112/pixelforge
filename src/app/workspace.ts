@@ -62,8 +62,19 @@ export class Workspace {
 
   /** Adds an opened document and makes it active. */
   add(doc: ImageDocument, fileHandle: FileSystemFileHandle | null = null, initialLabel = 'Open'): DocumentSession {
-    const history = new History(doc, { initialLabel, residency: this.#options.residency, maxStates: this.#options.historyStates });
-    const session: DocumentSession = { id: doc.id, doc, history, fileHandle, view: null, savedEntryId: history.entries[0]!.id };
+    const history = new History(doc, {
+      initialLabel,
+      residency: this.#options.residency,
+      maxStates: this.#options.historyStates,
+    });
+    const session: DocumentSession = {
+      id: doc.id,
+      doc,
+      history,
+      fileHandle,
+      view: null,
+      savedEntryId: history.entries[0]!.id,
+    };
     history.changes.on(() => this.#changed());
     doc.changes.on((change) => {
       if (change.kind !== 'pixels') this.#changed(); // pixel edits are reported through the history

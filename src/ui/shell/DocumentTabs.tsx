@@ -24,30 +24,30 @@ export function DocumentTabs() {
       {tabs.map((t) => {
         const label = `${t.name}${t.zoom !== undefined ? ` @ ${formatZoom(t.zoom)}` : ''} (${t.mode}${t.dirty ? '*' : ''})`;
         return (
-        <div
-          key={t.id}
-          role="tab"
-          aria-label={label}
-          aria-selected={t.active}
-          tabIndex={t.active ? 0 : -1}
-          className={`doc-tab${t.active ? ' active' : ''}`}
-          title={t.name}
-          onClick={() => controller.workspace.activate(t.id)}
-          onAuxClick={(e) => e.button === 1 && void controller.close(t.session)}
-        >
-          <span className="doc-tab-label">{label}</span>
-          <button
-            type="button"
-            className="doc-tab-close"
-            aria-label={`Close ${t.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              void controller.close(t.session);
-            }}
+          <div
+            key={t.id}
+            role="tab"
+            aria-label={label}
+            aria-selected={t.active}
+            tabIndex={t.active ? 0 : -1}
+            className={`doc-tab${t.active ? ' active' : ''}`}
+            title={t.name}
+            onClick={() => controller.workspace.activate(t.id)}
+            onAuxClick={(e) => e.button === 1 && void controller.close(t.session)}
           >
-            <Icon name="close" size={12} />
-          </button>
-        </div>
+            <span className="doc-tab-label">{label}</span>
+            <button
+              type="button"
+              className="doc-tab-close"
+              aria-label={`Close ${t.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                void controller.close(t.session);
+              }}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
         );
       })}
     </div>

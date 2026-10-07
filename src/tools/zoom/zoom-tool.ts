@@ -26,6 +26,10 @@ export class ZoomTool implements Tool {
   readonly name = 'Zoom Tool';
   readonly key = 'Z';
   readonly options: ZoomToolOptions = { mode: 'in', scrubby: true };
+
+  setOptions(changes: Partial<ZoomToolOptions>): void {
+    Object.assign(this.options, changes);
+  }
   #start: Point | null = null;
   #last: Point | null = null;
   #moved = false;

@@ -90,9 +90,26 @@ describe('dock model', () => {
   it('sanitises stored layouts', () => {
     const known = new Set(['history', 'navigator']);
     expect(sanitizeLayout('nonsense', known)).toBeNull();
-    const stored = { columns: [{ id: 'main', width: 99999, collapsed: 0, groups: [{ id: 'g', panels: ['history', 'ghost', 'history'], active: 'ghost', weight: -1 }] }], floating: [] };
+    const stored = {
+      columns: [
+        {
+          id: 'main',
+          width: 99999,
+          collapsed: 0,
+          groups: [{ id: 'g', panels: ['history', 'ghost', 'history'], active: 'ghost', weight: -1 }],
+        },
+      ],
+      floating: [],
+    };
     expect(sanitizeLayout(stored, known)).toEqual({
-      columns: [{ id: 'main', width: 600, collapsed: false, groups: [{ id: 'g', panels: ['history'], active: 'history', weight: 1 }] }],
+      columns: [
+        {
+          id: 'main',
+          width: 600,
+          collapsed: false,
+          groups: [{ id: 'g', panels: ['history'], active: 'history', weight: 1 }],
+        },
+      ],
       floating: [],
     });
   });

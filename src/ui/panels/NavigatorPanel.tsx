@@ -18,16 +18,14 @@ export function NavigatorPanel() {
   const doc = useWorkspace((w) => w.active?.doc ?? null);
   const view = useUi((s) => s.view);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [thumb, setThumb] = useState<{ width: number; height: number; scale: number } | null>(null);
+  const [thumbState, setThumb] = useState<{ docId: string; width: number; height: number; scale: number } | null>(null);
+  const thumb = thumbState && doc && thumbState.docId === doc.id ? thumbState : null;
   const drag = useRef<{ dx: number; dy: number } | null>(null);
 
   // Refresh the thumbnail after the document changes, at most a few times per second.
   useEffect(() => {
     const canvasView = controller.canvas;
-    if (!doc || !canvasView) {
-      setThumb(null);
-      return;
-    }
+    if (!doc || !canvasView) return;
     let dirty = true;
     let last = 0;
     const offDoc = doc.changes.on(() => (dirty = true));
@@ -37,8 +35,10 @@ export function NavigatorPanel() {
       if (!t || !canvas) return;
       canvas.width = t.width;
       canvas.height = t.height;
-      canvas.getContext('2d')?.putImageData(new ImageData(t.data as Uint8ClampedArray<ArrayBuffer>, t.width, t.height), 0, 0);
-      setThumb({ width: t.width, height: t.height, scale: t.scale });
+      canvas
+        .getContext('2d')
+        ?.putImageData(new ImageData(t.data as Uint8ClampedArray<ArrayBuffer>, t.width, t.height), 0, 0);
+      setThumb({ docId: doc.id, width: t.width, height: t.height, scale: t.scale });
       dirty = false;
     };
     const offFrame = canvasView.renderer.onFrame((stats) => {
@@ -69,7 +69,11 @@ export function NavigatorPanel() {
     ]
       .map((p) => v.viewToDoc(p))
       // Unrotated, keep the outline on the thumbnail even when the view is larger than the image.
-      .map((p) => (v.rotation === 0 ? { x: Math.min(doc!.width, Math.max(0, p.x)), y: Math.min(doc!.height, Math.max(0, p.y)) } : p))
+      .map((p) =>
+        v.rotation === 0
+          ? { x: Math.min(doc!.width, Math.max(0, p.x)), y: Math.min(doc!.height, Math.max(0, p.y)) }
+          : p,
+      )
       .map((p) => `${p.x / thumb.scale},${p.y / thumb.scale}`)
       .join(' ');
   }
@@ -77,7 +81,10 @@ export function NavigatorPanel() {
   const docPoint = (e: PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const sx = (thumb?.width ?? 1) / rect.width;
-    return { x: (e.clientX - rect.left) * sx * (thumb?.scale ?? 1), y: (e.clientY - rect.top) * sx * (thumb?.scale ?? 1) };
+    return {
+      x: (e.clientX - rect.left) * sx * (thumb?.scale ?? 1),
+      y: (e.clientY - rect.top) * sx * (thumb?.scale ?? 1),
+    };
   };
   const onPointerDown = (e: PointerEvent<SVGSVGElement>) => {
     const c = ctx();
@@ -109,7 +116,10 @@ export function NavigatorPanel() {
   return (
     <div className="navigator">
       <div className="navigator-thumb">
-        <div className="navigator-frame" style={thumb ? { aspectRatio: `${thumb.width} / ${thumb.height}` } : undefined}>
+        <div
+          className="navigator-frame"
+          style={thumb ? { aspectRatio: `${thumb.width} / ${thumb.height}` } : undefined}
+        >
           <canvas ref={canvasRef} />
           {thumb && (
             <svg
@@ -126,8 +136,23 @@ export function NavigatorPanel() {
         </div>
       </div>
       <div className="navigator-controls">
-        <NumberField label="Zoom" hideLabel value={(view?.zoom ?? 1) * 100} precision={2} suffix="%" min={MIN_ZOOM * 100} max={MAX_ZOOM * 100} width={64} onChange={(pct) => zoomTo(pct / 100)} />
-        <button type="button" className="option-icon" aria-label="Zoom out" onClick={() => (ctx()?.viewport.zoomOut(), ctx()?.viewChanged())}>
+        <NumberField
+          label="Zoom"
+          hideLabel
+          value={(view?.zoom ?? 1) * 100}
+          precision={2}
+          suffix="%"
+          min={MIN_ZOOM * 100}
+          max={MAX_ZOOM * 100}
+          width={64}
+          onChange={(pct) => zoomTo(pct / 100)}
+        />
+        <button
+          type="button"
+          className="option-icon"
+          aria-label="Zoom out"
+          onClick={() => (ctx()?.viewport.zoomOut(), ctx()?.viewChanged())}
+        >
           <Icon name="zoomOut" size={14} />
         </button>
         <input
@@ -139,7 +164,12 @@ export function NavigatorPanel() {
           value={Math.round(((Math.log2(view?.zoom ?? 1) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 1000)}
           onChange={(e) => zoomTo(2 ** (LOG_MIN + (Number(e.target.value) / 1000) * (LOG_MAX - LOG_MIN)))}
         />
-        <button type="button" className="option-icon" aria-label="Zoom in" onClick={() => (ctx()?.viewport.zoomIn(), ctx()?.viewChanged())}>
+        <button
+          type="button"
+          className="option-icon"
+          aria-label="Zoom in"
+          onClick={() => (ctx()?.viewport.zoomIn(), ctx()?.viewChanged())}
+        >
           <Icon name="zoomIn" size={14} />
         </button>
       </div>

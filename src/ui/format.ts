@@ -38,7 +38,8 @@ export function documentSizes(doc: ImageDocument): { flattened: number; layered:
   for (const layer of doc.layers()) {
     if (layer.kind !== 'pixel') continue;
     const spp = layer.buffer.spp;
-    const pixels = layer.buffer.tileCount > 0 ? layer.buffer.tileCount * 256 * 256 : layer.isBackground ? doc.width * doc.height : 0;
+    const pixels =
+      layer.buffer.tileCount > 0 ? layer.buffer.tileCount * 256 * 256 : layer.isBackground ? doc.width * doc.height : 0;
     layered += Math.min(pixels, doc.width * doc.height * 4) * spp * bps;
   }
   return { flattened, layered };

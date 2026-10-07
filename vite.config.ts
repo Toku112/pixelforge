@@ -54,7 +54,9 @@ function buildInputs(): Record<string, string> | undefined {
   return inputs;
 }
 
-const packageVersion = (JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string }).version;
+const packageVersion = (
+  JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string }
+).version;
 
 export default defineConfig({
   plugins: [crossOriginIsolation(), react(), brandHtml()],

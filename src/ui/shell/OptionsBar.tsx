@@ -59,7 +59,7 @@ export function OptionsBar() {
                 title={mode === 'in' ? 'Zoom in' : 'Zoom out'}
                 className={`option-icon${zoom.mode === mode ? ' active' : ''}`}
                 onClick={() => {
-                  zoom.mode = mode;
+                  controller.tools.zoom.setOptions({ mode });
                   bump();
                   controller.canvas?.toolChanged();
                 }}
@@ -73,7 +73,7 @@ export function OptionsBar() {
               type="checkbox"
               checked={zoom.scrubby}
               onChange={(e) => {
-                zoom.scrubby = e.target.checked;
+                controller.tools.zoom.setOptions({ scrubby: e.target.checked });
                 bump();
               }}
             />

@@ -29,7 +29,11 @@ export interface UiBridge {
   about(): Promise<void>;
 }
 
-const TOOL_COMMANDS: Record<string, string> = { 'tool.hand': 'hand', 'tool.rotateView': 'rotate-view', 'tool.zoom': 'zoom' };
+const TOOL_COMMANDS: Record<string, string> = {
+  'tool.hand': 'hand',
+  'tool.rotateView': 'rotate-view',
+  'tool.zoom': 'zoom',
+};
 
 export class AppController {
   readonly services: AppServices;
@@ -55,7 +59,9 @@ export class AppController {
         nextToolForCommand: (c) => TOOL_COMMANDS[c],
       },
     });
-    this.commands.onError((_id, error) => void ui.alert('Something went wrong', error instanceof Error ? error.message : String(error)));
+    this.commands.onError(
+      (_id, error) => void ui.alert('Something went wrong', error instanceof Error ? error.message : String(error)),
+    );
     this.#registerCommands();
   }
 
@@ -97,7 +103,12 @@ export class AppController {
   /** Saves in place when the document came from a PNG it can be written back to; otherwise Save As. */
   async save(session: DocumentSession): Promise<boolean> {
     const flat = session.doc.layerCount === 1 && session.doc.root.children[0]?.kind === 'pixel';
-    if (session.fileHandle && flat && session.fileHandle.name.toLowerCase().endsWith('.png') && !formatById('png').saveRestriction(session.doc)) {
+    if (
+      session.fileHandle &&
+      flat &&
+      session.fileHandle.name.toLowerCase().endsWith('.png') &&
+      !formatById('png').saveRestriction(session.doc)
+    ) {
       await writeToHandle(session.fileHandle, await encodeDocumentAsPng(session.doc, this.services.codec));
       this.workspace.markSaved(session, session.fileHandle);
       return true;
@@ -151,26 +162,76 @@ export class AppController {
 
     // File
     add({ id: 'file.open', label: 'Open…', run: () => this.openWithDialog() });
-    add({ id: 'file.close', label: 'Close', enabled: hasDoc, run: async () => void (ws.active && (await this.close(ws.active))) });
+    add({
+      id: 'file.close',
+      label: 'Close',
+      enabled: hasDoc,
+      run: async () => void (ws.active && (await this.close(ws.active))),
+    });
     add({ id: 'file.closeAll', label: 'Close All', enabled: hasDoc, run: () => this.closeAll() });
-    add({ id: 'file.closeOthers', label: 'Close Others', enabled: () => ws.sessions.length > 1, run: () => this.closeAll(ws.active ?? undefined) });
-    add({ id: 'file.save', label: 'Save', enabled: hasDoc, run: async () => void (ws.active && (await this.save(ws.active))) });
-    add({ id: 'file.saveAs', label: 'Save As…', enabled: hasDoc, run: async () => void (ws.active && (await this.saveAs(ws.active))) });
+    add({
+      id: 'file.closeOthers',
+      label: 'Close Others',
+      enabled: () => ws.sessions.length > 1,
+      run: () => this.closeAll(ws.active ?? undefined),
+    });
+    add({
+      id: 'file.save',
+      label: 'Save',
+      enabled: hasDoc,
+      run: async () => void (ws.active && (await this.save(ws.active))),
+    });
+    add({
+      id: 'file.saveAs',
+      label: 'Save As…',
+      enabled: hasDoc,
+      run: async () => void (ws.active && (await this.saveAs(ws.active))),
+    });
 
     // Edit
     add({ id: 'edit.undo', label: 'Undo', enabled: () => !!history()?.canUndo, run: () => history()?.undo() });
     add({ id: 'edit.redo', label: 'Redo', enabled: () => !!history()?.canRedo, run: () => history()?.redo() });
-    add({ id: 'edit.toggleLastState', label: 'Toggle Last State', enabled: () => !!history()?.canUndo || !!history()?.canRedo, run: () => history()?.toggleLastState() });
+    add({
+      id: 'edit.toggleLastState',
+      label: 'Toggle Last State',
+      enabled: () => !!history()?.canUndo || !!history()?.canRedo,
+      run: () => history()?.toggleLastState(),
+    });
 
     // Image
-    add({ id: 'image.adjustments.invert', label: 'Invert', enabled: () => ws.canExecute('invert'), run: () => ws.execute({ name: 'invert', params: {} }) });
+    add({
+      id: 'image.adjustments.invert',
+      label: 'Invert',
+      enabled: () => ws.canExecute('invert'),
+      run: () => ws.execute({ name: 'invert', params: {} }),
+    });
 
     // View
-    add({ id: 'view.zoomIn', label: 'Zoom In', enabled: hasDoc, run: withView((ctx) => (ctx.viewport.zoomIn(), ctx.viewChanged())) });
-    add({ id: 'view.zoomOut', label: 'Zoom Out', enabled: hasDoc, run: withView((ctx) => (ctx.viewport.zoomOut(), ctx.viewChanged())) });
+    add({
+      id: 'view.zoomIn',
+      label: 'Zoom In',
+      enabled: hasDoc,
+      run: withView((ctx) => (ctx.viewport.zoomIn(), ctx.viewChanged())),
+    });
+    add({
+      id: 'view.zoomOut',
+      label: 'Zoom Out',
+      enabled: hasDoc,
+      run: withView((ctx) => (ctx.viewport.zoomOut(), ctx.viewChanged())),
+    });
     add({ id: 'view.fitOnScreen', label: 'Fit on Screen', enabled: hasDoc, run: () => this.#canvas?.fitOnScreen() });
-    add({ id: 'view.actualPixels', label: '100%', enabled: hasDoc, run: withView((ctx) => viewActions.actualPixels(ctx)) });
-    add({ id: 'view.zoom200', label: '200%', enabled: hasDoc, run: withView((ctx) => (ctx.viewport.zoomTo(2), ctx.viewChanged())) });
+    add({
+      id: 'view.actualPixels',
+      label: '100%',
+      enabled: hasDoc,
+      run: withView((ctx) => viewActions.actualPixels(ctx)),
+    });
+    add({
+      id: 'view.zoom200',
+      label: '200%',
+      enabled: hasDoc,
+      run: withView((ctx) => (ctx.viewport.zoomTo(2), ctx.viewChanged())),
+    });
     add({
       id: 'view.show.pixelGrid',
       label: 'Pixel Grid',
@@ -184,13 +245,26 @@ export class AppController {
     });
 
     // Window
-    for (const [id, panel, label] of [['window.panel.history', 'history', 'History'], ['window.panel.navigator', 'navigator', 'Navigator']] as const) {
+    for (const [id, panel, label] of [
+      ['window.panel.history', 'history', 'History'],
+      ['window.panel.navigator', 'navigator', 'Navigator'],
+    ] as const) {
       add({ id, label, checked: () => this.#ui.isPanelOpen(panel), run: () => this.#ui.togglePanel(panel) });
     }
     add({ id: 'window.workspace.essentials', label: 'Essentials (Default)', run: () => this.#ui.resetWorkspace() });
     add({ id: 'window.workspace.reset', label: 'Reset Essentials', run: () => this.#ui.resetWorkspace() });
-    add({ id: 'window.nextDocument', label: 'Next Document', enabled: () => ws.sessions.length > 1, run: () => ws.cycle(1) });
-    add({ id: 'window.previousDocument', label: 'Previous Document', enabled: () => ws.sessions.length > 1, run: () => ws.cycle(-1) });
+    add({
+      id: 'window.nextDocument',
+      label: 'Next Document',
+      enabled: () => ws.sessions.length > 1,
+      run: () => ws.cycle(1),
+    });
+    add({
+      id: 'window.previousDocument',
+      label: 'Previous Document',
+      enabled: () => ws.sessions.length > 1,
+      run: () => ws.cycle(-1),
+    });
 
     // Help
     add({ id: 'help.about', label: `About ${APP_NAME}…`, run: () => this.#ui.about() });

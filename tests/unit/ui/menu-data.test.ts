@@ -8,7 +8,19 @@ function commands(entries: readonly MenuEntry[]): string[] {
 
 describe('menu bar data', () => {
   it('has the eleven top-level menus in order', () => {
-    expect(MENUS.map((m) => m.label)).toEqual(['File', 'Edit', 'Image', 'Layer', 'Type', 'Select', 'Filter', 'View', 'Plugins', 'Window', 'Help']);
+    expect(MENUS.map((m) => m.label)).toEqual([
+      'File',
+      'Edit',
+      'Image',
+      'Layer',
+      'Type',
+      'Select',
+      'Filter',
+      'View',
+      'Plugins',
+      'Window',
+      'Help',
+    ]);
   });
 
   it('uses each command at most once', () => {
@@ -19,7 +31,12 @@ describe('menu bar data', () => {
   it('gives every default menu shortcut a home in the menus or the tools', () => {
     const inMenus = new Set(MENUS.flatMap((m) => commands(m.items)));
     const orphaned = DEFAULT_KEYMAP.map((b) => b.command).filter(
-      (c) => /^(file|edit|image|layer|select|filter)\./.test(c) && !inMenus.has(c) && c !== 'layer.newNoDialog' && c !== 'layer.stampVisible' && c !== 'select.feather',
+      (c) =>
+        /^(file|edit|image|layer|select|filter)\./.test(c) &&
+        !inMenus.has(c) &&
+        c !== 'layer.newNoDialog' &&
+        c !== 'layer.stampVisible' &&
+        c !== 'select.feather',
     );
     expect(orphaned).toEqual([]);
   });

@@ -46,7 +46,10 @@ export function CanvasArea() {
     });
     const uninstallDrop = installFileDrop(
       hostRef.current!,
-      (files) => void Promise.all(files.map(async (f) => ({ name: f.name, bytes: await readFile(f) }))).then((picked) => controller.openFiles(picked)),
+      (files) =>
+        void Promise.all(files.map(async (f) => ({ name: f.name, bytes: await readFile(f) }))).then((picked) =>
+          controller.openFiles(picked),
+        ),
       (active) => useUi.getState().setDropActive(active),
     );
     return () => {

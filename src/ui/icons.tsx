@@ -5,13 +5,24 @@ type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 function Svg({ size = 18, children, ...rest }: IconProps & { children: ReactElement | ReactElement[] }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...rest}
+    >
       {children}
     </svg>
   );
 }
 
-export const icons = {
+const icons = {
   hand: (p: IconProps) => (
     <Svg {...p}>
       <path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11" />

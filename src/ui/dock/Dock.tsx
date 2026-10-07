@@ -7,7 +7,7 @@
  *   change its width; the column header button collapses it to icons.
  * - Floating windows move by their grip bar and resize from the corner.
  */
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useController } from '../AppContext';
 import { Icon } from '../icons';
 import { PANELS } from '../panels/panel-registry';
@@ -55,38 +55,66 @@ function hitTest(x: number, y: number): { target: DropTarget; indicator: DragSta
       }
     }
     const r = strip.getBoundingClientRect();
-    return { target: { kind: 'group', groupId: strip.dataset['dockTabstrip']!, index }, indicator: { left: r.left, top: r.top, width: r.width, height: r.height } };
+    return {
+      target: { kind: 'group', groupId: strip.dataset['dockTabstrip']!, index },
+      indicator: { left: r.left, top: r.top, width: r.width, height: r.height },
+    };
   }
   const body = el?.closest<HTMLElement>('[data-dock-group-body]');
   if (body?.dataset['column']) {
     const r = body.getBoundingClientRect();
     const index = Number(body.dataset['groupIndex']);
     const column = body.dataset['column'];
-    if (y < r.top + r.height * 0.3) return { target: { kind: 'new-group', columnId: column, index }, indicator: { left: r.left, top: r.top - 2, width: r.width, height: 4 } };
-    if (y > r.bottom - r.height * 0.3) return { target: { kind: 'new-group', columnId: column, index: index + 1 }, indicator: { left: r.left, top: r.bottom - 2, width: r.width, height: 4 } };
-    return { target: { kind: 'group', groupId: body.dataset['dockGroupBody']!, index: Infinity }, indicator: { left: r.left, top: r.top, width: r.width, height: r.height } };
+    if (y < r.top + r.height * 0.3)
+      return {
+        target: { kind: 'new-group', columnId: column, index },
+        indicator: { left: r.left, top: r.top - 2, width: r.width, height: 4 },
+      };
+    if (y > r.bottom - r.height * 0.3)
+      return {
+        target: { kind: 'new-group', columnId: column, index: index + 1 },
+        indicator: { left: r.left, top: r.bottom - 2, width: r.width, height: 4 },
+      };
+    return {
+      target: { kind: 'group', groupId: body.dataset['dockGroupBody']!, index: Infinity },
+      indicator: { left: r.left, top: r.top, width: r.width, height: r.height },
+    };
   }
   const column = el?.closest<HTMLElement>('[data-dock-column]');
   if (column) {
     const r = column.getBoundingClientRect();
-    return { target: { kind: 'new-group', columnId: column.dataset['dockColumn']!, index: Infinity }, indicator: { left: r.left, top: r.bottom - 4, width: r.width, height: 4 } };
+    return {
+      target: { kind: 'new-group', columnId: column.dataset['dockColumn']!, index: Infinity },
+      indicator: { left: r.left, top: r.bottom - 4, width: r.width, height: 4 },
+    };
   }
   return { target: { kind: 'float', x: x - 40, y: y - 12 }, indicator: null };
 }
 
 function useTabDrag() {
-  const [drag, setDrag] = useState<DragState | null>(null);
+  const [drag, setDragState] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
-  dragRef.current = drag;
+  const setDrag = useCallback((next: DragState | null) => {
+    dragRef.current = next;
+    setDragState(next);
+  }, []);
+  const dragging = drag !== null;
 
   useEffect(() => {
-    if (!drag) return;
+    if (!dragging) return;
     const move = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
       const active = d.active || Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > DRAG_THRESHOLD;
       const hit = active ? hitTest(e.clientX, e.clientY) : null;
-      setDrag({ ...d, x: e.clientX, y: e.clientY, active, target: hit?.target ?? null, indicator: hit?.indicator ?? null });
+      setDrag({
+        ...d,
+        x: e.clientX,
+        y: e.clientY,
+        active,
+        target: hit?.target ?? null,
+        indicator: hit?.indicator ?? null,
+      });
     };
     const up = () => {
       const d = dragRef.current;
@@ -105,11 +133,20 @@ function useTabDrag() {
       window.removeEventListener('pointerup', up);
       window.removeEventListener('keydown', key);
     };
-  }, [drag !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dragging, setDrag]);
 
   const start = (panel: string, e: ReactPointerEvent) => {
     if (e.button !== 0) return;
-    setDrag({ panel, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, active: false, target: null, indicator: null });
+    setDrag({
+      panel,
+      startX: e.clientX,
+      startY: e.clientY,
+      x: e.clientX,
+      y: e.clientY,
+      active: false,
+      target: null,
+      indicator: null,
+    });
   };
   return { drag, start };
 }
@@ -141,11 +178,21 @@ function PanelMenu({ group, onClose }: { group: PanelGroup; onClose: () => void 
         </div>
       ))}
       {def?.menu && <div className="menu-separator" role="separator" />}
-      <div role="menuitem" tabIndex={-1} className="menu-row" onClick={() => (setDock(closePanel(dock, group.active)), onClose())}>
+      <div
+        role="menuitem"
+        tabIndex={-1}
+        className="menu-row"
+        onClick={() => (setDock(closePanel(dock, group.active)), onClose())}
+      >
         <span className="menu-check" />
         <span className="menu-label">Close</span>
       </div>
-      <div role="menuitem" tabIndex={-1} className="menu-row" onClick={() => (setDock(closeGroup(dock, group.id)), onClose())}>
+      <div
+        role="menuitem"
+        tabIndex={-1}
+        className="menu-row"
+        onClick={() => (setDock(closeGroup(dock, group.id)), onClose())}
+      >
         <span className="menu-check" />
         <span className="menu-label">Close Tab Group</span>
       </div>
@@ -153,12 +200,28 @@ function PanelMenu({ group, onClose }: { group: PanelGroup; onClose: () => void 
   );
 }
 
-function GroupView({ group, column, index, startDrag, weight }: { group: PanelGroup; column?: string; index?: number; startDrag: StartDrag; weight?: number }) {
+function GroupView({
+  group,
+  column,
+  index,
+  startDrag,
+  weight,
+}: {
+  group: PanelGroup;
+  column?: string;
+  index?: number;
+  startDrag: StartDrag;
+  weight?: number;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const setDock = useUi((s) => s.setDock);
   const Active = PANELS[group.active]?.component;
   return (
-    <section className="panel-group" style={weight !== undefined ? { flexGrow: weight } : undefined} aria-label={PANELS[group.active]?.title}>
+    <section
+      className="panel-group"
+      style={weight !== undefined ? { flexGrow: weight } : undefined}
+      aria-label={PANELS[group.active]?.title}
+    >
       <div className="panel-tabs" data-dock-tabstrip={group.id} role="tablist">
         {group.panels.map((id) => (
           <button
@@ -175,7 +238,13 @@ function GroupView({ group, column, index, startDrag, weight }: { group: PanelGr
           </button>
         ))}
         <span className="panel-tabs-spacer" />
-        <button type="button" className="panel-menu-button" aria-label="Panel menu" aria-haspopup="menu" onClick={() => setMenuOpen(!menuOpen)}>
+        <button
+          type="button"
+          className="panel-menu-button"
+          aria-label="Panel menu"
+          aria-haspopup="menu"
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
           <Icon name="menu" size={14} />
         </button>
         {menuOpen && <PanelMenu group={group} onClose={() => setMenuOpen(false)} />}
@@ -231,7 +300,13 @@ function ColumnView({ column, startDrag }: { column: DockColumn; startDrag: Star
 
   const header = (
     <div className="dock-column-header">
-      <button type="button" className="dock-collapse" aria-label={column.collapsed ? 'Expand panels' : 'Collapse to icons'} title={column.collapsed ? 'Expand Panels' : 'Collapse to Icons'} onClick={() => setDock(toggleColumnCollapsed(useUi.getState().dock, column.id))}>
+      <button
+        type="button"
+        className="dock-collapse"
+        aria-label={column.collapsed ? 'Expand panels' : 'Collapse to icons'}
+        title={column.collapsed ? 'Expand Panels' : 'Collapse to Icons'}
+        onClick={() => setDock(toggleColumnCollapsed(useUi.getState().dock, column.id))}
+      >
         <Icon name={column.collapsed ? 'expand' : 'collapse'} size={12} />
       </button>
     </div>
@@ -244,7 +319,14 @@ function ColumnView({ column, startDrag }: { column: DockColumn; startDrag: Star
       <aside className="dock-column collapsed" data-dock-column={column.id} aria-label="Panels">
         {header}
         {panels.map((id) => (
-          <button key={id} type="button" className={`dock-icon${popout === id ? ' active' : ''}`} aria-label={PANELS[id]?.title} title={PANELS[id]?.title} onClick={() => setPopout(popout === id ? null : id)}>
+          <button
+            key={id}
+            type="button"
+            className={`dock-icon${popout === id ? ' active' : ''}`}
+            aria-label={PANELS[id]?.title}
+            title={PANELS[id]?.title}
+            onClick={() => setPopout(popout === id ? null : id)}
+          >
             <Icon name={PANELS[id]?.icon ?? 'menu'} size={16} />
           </button>
         ))}
@@ -276,7 +358,23 @@ function ColumnView({ column, startDrag }: { column: DockColumn; startDrag: Star
   );
 }
 
-function FloatingWindow({ id, x, y, width, height, group, startDrag }: { id: string; x: number; y: number; width: number; height: number; group: PanelGroup; startDrag: StartDrag }) {
+function FloatingWindow({
+  id,
+  x,
+  y,
+  width,
+  height,
+  group,
+  startDrag,
+}: {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  group: PanelGroup;
+  startDrag: StartDrag;
+}) {
   const drag = (kind: 'move' | 'resize') => (e: ReactPointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     const sx = e.clientX;
@@ -284,7 +382,11 @@ function FloatingWindow({ id, x, y, width, height, group, startDrag }: { id: str
     const move = (ev: PointerEvent) => {
       const ui = useUi.getState();
       const bounds = { width: window.innerWidth, height: window.innerHeight };
-      ui.setDock(kind === 'move' ? moveFloating(ui.dock, id, x + ev.clientX - sx, y + ev.clientY - sy, bounds) : resizeFloating(ui.dock, id, width + ev.clientX - sx, height + ev.clientY - sy));
+      ui.setDock(
+        kind === 'move'
+          ? moveFloating(ui.dock, id, x + ev.clientX - sx, y + ev.clientY - sy, bounds)
+          : resizeFloating(ui.dock, id, width + ev.clientX - sx, height + ev.clientY - sy),
+      );
     };
     const up = () => {
       window.removeEventListener('pointermove', move);

@@ -1,6 +1,9 @@
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { APP_NAME } from '../../src/app/brand';
+import type { AppController } from '../../src/app/controller';
+
+type AppWindow = { __pixelforge: AppController };
 
 const FIXTURES = join(import.meta.dirname, '../fixtures/images');
 
@@ -23,17 +26,24 @@ async function openFile(page: Page, name: string) {
 /** View state and a rendered pixel, read from the running app. */
 const app = (page: Page) =>
   page.evaluate(() => {
-    const c = (window as unknown as { __pixelforge: import('../../src/app/controller').AppController }).__pixelforge;
+    const c = (window as unknown as AppWindow).__pixelforge;
     const r = c.canvas!.renderer;
     const v = r.viewport;
-    return { zoom: v.zoom, rotation: v.rotation, centerX: v.centerX, centerY: v.centerY, dpr: r.devicePixelRatio, docs: c.workspace.sessions.length };
+    return {
+      zoom: v.zoom,
+      rotation: v.rotation,
+      centerX: v.centerX,
+      centerY: v.centerY,
+      dpr: r.devicePixelRatio,
+      docs: c.workspace.sessions.length,
+    };
   });
 
 /** Colour of the canvas at a CSS point (relative to the canvas). */
 const canvasPixel = (page: Page, x: number, y: number) =>
   page.evaluate(
     ([px, py]) => {
-      const c = (window as unknown as { __pixelforge: import('../../src/app/controller').AppController }).__pixelforge;
+      const c = (window as unknown as AppWindow).__pixelforge;
       const r = c.canvas!.renderer;
       while (!r.render());
       const data = r.readCanvas();
@@ -113,12 +123,32 @@ test('Phase 0 exit criteria: open a PNG, view it, pan/zoom/rotate, undo and redo
 
 test('menu bar: all top-level menus, only working items, keyboard navigation', async ({ page }) => {
   const bar = page.getByRole('menubar', { name: 'Application menu' });
-  await expect(bar.getByRole('menuitem')).toHaveText(['File', 'Edit', 'Image', 'Layer', 'Type', 'Select', 'Filter', 'View', 'Plugins', 'Window', 'Help']);
-  for (const empty of ['Layer', 'Type', 'Select', 'Filter', 'Plugins']) await expect(bar.getByRole('menuitem', { name: empty })).toHaveAttribute('aria-disabled', 'true');
+  await expect(bar.getByRole('menuitem')).toHaveText([
+    'File',
+    'Edit',
+    'Image',
+    'Layer',
+    'Type',
+    'Select',
+    'Filter',
+    'View',
+    'Plugins',
+    'Window',
+    'Help',
+  ]);
+  for (const empty of ['Layer', 'Type', 'Select', 'Filter', 'Plugins'])
+    await expect(bar.getByRole('menuitem', { name: empty })).toHaveAttribute('aria-disabled', 'true');
 
   await bar.getByRole('menuitem', { name: 'File' }).click();
   const file = page.getByRole('menu', { name: 'File' });
-  await expect(file.getByRole('menuitem')).toHaveText([/^Open…/, /^Close/, /^Close All/, /^Close Others/, /^Save/, /^Save As…/]);
+  await expect(file.getByRole('menuitem')).toHaveText([
+    /^Open…/,
+    /^Close/,
+    /^Close All/,
+    /^Close Others/,
+    /^Save/,
+    /^Save As…/,
+  ]);
   await expect(file.getByRole('menuitem', { name: /^Close/ }).first()).toHaveAttribute('aria-disabled', 'true'); // nothing open
   await page.keyboard.press('Escape');
   await expect(file).toBeHidden();
@@ -258,7 +288,8 @@ test('dropping an image on the canvas opens it; non-images report an error', asy
         const area = document.querySelector('[data-testid=canvas-area]')!;
         const transfer = new DataTransfer();
         transfer.items.add(new File([new Uint8Array(data as number[])], fileName as string));
-        for (const type of ['dragenter', 'dragover', 'drop']) area.dispatchEvent(new DragEvent(type, { dataTransfer: transfer, bubbles: true, cancelable: true }));
+        for (const type of ['dragenter', 'dragover', 'drop'])
+          area.dispatchEvent(new DragEvent(type, { dataTransfer: transfer, bubbles: true, cancelable: true }));
       },
       [name, bytes],
     );

@@ -5,7 +5,11 @@
  * suffixes such as "%", "°", "px" are ignored. Returns null for invalid input.
  */
 export function evaluateNumberInput(text: string, current: number): number | null {
-  const cleaned = text.trim().replace(/(%|°|px|in|cm|mm|pt)$/i, '').trim().replace(',', '.');
+  const cleaned = text
+    .trim()
+    .replace(/(%|°|px|in|cm|mm|pt)$/i, '')
+    .trim()
+    .replace(',', '.');
   if (cleaned === '') return null;
   const relative = /^[+*/]/.test(cleaned) ? cleaned[0] : null;
   const value = parseExpression(relative ? cleaned.slice(1) : cleaned);

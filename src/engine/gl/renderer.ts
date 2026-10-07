@@ -324,7 +324,9 @@ export class Renderer {
         const a = src[i + 3]!;
         for (let c = 0; c < 3; c++) {
           const k = checker[c] ?? 1;
-          const v = linear ? toSrgb(Math.min(1, Math.max(0, src[i + c]! + toLinear(k) * (1 - a)))) : src[i + c]! + k * (1 - a);
+          const v = linear
+            ? toSrgb(Math.min(1, Math.max(0, src[i + c]! + toLinear(k) * (1 - a))))
+            : src[i + c]! + k * (1 - a);
           data[i + c] = Math.round(Math.min(1, Math.max(0, v)) * 255);
         }
         data[i + 3] = 255;

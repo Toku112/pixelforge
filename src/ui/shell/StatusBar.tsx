@@ -1,5 +1,5 @@
 /** Status bar: editable zoom and a choice of document information. */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { evaluateNumberInput } from '../controls/number-expr';
 import { useController, useWorkspace } from '../AppContext';
 import { documentSizes, formatBytes, formatZoom } from '../format';
@@ -21,19 +21,16 @@ export function StatusBar() {
   const toolId = useUi((s) => s.activeToolId);
   const doc = useWorkspace((w) => w.active?.doc ?? null);
   useWorkspace((w) => w.version); // refresh sizes after edits
-  const [zoomText, setZoomText] = useState('');
-  const [editing, setEditing] = useState(false);
+  // Text being typed in the zoom field; null when not editing.
+  const [zoomDraft, setZoomDraft] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    if (!editing) setZoomText(view ? formatZoom(view.zoom) : '');
-  }, [view, editing]);
 
   if (!doc || !view) return <footer className="status-bar" />;
 
   const applyZoom = () => {
-    setEditing(false);
-    const pct = evaluateNumberInput(zoomText, view.zoom * 100);
+    if (zoomDraft === null) return;
+    setZoomDraft(null);
+    const pct = evaluateNumberInput(zoomDraft, view.zoom * 100);
     const ctx = controller.canvas?.context;
     if (pct !== null && pct > 0 && ctx) {
       ctx.viewport.zoomTo(pct / 100);
@@ -52,7 +49,9 @@ export function StatusBar() {
       text = `${doc.width} px × ${doc.height} px (${Number(doc.resolution.toFixed(2))} ppi)`;
       break;
     case 'profile':
-      text = doc.iccProfile ? 'Embedded profile (not applied yet)' : `Untagged ${doc.mode === 'grayscale' ? 'Gray' : 'RGB'} (${doc.depth}bpc)`;
+      text = doc.iccProfile
+        ? 'Embedded profile (not applied yet)'
+        : `Untagged ${doc.mode === 'grayscale' ? 'Gray' : 'RGB'} (${doc.depth}bpc)`;
       break;
     case 'scratch': {
       const stats = controller.services.tileStore.stats;
@@ -69,24 +68,29 @@ export function StatusBar() {
       <input
         className="status-zoom"
         aria-label="Zoom level"
-        value={zoomText}
+        value={zoomDraft ?? formatZoom(view.zoom)}
         onFocus={(e) => {
-          setEditing(true);
+          setZoomDraft(formatZoom(view.zoom));
           e.currentTarget.select();
         }}
-        onChange={(e) => setZoomText(e.target.value)}
+        onChange={(e) => setZoomDraft(e.target.value)}
         onBlur={applyZoom}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
           if (e.key === 'Escape') {
-            setEditing(false);
-            setZoomText(formatZoom(view.zoom));
+            setZoomDraft(null);
             e.currentTarget.blur();
           }
         }}
       />
       <div className="status-info">
-        <button type="button" className="status-info-button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+        <button
+          type="button"
+          className="status-info-button"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
           {text}
         </button>
         {menuOpen && (

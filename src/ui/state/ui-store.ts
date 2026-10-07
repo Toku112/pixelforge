@@ -48,14 +48,14 @@ interface UiState {
   view: ViewportState | null;
   statusInfo: StatusInfo;
   dropActive: boolean;
-  setActiveTool(id: string, groupId?: string): void;
-  bumpToolOptions(): void;
-  setDock(layout: DockLayout): void;
-  pushDialog(dialog: DialogRequest): void;
-  closeDialog(dialog: DialogRequest): void;
-  setView(view: ViewportState | null): void;
-  setStatusInfo(info: StatusInfo): void;
-  setDropActive(active: boolean): void;
+  setActiveTool: (id: string, groupId?: string) => void;
+  bumpToolOptions: () => void;
+  setDock: (layout: DockLayout) => void;
+  pushDialog: (dialog: DialogRequest) => void;
+  closeDialog: (dialog: DialogRequest) => void;
+  setView: (view: ViewportState | null) => void;
+  setStatusInfo: (info: StatusInfo) => void;
+  setDropActive: (active: boolean) => void;
 }
 
 export const useUi = create<UiState>()((set) => ({

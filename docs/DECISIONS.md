@@ -210,3 +210,18 @@ preset levels (…, 25 %, 33.33 %, 50 %, 66.67 %, 100 %, 200 %, …, 800 %, 1200
   temporary. Shift + letter cycles tools sharing the letter.
 - The default table covers the reference app's default shortcuts, including commands not implemented yet (their keys
   do nothing until registered). A unit test checks it has no conflicting chords on either platform.
+
+## D-021 — 2026-10-07 — App shell behaviour
+
+**Decision:**
+
+- Menus list the reference app's full structure as data, but only items whose command is implemented are shown;
+  top-level menus with nothing available yet are shown dimmed so the menu bar keeps its familiar shape. The
+  development flag `?flags=show-unimplemented` shows every item greyed out.
+- Newly opened documents are fitted to the window but never enlarged beyond 100 %; View > Fit on Screen may enlarge.
+- Save writes back to the opened PNG only when the document is still a single pixel layer (nothing would be lost);
+  otherwise Save behaves as Save As. Save As currently offers PNG.
+- The panel layout is kept in the browser's local storage (a per-user convenience); Window > Workspace > Reset
+  Essentials restores the default.
+- Store actions and component callbacks are declared as function-typed properties so they can be passed around
+  safely; text fields show the live value except while the user is typing (no state syncing effects).
