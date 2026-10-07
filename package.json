@@ -30,7 +30,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "ag-psd": "^31.0.3",
+    "ag-psd": "^31.0.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zustand": "^5.0.15"
