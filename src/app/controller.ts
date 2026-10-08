@@ -18,9 +18,11 @@ import {
   dynamicsColors,
   paintTarget,
   resolveBrushResources,
+  resolveStamp,
   strokeSetup,
   type BrushResources,
   type PaintTool,
+  type StampPattern,
 } from '../core/commands/builtin/paint';
 import {
   DEFAULT_BRUSH,
@@ -37,6 +39,7 @@ import { BRUSH_FILE_EXTENSION, readBrushFile, writeBrushFile } from '../io/brush
 import { readAco, readAse } from '../io/swatch-files';
 import { readGrd, writeGrd } from '../io/grd';
 import { cloneGradient, type Gradient, type GradientMethod } from '../core/paint/gradient';
+import { DEFAULT_PATTERN_ID, MAX_PATTERN_SIDE } from '../core/pattern/pattern';
 
 import { sampleRect, samplePlan, sampledToRgb, type EyedropperOptions } from '../core/paint/sample';
 import { SYMMETRY_KINDS, defaultSymmetry, hasSegments, type SymmetryKind } from '../core/paint/symmetry';
@@ -193,6 +196,7 @@ const GROUP_COMMANDS: Record<string, string> = {
   'tool.lasso': 'lasso-group',
   'tool.brush': 'brush-group',
   'tool.gradient': 'gradient-group',
+  'tool.stamp': 'stamp-group',
 };
 
 export class AppController {
@@ -304,13 +308,18 @@ export class AppController {
   #beginStroke(
     tool: PaintTool,
     brush: BrushSettings,
-    options: { autoEraseAt?: { x: number; y: number } } = {},
+    options: { autoEraseAt?: { x: number; y: number }; pattern?: StampPattern } = {},
   ): PaintStroke | null {
     const ws = this.workspace;
     const session = ws.active;
     if (!session || ws.running) return null;
     const doc = session.doc;
-    const what = tool === 'brush' ? 'the Brush Tool' : tool === 'pencil' ? 'the Pencil' : 'the Eraser';
+    const what = {
+      brush: 'the Brush Tool',
+      pencil: 'the Pencil',
+      eraser: 'the Eraser',
+      'pattern-stamp': 'the Pattern Stamp',
+    }[tool];
     const layer = paintTarget(doc);
     if (!layer) {
       const active = doc.activeLayer;
@@ -334,7 +343,10 @@ export class AppController {
     }
     let res: BrushResources;
     try {
-      res = resolveBrushResources(brush, this.services.brushes, this.services.patterns);
+      res = {
+        ...resolveBrushResources(brush, this.services.brushes, this.services.patterns),
+        stamp: resolveStamp(options.pattern, this.services.patterns),
+      };
     } catch (error) {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
       return null;
@@ -343,7 +355,14 @@ export class AppController {
     const seed = Math.floor(Math.random() * 2 ** 31);
     const varyColor = tool !== 'eraser' && !!brush.dynamics?.color.enabled;
     const colors = varyColor ? { foreground: this.colors.foreground, background: this.colors.background } : undefined;
-    const params = { tool, brush, color, seed, ...(colors ? { colors } : {}) };
+    const params = {
+      tool,
+      brush,
+      color,
+      seed,
+      ...(colors ? { colors } : {}),
+      ...(options.pattern ? { pattern: options.pattern } : {}),
+    };
     const live = this.services.strokes.begin(strokeSetup(doc, layer, params, res));
     const symmetry = doc.symmetry?.enabled ? doc.symmetry : null;
     const stroke = new PaintSession(
@@ -357,6 +376,7 @@ export class AppController {
       seed,
       dynamicsColors(doc, params),
       symmetry,
+      options.pattern ?? null,
     );
     return {
       seed,
@@ -432,8 +452,22 @@ export class AppController {
       blendModes: availableBlendModes(doc.mode, doc.depth),
       canPreserve: !!canPreserve,
       preserve: false,
+      pattern: this.currentPatternId ?? DEFAULT_PATTERN_ID,
     });
     if (!result || ws.active?.doc !== doc) return;
+    if (result.pattern !== undefined) {
+      this.choosePattern(result.pattern);
+      await this.workspace.execute({
+        name: 'fill',
+        params: {
+          pattern: result.pattern,
+          mode: result.mode,
+          opacity: result.opacity,
+          preserveTransparency: result.preserveTransparency && !!canPreserve,
+        },
+      });
+      return;
+    }
     await this.#fill(result.color, result.mode, result.opacity, result.preserveTransparency);
   }
 
@@ -924,6 +958,141 @@ export class AppController {
       confirmLabel: 'Restore',
     });
     if (ok) await this.services.swatches.restoreDefaults();
+  }
+
+  // -- patterns ---------------------------------------------------------------
+
+  #patternId: string | null = null;
+
+  /** The pattern chosen last (Patterns panel, Fill), if it still exists. */
+  get currentPatternId(): string | null {
+    const id = this.#patternId;
+    return id && this.services.patterns.get(id) ? id : null;
+  }
+
+  /** A pattern clicked: the Pattern Stamp paints it and Edit > Fill offers it. */
+  choosePattern(id: string): void {
+    if (!this.services.patterns.get(id)) return;
+    this.#patternId = id;
+    this.tools.patternStamp.setStamp({ patternId: id });
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** Edit > Define Pattern: the visible image in the rectangular selection (or the whole canvas). */
+  async definePattern(): Promise<void> {
+    const doc = this.workspace.active?.doc;
+    if (!doc) return;
+    const title = 'Could not define the pattern';
+    const { pixelOps, patterns } = this.services;
+    const rect = doc.selection ? await pixelOps.maskBounds(doc.selection.data, doc.canvasRect) : doc.canvasRect;
+    if (!rect) return this.#ui.alert(title, 'Nothing is selected.');
+    if (rect.w > MAX_PATTERN_SIDE || rect.h > MAX_PATTERN_SIDE)
+      return this.#ui.alert(title, `A pattern can be at most ${MAX_PATTERN_SIDE} × ${MAX_PATTERN_SIDE} pixels.`);
+    let result: { data: Uint8Array; rectangular: boolean };
+    try {
+      result = await pixelOps.patternFromImage(
+        planFromDocument(doc),
+        rect,
+        doc.selection?.data ?? null,
+        doc.canvasRect,
+      );
+    } catch (error) {
+      return this.#ui.alert(title, error instanceof Error ? error.message : String(error));
+    }
+    if (!result.rectangular)
+      return this.#ui.alert(title, 'Patterns are made from a rectangular selection without feathering.');
+    await patterns.ready;
+    const answer = await this.#ui.askName({
+      title: 'Pattern Name',
+      name: `Pattern ${patterns.userPatterns().length + 1}`,
+    });
+    if (!answer) return;
+    const id = newId();
+    const current = this.currentPatternId;
+    const group = (current && patterns.groupOf(current)) ?? patterns.groups()[0]?.name ?? 'Patterns';
+    await patterns.add([{ id, name: answer.name, width: rect.w, height: rect.h, data: result.data }], group);
+    this.choosePattern(id);
+  }
+
+  async newPatternGroup(): Promise<void> {
+    const library = this.services.patterns;
+    const answer = await this.#ui.askName({
+      title: 'New Pattern Group',
+      name: library.freeGroupName(`Group ${library.groups().length + 1}`),
+    });
+    if (answer) await library.addGroup(answer.name);
+  }
+
+  async renamePattern(id = this.currentPatternId): Promise<void> {
+    const library = this.services.patterns;
+    const pattern = id ? library.get(id) : undefined;
+    if (!pattern) return;
+    if (!library.isUserPattern(pattern.id))
+      return this.#ui.alert('Rename Pattern', 'The default patterns keep their names.');
+    const answer = await this.#ui.askName({ title: 'Pattern Name', name: pattern.name });
+    if (answer) await library.rename(pattern.id, answer.name);
+    this.#ui.toolOptionsChanged();
+  }
+
+  async deletePattern(id = this.currentPatternId): Promise<void> {
+    if (!id || !this.services.patterns.get(id)) return;
+    await this.services.patterns.remove(id);
+    if (this.#patternId === id) this.#patternId = null;
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** Import Patterns: .pat files, one group each. */
+  async importPatterns(): Promise<void> {
+    const library = this.services.patterns;
+    const files = await pickFiles({ 'application/octet-stream': ['.pat'] }, 'Patterns');
+    for (const file of files) {
+      try {
+        const { patterns, notes } = await this.services.codec.importPat(file.bytes);
+        const group = library.freeGroupName(file.name.replace(/\.[^.]+$/, ''));
+        await library.add(
+          patterns.map((p) => ({ ...p, id: newId() })),
+          group,
+        );
+        if (notes.length > 0) await this.#ui.alert(`Imported “${file.name}”`, notes.join(' '));
+      } catch (error) {
+        await this.#ui.alert(`Could not import “${file.name}”`, error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  /** Export Selected Patterns: chosen groups into a .pat file. */
+  async exportPatterns(): Promise<void> {
+    const library = this.services.patterns;
+    const current = this.currentPatternId;
+    const groups = library.groups().map((g) => g.name);
+    const chosen = await this.#ui.exportGroups({
+      title: 'Export Patterns',
+      ungroupedLabel: 'Patterns outside groups',
+      groups,
+      selected: current ? [library.groupOf(current) ?? ''] : groups.slice(0, 1),
+    });
+    if (!chosen || chosen.length === 0) return;
+    const patterns = library
+      .groups()
+      .filter((g) => chosen.includes(g.name))
+      .flatMap((g) => g.patterns);
+    const name = chosen.length === 1 && chosen[0] ? chosen[0] : 'Patterns';
+    await saveFileAs(
+      await this.services.codec.exportPat(patterns),
+      `${name}.pat`,
+      'application/octet-stream',
+      '.pat',
+      'Patterns',
+    );
+  }
+
+  async restoreDefaultPatterns(): Promise<void> {
+    const ok = await this.#ui.confirm({
+      title: 'Restore Default Patterns',
+      message: 'Bring back the default patterns? Your own patterns stay.',
+      confirmLabel: 'Restore',
+    });
+    if (ok) await this.services.patterns.restoreDefaults();
   }
 
   // -- gradients --------------------------------------------------------------
@@ -1587,6 +1756,12 @@ export class AppController {
       run: () => this.defineBrushPreset(),
     });
     add({
+      id: 'edit.definePattern',
+      label: 'Define Pattern…',
+      enabled: () => !toolBusy() && ws.active !== null,
+      run: () => this.definePattern(),
+    });
+    add({
       id: 'edit.freeTransform',
       label: 'Free Transform',
       enabled: () => !toolBusy() && ws.active !== null && ws.canExecute('freeTransform'),
@@ -2003,6 +2178,7 @@ export class AppController {
       ['window.color', 'color', 'Color'],
       ['window.swatches', 'swatches', 'Swatches'],
       ['window.gradients', 'gradients', 'Gradients'],
+      ['window.patterns', 'patterns', 'Patterns'],
     ] as const) {
       add({ id, label, checked: () => this.#ui.isPanelOpen(panel), run: () => this.#ui.togglePanel(panel) });
     }
@@ -2010,6 +2186,7 @@ export class AppController {
     const hasPreset = () => this.currentPresetId !== null;
     const hasToolPreset = () => this.#toolPresetId !== null;
     const hasGradient = () => this.currentGradientId !== null;
+    const hasPattern = () => this.currentPatternId !== null;
     for (const [id, label, run, enabled] of [
       ['brushes.newPreset', 'New Brush Preset…', () => this.newBrushPreset(), undefined],
       ['brushes.newGroup', 'New Brush Group…', () => this.newBrushGroup(), undefined],
@@ -2034,6 +2211,12 @@ export class AppController {
       ['gradients.import', 'Import Gradients…', () => this.importGradients(), undefined],
       ['gradients.export', 'Export Selected Gradients…', () => this.exportGradients(), hasGradient],
       ['gradients.restore', 'Restore Default Gradients…', () => this.restoreDefaultGradients(), undefined],
+      ['patterns.newGroup', 'New Pattern Group…', () => this.newPatternGroup(), undefined],
+      ['patterns.rename', 'Rename Pattern…', () => this.renamePattern(), hasPattern],
+      ['patterns.delete', 'Delete Pattern', () => this.deletePattern(), hasPattern],
+      ['patterns.import', 'Import Patterns…', () => this.importPatterns(), undefined],
+      ['patterns.export', 'Export Selected Patterns…', () => this.exportPatterns(), undefined],
+      ['patterns.restore', 'Restore Default Patterns…', () => this.restoreDefaultPatterns(), undefined],
       ['toolPresets.rename', 'Rename Tool Preset…', () => this.renameToolPreset(), hasToolPreset],
       ['toolPresets.delete', 'Delete Tool Preset', () => this.deleteToolPreset(), hasToolPreset],
     ] as const) {

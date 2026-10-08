@@ -8,6 +8,7 @@ import { ToolPresetsPanel } from './ToolPresetsPanel';
 import { ColorPanel } from './ColorPanel';
 import { SwatchesPanel } from './SwatchesPanel';
 import { GradientsPanel } from './GradientsPanel';
+import { PatternsPanel } from './PatternsPanel';
 import { NavigatorPanel } from './NavigatorPanel';
 
 export interface PanelDefinition {
@@ -89,6 +90,22 @@ export const PANELS: Record<string, PanelDefinition> = {
       { label: 'Import Gradients…', command: 'gradients.import' },
       { label: 'Export Selected Gradients…', command: 'gradients.export' },
       { label: 'Restore Default Gradients…', command: 'gradients.restore' },
+    ],
+  },
+  patterns: {
+    id: 'patterns',
+    title: 'Patterns',
+    icon: 'pattern',
+    component: PatternsPanel,
+    float: { width: 290, height: 360 },
+    menu: [
+      { label: 'New Pattern…', command: 'edit.definePattern' },
+      { label: 'New Pattern Group…', command: 'patterns.newGroup' },
+      { label: 'Rename Pattern…', command: 'patterns.rename' },
+      { label: 'Delete Pattern', command: 'patterns.delete' },
+      { label: 'Import Patterns…', command: 'patterns.import' },
+      { label: 'Export Selected Patterns…', command: 'patterns.export' },
+      { label: 'Restore Default Patterns…', command: 'patterns.restore' },
     ],
   },
   'tool-presets': {

@@ -1,5 +1,5 @@
 /**
- * Brush and Eraser strokes as commands.
+ * Brush, Pencil, Eraser and Pattern Stamp strokes as commands.
  *
  * A stroke is painted live while the pointer moves (see app/paint-session.ts) and
  * then recorded with `preparedStroke`, which keeps the tile diff already made.
@@ -12,7 +12,7 @@ import type { Tile } from '../../document/tile';
 import { LAYER_BLEND_MODES } from '../../document/layers';
 import { colorToSamples, type RGB } from '../../color/color';
 import type { PixelFormat } from '../../document/pixel-format';
-import { builtInPattern, patternGray, type Pattern, type PatternSource } from '../../pattern/pattern';
+import { builtInPattern, patternGray, patternSamples, type Pattern, type PatternSource } from '../../pattern/pattern';
 import { parseSymmetry, type Symmetry } from '../../paint/symmetry';
 import { builtInTip } from '../../paint/builtin-tips';
 import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
@@ -29,7 +29,15 @@ import { CommandUnavailableError, type Command, type CommandContext, type JsonOb
 import type { CommandDefinition } from '../registry';
 import { LayerTileDiff } from '../tile-diff';
 
-export type PaintTool = 'brush' | 'pencil' | 'eraser';
+export type PaintTool = 'brush' | 'pencil' | 'eraser' | 'pattern-stamp';
+
+/** The Pattern Stamp's pattern: its id, where it starts repeating, and Impressionist. */
+export interface StampPattern {
+  id: string;
+  originX: number;
+  originY: number;
+  impressionist: boolean;
+}
 
 export interface StrokeParams {
   tool: PaintTool;
@@ -45,9 +53,16 @@ export interface StrokeParams {
   colors?: { foreground: RGB; background: RGB };
   /** The paint symmetry the stroke was painted with (its mirror images are part of it). */
   symmetry?: Symmetry;
+  /** Pattern Stamp strokes: the pattern painted. */
+  pattern?: StampPattern;
 }
 
-export const PAINT_LABELS: Record<PaintTool, string> = { brush: 'Brush Tool', pencil: 'Pencil', eraser: 'Eraser' };
+export const PAINT_LABELS: Record<PaintTool, string> = {
+  brush: 'Brush Tool',
+  pencil: 'Pencil',
+  eraser: 'Eraser',
+  'pattern-stamp': 'Pattern Stamp',
+};
 
 /** The layer a stroke paints on: the active pixel layer, if its pixels may change. */
 export function paintTarget(doc: ImageDocument): PixelLayer | undefined {
@@ -60,6 +75,8 @@ export interface BrushResources {
   tip: BrushTip | null;
   dualTip: BrushTip | null;
   pattern: Pattern | null;
+  /** The Pattern Stamp's pattern (with where it starts and Impressionist). */
+  stamp?: { pattern: Pattern; at: StampPattern } | null;
 }
 
 const tipData = (tip: BrushTip | null) => (tip ? { width: tip.width, height: tip.height, data: tip.data } : null);
@@ -84,7 +101,17 @@ export function brushStrokeSetup(
     mode: brush.mode,
     tip: tipData(res.tip),
     aliased: brush.aliased,
-    varyColor: !!d?.color.enabled && tool !== 'eraser',
+    varyColor: (!!d?.color.enabled && tool !== 'eraser') || !!res.stamp?.at.impressionist,
+    pattern: res.stamp
+      ? {
+          width: res.stamp.pattern.width,
+          height: res.stamp.pattern.height,
+          data: patternSamples(res.stamp.pattern, format.colorChannels === 1 ? 'grayscale' : 'rgb', format.depth),
+          originX: res.stamp.at.originX,
+          originY: res.stamp.at.originY,
+          impressionist: res.stamp.at.impressionist,
+        }
+      : null,
     varyOpacity: !!d?.transfer.enabled,
     texture:
       texture && res.pattern
@@ -151,7 +178,10 @@ class PaintStrokeCommand implements Command {
     const { doc, services } = this.#ctx;
     const layer = paintTarget(doc);
     if (!layer) throw new CommandUnavailableError('Painting needs an editable pixel layer');
-    const res = resolveBrushResources(this.#params.brush, services.brushTips, services.patterns);
+    const res = {
+      ...resolveBrushResources(this.#params.brush, services.brushTips, services.patterns),
+      stamp: resolveStamp(this.#params.pattern, services.patterns),
+    };
     const dabber = new StrokeDabber(
       this.#params.brush,
       this.#params.seed,
@@ -199,6 +229,17 @@ export function dynamicsColors(
 ): DynamicsColors | null {
   if (!params.colors || params.tool === 'eraser') return null;
   return { ...params.colors, toSamples: (c) => colorToSamples(c, doc.mode, doc.depth) };
+}
+
+/** The Pattern Stamp's pattern from the library (null for other strokes). */
+export function resolveStamp(
+  at: StampPattern | undefined,
+  patterns: PatternSource | undefined,
+): { pattern: Pattern; at: StampPattern } | null {
+  if (!at) return null;
+  const pattern = patterns?.get(at.id) ?? builtInPattern(at.id);
+  if (!pattern) throw new CommandUnavailableError('The pattern this stroke paints is not in the pattern library');
+  return { pattern, at };
 }
 
 /** The brush's sampled tip from the library (null for the round tip). */
@@ -292,8 +333,8 @@ export const paintStrokeCommand: CommandDefinition = {
   isAvailable: (ctx) => paintTarget(ctx.doc) !== undefined,
   create: (ctx, p) => {
     const tool = p['tool'];
-    if (tool !== 'brush' && tool !== 'pencil' && tool !== 'eraser')
-      throw new Error('paintStroke: tool must be brush, pencil or eraser');
+    if (tool !== 'brush' && tool !== 'pencil' && tool !== 'eraser' && tool !== 'pattern-stamp')
+      throw new Error('paintStroke: tool must be brush, pencil, eraser or pattern-stamp');
     const points = p['points'];
     const stride = p['stride'] ?? 3;
     if (stride !== 3 && stride !== POINT_FIELDS.length)
@@ -320,6 +361,14 @@ export const paintStrokeCommand: CommandDefinition = {
       seed: seed as number,
       ...(colors ? { colors } : {}),
       ...(symmetry ? { symmetry } : {}),
+      ...(tool === 'pattern-stamp' ? { pattern: parseStampPattern(p['pattern']) } : {}),
     });
   },
 };
+
+function parseStampPattern(v: unknown): StampPattern {
+  const o = v as Partial<StampPattern> | null;
+  if (!o || typeof o.id !== 'string') throw new Error('paintStroke: a Pattern Stamp stroke needs its pattern');
+  if (!isNum(o.originX) || !isNum(o.originY)) throw new Error('paintStroke: the pattern origin must be a point');
+  return { id: o.id, originX: o.originX, originY: o.originY, impressionist: o.impressionist === true };
+}

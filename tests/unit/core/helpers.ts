@@ -14,6 +14,7 @@ import {
 import { tipFromImage } from '../../../src/core/paint/define-tip';
 import { fillTiles } from '../../../src/core/paint/fill';
 import { gradientTiles } from '../../../src/core/paint/gradient-fill';
+import { patternFromImage } from '../../../src/core/pattern/define-pattern';
 import { movePixels } from '../../../src/core/paint/move-pixels';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
 import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
@@ -67,6 +68,9 @@ export const referencePixelOps: PixelOps = {
   },
   brushTipFromImage(plan, rect, mask, canvas) {
     return Promise.resolve(tipFromImage(plan, rect, mask, canvas));
+  },
+  patternFromImage(plan, rect, mask, canvas) {
+    return Promise.resolve(patternFromImage(plan, rect, mask, canvas));
   },
   maskBounds(mask, canvas) {
     return Promise.resolve(maskBounds(mask, canvas));

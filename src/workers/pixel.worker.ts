@@ -36,6 +36,7 @@ import { tipFromImage } from '../core/paint/define-tip';
 import { sampleArea } from '../core/paint/sample';
 import { TILE_SIZE } from '../core/document/tile';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
+import { patternFromImage } from '../core/pattern/define-pattern';
 import { gradientTiles, type GradientFillSpec } from '../core/paint/gradient-fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
 import { StrokeRenderer, wasmCanPaint, type StrokeSetup } from '../core/paint/stroke';
@@ -233,6 +234,17 @@ const conversions = {
   brushTipFromImage(plan: FlattenPlan, rect: Rect, mask: MaskData | null, canvas: Rect): Uint8Array {
     const tip = tipFromImage(plan, rect, mask, canvas);
     return transfer(tip, [tip.buffer as ArrayBuffer]);
+  },
+
+  /** See PixelOps.patternFromImage. */
+  patternFromImage(
+    plan: FlattenPlan,
+    rect: Rect,
+    mask: MaskData | null,
+    canvas: Rect,
+  ): { data: Uint8Array; rectangular: boolean } {
+    const result = patternFromImage(plan, rect, mask, canvas);
+    return transfer(result, [result.data.buffer as ArrayBuffer]);
   },
 
   /** See PixelOps.sampleColor. */

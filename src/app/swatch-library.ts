@@ -81,10 +81,17 @@ export class SwatchLibrary {
     await this.#save();
   }
 
+  /** Brings back our default swatches; the user's swatches stay where they are. */
   async restoreDefaults(): Promise<void> {
     const defaults = defaultSwatches();
-    const own = this.#groups.filter((g) => !defaults.some((d) => d.name === g.name));
-    this.#groups = [...defaults, ...own];
+    const ours = (id: string) => id.startsWith('pf-');
+    this.#groups = [
+      ...defaults.map((d) => {
+        const kept = this.#groups.find((g) => g.name === d.name);
+        return { ...d, swatches: [...d.swatches, ...(kept?.swatches.filter((s) => !ours(s.id)) ?? [])] };
+      }),
+      ...this.#groups.filter((g) => !defaults.some((d) => d.name === g.name)),
+    ];
     await this.#save();
   }
 

@@ -27,6 +27,7 @@ import { maxSampleValue, samplesPerPixel, type PixelFormat, type SampleArray } f
 import { TILE_SIZE, tileIndex, tileKey } from '../document/tile';
 import { MaskReader } from '../selection/mask-ops';
 import type { MaskData } from '../selection/selection';
+import type { PatternPixels } from '../pattern/pattern';
 import { dabBounds, dabCoverage, type BrushMode, type Dab } from './brush';
 import {
   WET_RIM,
@@ -78,6 +79,8 @@ export interface StrokeSetup {
   wetEdges?: boolean;
   /** Dabs carry their own colours (Color Dynamics) / opacities (Transfer): keep them per pixel. */
   varyColor?: boolean;
+  /** Pattern Stamp: paints a pattern instead of `color`. */
+  pattern?: StrokePattern | null;
   varyOpacity?: boolean;
   /** Transparency of the layer is locked: alpha never changes. */
   lockAlpha: boolean;
@@ -86,6 +89,15 @@ export interface StrokeSetup {
   offsetY: number;
   /** Painting is limited to the selection, when there is one. */
   selection: { mask: MaskData; canvas: Rect } | null;
+}
+
+/** The Pattern Stamp's pattern. */
+export interface StrokePattern extends PatternPixels {
+  /** Where the pattern starts repeating (document coordinates): 0, 0 when Aligned, else where the stroke began. */
+  originX: number;
+  originY: number;
+  /** Each dab paints one colour: the pattern's at the dab's centre (needs `varyColor`). */
+  impressionist: boolean;
 }
 
 interface TileState {
@@ -179,6 +191,9 @@ export class StrokeRenderer {
   /** Scratch: the blended paint colour of the pixel being shaded. */
   readonly #blended = [0, 0, 0, 0];
   readonly #paintScratch = [0, 0, 0, 0];
+  /** The Pattern Stamp's pattern in sample values (alpha 0–1), or null. */
+  readonly #pattern: Float32Array | null;
+  readonly #patternColor: number[] = [];
 
   constructor(setup: StrokeSetup) {
     this.#setup = setup;
@@ -195,6 +210,14 @@ export class StrokeRenderer {
       this.#texture = null;
     }
     const max = this.#max;
+    const pat = setup.pattern;
+    if (pat) {
+      const n = setup.format.colorChannels + 1;
+      if (pat.data.length !== pat.width * pat.height * n) throw new Error('stroke: the pattern does not fit the layer');
+      this.#pattern = Float32Array.from(pat.data, (v, i) => (i % n === n - 1 ? v : v * max));
+    } else {
+      this.#pattern = null;
+    }
     this.#hdr = setup.format.depth === 32;
     this.#q = this.#hdr ? (v) => v : (v) => Math.round(Math.min(max, Math.max(0, v)));
   }
@@ -345,7 +368,7 @@ export class StrokeRenderer {
               if (tile.paint) {
                 // New paint over the paint so far.
                 const cc = s.format.colorChannels;
-                const color = dab.color ?? s.color;
+                const color = dab.color ?? (s.pattern?.impressionist ? this.#patternAt(dab.x, dab.y).color : s.color);
                 for (let k = 0; k < cc; k++) {
                   const old = tile.paint[p * cc + k]!;
                   tile.paint[p * cc + k] = next > 0 ? (old * c * (1 - add) + color[k]! * add) / next : color[k]!;
@@ -378,7 +401,13 @@ export class StrokeRenderer {
     }
     let e = (tile.cap ? tile.cap[p]! : s.opacity) * cover * sel;
     const cc = s.format.colorChannels;
-    const color = tile.paint ? this.#paintColor(tile.paint, p, cc) : s.color;
+    let color = tile.paint ? this.#paintColor(tile.paint, p, cc) : s.color;
+    if (this.#pattern && !s.pattern!.impressionist) {
+      // The pattern under the pixel, its transparency lowering the paint.
+      const at = this.#patternAt(x + 0.5, y + 0.5);
+      color = at.color;
+      e *= at.alpha;
+    }
     const max = this.#max;
     const q = this.#q;
     const i = p * this.#spp;
@@ -431,6 +460,21 @@ export class StrokeRenderer {
     out[i + cc] = q(a * max);
   }
 
+  /** The pattern's colour (scratch array, valid until the next call) and alpha at a document point. */
+  #patternAt(x: number, y: number): { color: number[]; alpha: number } {
+    const pat = this.#setup.pattern!;
+    const data = this.#pattern!;
+    const n = this.#setup.format.colorChannels + 1;
+    const w = pat.width;
+    const h = pat.height;
+    const px = (((Math.floor(x - pat.originX) % w) + w) % w) | 0;
+    const py = (((Math.floor(y - pat.originY) % h) + h) % h) | 0;
+    const o = (py * w + px) * n;
+    const out = this.#patternColor;
+    for (let c = 0; c < n - 1; c++) out[c] = data[o + c]!;
+    return { color: out, alpha: data[o + n - 1]! };
+  }
+
   /** The paint colour at pixel p (scratch array, valid until the next call). */
   #paintColor(paint: Float32Array, p: number, cc: number): number[] {
     const out = this.#paintScratch;
@@ -455,6 +499,7 @@ export function wasmCanPaint(setup: StrokeSetup): boolean {
     (setup.erase || setup.mode === 'normal' || setup.mode === 'behind' || setup.mode === 'clear') &&
     !setup.varyColor &&
     !setup.varyOpacity &&
+    !setup.pattern &&
     !setup.texture &&
     !setup.dual &&
     !setup.noise &&

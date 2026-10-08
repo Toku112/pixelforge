@@ -7,7 +7,7 @@
  * and marks the tiles changed so the canvas shows the stroke as it grows. When the
  * stroke ends it becomes one History step; cancelling restores the tiles.
  */
-import { preparedStroke, type PaintTool } from '../core/commands/builtin/paint';
+import { preparedStroke, type PaintTool, type StampPattern } from '../core/commands/builtin/paint';
 import { LayerTileDiff } from '../core/commands/tile-diff';
 import type { ImageDocument } from '../core/document/document';
 import type { PixelLayer } from '../core/document/layers';
@@ -32,6 +32,7 @@ export class PaintSession implements PaintStroke {
   readonly seed: number;
   readonly colors: DynamicsColors | null;
   readonly symmetry: Symmetry | null;
+  readonly #pattern: StampPattern | null;
   readonly #diff: LayerTileDiff;
   readonly #touched = new Set<number>();
   readonly #queue: Dab[] = [];
@@ -53,8 +54,10 @@ export class PaintSession implements PaintStroke {
     seed: number,
     colors: DynamicsColors | null,
     symmetry: Symmetry | null = null,
+    pattern: StampPattern | null = null,
   ) {
     this.seed = seed;
+    this.#pattern = pattern;
     this.colors = colors;
     this.symmetry = symmetry;
     this.#workspace = workspace;
@@ -142,6 +145,7 @@ export class PaintSession implements PaintStroke {
       seed: this.seed,
       ...(this.colors ? { colors: { foreground: this.colors.foreground, background: this.colors.background } } : {}),
       ...(this.symmetry ? { symmetry: { ...this.symmetry } } : {}),
+      ...(this.#pattern ? { pattern: { ...this.#pattern } } : {}),
     };
     const diff = this.#diff;
     await this.#workspace.executePrepared(this.#doc, (ctx) => preparedStroke(ctx, params, diff));

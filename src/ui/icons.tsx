@@ -291,6 +291,23 @@ const icons = {
       <path d="M14 6l4 4M5 15l4 4" />
     </Svg>
   ),
+  patternStamp: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M9 3.5h6v3.5l-1.5 3h-3L9 7Z" />
+      <path d="M5 13.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2V15H5Z" />
+      <path d="M5.5 18.5h2M9 18.5h2M12.5 18.5h2M16 18.5h2.5" />
+    </Svg>
+  ),
+  pattern: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1.5" />
+      <rect x="6" y="6" width="4" height="4" fill="currentColor" fillOpacity="0.7" stroke="none" />
+      <rect x="14" y="6" width="4" height="4" fill="currentColor" fillOpacity="0.7" stroke="none" />
+      <rect x="10" y="10" width="4" height="4" fill="currentColor" fillOpacity="0.7" stroke="none" />
+      <rect x="6" y="14" width="4" height="4" fill="currentColor" fillOpacity="0.7" stroke="none" />
+      <rect x="14" y="14" width="4" height="4" fill="currentColor" fillOpacity="0.7" stroke="none" />
+    </Svg>
+  ),
   gradient: (p: IconProps) => (
     <Svg {...p}>
       <rect x="3.5" y="5.5" width="17" height="13" rx="1.5" />

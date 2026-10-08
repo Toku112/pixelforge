@@ -1,7 +1,8 @@
 /**
- * Edit > Fill into layer tiles (runs in the pixel worker): a solid colour blended
- * into each pixel with a blend mode and opacity, through the selection (or the
- * whole canvas), using the compositing formula of FORMAT_NOTES §3.2.
+ * Edit > Fill into layer tiles (runs in the pixel worker): a solid colour or a
+ * pattern blended into each pixel with a blend mode and opacity, through the
+ * selection (or the whole canvas), using the compositing formula of FORMAT_NOTES §3.2.
+ * Patterns repeat from the document's top left corner.
  *
  * Preserve Transparency (and layers without alpha) keep each pixel's alpha and
  * only move its colour towards the blended colour.
@@ -15,11 +16,14 @@ import { TILE_SIZE } from '../document/tile';
 const TILE_SHIFT = Math.log2(TILE_SIZE);
 import { MaskReader } from '../selection/mask-ops';
 import type { MaskedTarget } from '../selection/masked-edits';
+import type { PatternPixels } from '../pattern/pattern';
 
 export interface FillSpec extends BlendSpec {
   mode: LayerBlendMode;
   /** Colour samples of the fill. */
   color: number[];
+  /** A pattern instead of the colour. */
+  pattern?: PatternPixels | null;
 }
 
 export function fillTiles(
@@ -29,12 +33,35 @@ export function fillTiles(
   spec: FillSpec,
   hdr: boolean,
 ): void {
+  const pattern = spec.pattern;
+  if (pattern) {
+    blendSourceTiles(tiles, format, target, spec, hdr, patternSource(pattern, format.colorChannels, 0, 0));
+    return;
+  }
   const max = maxSampleValue(format.depth);
   const s = spec.color.map((v) => v / max);
   blendSourceTiles(tiles, format, target, spec, hdr, (_x, _y, out) => {
     for (let c = 0; c < s.length; c++) out[c] = s[c]!;
     return 1;
   });
+}
+
+/** A pattern repeated from document point (originX, originY), as a blend source. */
+export function patternSource(
+  pattern: PatternPixels,
+  cc: number,
+  originX: number,
+  originY: number,
+): (x: number, y: number, out: number[]) => number {
+  const { width: w, height: h, data } = pattern;
+  if (data.length !== w * h * (cc + 1)) throw new Error('fill: the pattern does not fit the document');
+  return (x, y, out) => {
+    const px = (((x - originX) % w) + w) % w;
+    const py = (((y - originY) % h) + h) % h;
+    const o = (py * w + px) * (cc + 1);
+    for (let c = 0; c < cc; c++) out[c] = data[o + c]!;
+    return data[o + cc]!;
+  };
 }
 
 /** How a source is blended into a layer (Fill, Gradient). */

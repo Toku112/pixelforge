@@ -95,10 +95,17 @@ export class GradientLibrary {
     await this.#save();
   }
 
+  /** Brings back our default gradients; the user's gradients stay where they are. */
   async restoreDefaults(): Promise<void> {
     const defaults = defaultGradients();
-    const own = this.#groups.filter((g) => !defaults.some((d) => d.name === g.name));
-    this.#groups = [...defaults, ...own];
+    const ours = (id: string) => id.startsWith('pf-grad-');
+    this.#groups = [
+      ...defaults.map((d) => {
+        const kept = this.#groups.find((g) => g.name === d.name);
+        return { ...d, gradients: [...d.gradients, ...(kept?.gradients.filter((e) => !ours(e.id)) ?? [])] };
+      }),
+      ...this.#groups.filter((g) => !defaults.some((d) => d.name === g.name)),
+    ];
     await this.#save();
   }
 

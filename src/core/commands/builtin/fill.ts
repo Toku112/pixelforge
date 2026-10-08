@@ -4,13 +4,15 @@
  * transparency).
  *
  * Behaviour (own summary of the reference app): fills the selection — or the whole
- * canvas area of the active layer — with a colour, blended with a mode and opacity.
- * Preserve Transparency changes only existing pixels; it is not offered on the
- * Background, which has no transparency.
+ * canvas area of the active layer — with a colour or a pattern (repeated from the
+ * document's top left corner), blended with a mode and opacity. Preserve
+ * Transparency changes only existing pixels; it is not offered on the Background,
+ * which has no transparency.
  */
 import { LAYER_BLEND_MODES, layerCapabilities, type LayerBlendMode, type PixelLayer } from '../../document/layers';
 import type { Tile } from '../../document/tile';
 import type { FillSpec } from '../../paint/fill';
+import { builtInPattern, patternSamples } from '../../pattern/pattern';
 import { Selection } from '../../selection/selection';
 import { CommandUnavailableError, type Command, type CommandContext, type JsonObject } from '../command';
 import { canvasLayerTiles, selectedLayerTiles } from '../pixel-targets';
@@ -22,17 +24,20 @@ function target(ctx: CommandContext): PixelLayer | undefined {
   return layer?.kind === 'pixel' && layerCapabilities(layer).editPixels ? layer : undefined;
 }
 
+/** What the fill descriptor records: a pattern by its id. */
+type FillParams = Omit<FillSpec, 'pattern'> & { pattern?: string };
+
 class FillCommand implements Command {
   readonly label = 'Fill';
   readonly descriptor: { name: string; params: JsonObject };
   readonly #ctx: CommandContext;
-  readonly #spec: FillSpec;
+  readonly #spec: FillParams;
   #diff: LayerTileDiff | undefined;
 
-  constructor(ctx: CommandContext, spec: FillSpec) {
+  constructor(ctx: CommandContext, spec: FillParams) {
     this.#ctx = ctx;
     this.#spec = spec;
-    this.descriptor = { name: 'fill', params: spec as unknown as JsonObject };
+    this.descriptor = { name: 'fill', params: spec };
   }
 
   get undoBytes(): number {
@@ -43,7 +48,16 @@ class FillCommand implements Command {
     const { doc, services } = this.#ctx;
     const layer = target(this.#ctx);
     if (!layer) throw new CommandUnavailableError('Fill needs an editable pixel layer');
-    if (this.#spec.color.length !== doc.colorChannels)
+    const { pattern: patternId, ...rest } = this.#spec;
+    let spec: FillSpec = rest;
+    if (patternId !== undefined) {
+      const pattern = services.patterns?.get(patternId) ?? builtInPattern(patternId);
+      if (!pattern) throw new CommandUnavailableError('The pattern of this fill is not in the pattern library');
+      spec = {
+        ...rest,
+        pattern: { width: pattern.width, height: pattern.height, data: patternSamples(pattern, doc.mode, doc.depth) },
+      };
+    } else if (rest.color.length !== doc.colorChannels)
       throw new Error('fill: color needs one value per colour channel');
     // The selected part of the canvas (or all of it) — also where the layer has no tiles yet.
     const selection = doc.selection ?? Selection.all();
@@ -52,7 +66,7 @@ class FillCommand implements Command {
     for (const [tx, ty] of coords) diff.captureBefore(doc, tx, ty);
     const tiles = coords.map(([tx, ty]) => layer.buffer.writableTile(tx, ty).data);
     try {
-      await services.pixelOps.fill(tiles, layer.buffer.format, { ...through, coords }, this.#spec, doc.depth === 32);
+      await services.pixelOps.fill(tiles, layer.buffer.format, { ...through, coords }, spec, doc.depth === 32);
     } catch (error) {
       diff.undo(doc);
       throw error;
@@ -79,7 +93,9 @@ export const fillCommand: CommandDefinition = {
   name: 'fill',
   isAvailable: (ctx) => target(ctx) !== undefined,
   create: (ctx, p) => {
-    const raw = p['color'];
+    const pattern = p['pattern'];
+    if (pattern !== undefined && typeof pattern !== 'string') throw new Error('fill: pattern must be a pattern id');
+    const raw = p['color'] ?? (pattern !== undefined ? [] : undefined);
     if (!Array.isArray(raw) || !raw.every((v) => typeof v === 'number' && Number.isFinite(v)))
       throw new Error('fill: color must be a list of numbers');
     const color = raw as number[];
@@ -89,6 +105,12 @@ export const fillCommand: CommandDefinition = {
     if (typeof opacity !== 'number' || !(opacity >= 0 && opacity <= 1)) throw new Error('fill: opacity must be 0–1');
     const preserve = p['preserveTransparency'] ?? false;
     if (typeof preserve !== 'boolean') throw new Error('fill: preserveTransparency must be true or false');
-    return new FillCommand(ctx, { color, mode: mode as LayerBlendMode, opacity, preserveTransparency: preserve });
+    return new FillCommand(ctx, {
+      color,
+      mode: mode as LayerBlendMode,
+      opacity,
+      preserveTransparency: preserve,
+      ...(pattern !== undefined ? { pattern } : {}),
+    });
   },
 };

@@ -11,6 +11,7 @@ import { CropTool } from '../../tools/crop/crop-tool';
 import { EyedropperTool } from '../../tools/eyedropper/eyedropper-tool';
 import { GradientTool } from '../../tools/gradient/gradient-tool';
 import { GradientOptionsBar } from './GradientOptions';
+import { PatternPicker } from './PatternPicker';
 import { SAMPLE_SIZES, type SampleSize, type SampleSource } from '../../core/paint/sample';
 import { BrushPicker } from './BrushPicker';
 import { SmoothingControls } from './SmoothingControls';
@@ -556,6 +557,38 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       >
         <Icon name="penPressureSize" size={16} />
       </button>
+      {tool.kind === 'pattern-stamp' && (
+        <>
+          <span className="options-divider" />
+          <label className="option-check" title="Keep the pattern continuous from stroke to stroke">
+            <input
+              type="checkbox"
+              checked={tool.stamp.aligned}
+              onChange={(e) => {
+                tool.setStamp({ aligned: e.target.checked });
+                bump();
+              }}
+            />
+            Aligned
+          </label>
+          <PatternPicker
+            value={tool.stamp.patternId}
+            label="Pattern Stamp pattern"
+            onChange={(id) => controller.choosePattern(id)}
+          />
+          <label className="option-check" title="Paint each dab in one colour taken from the pattern">
+            <input
+              type="checkbox"
+              checked={tool.stamp.impressionist}
+              onChange={(e) => {
+                tool.setStamp({ impressionist: e.target.checked });
+                bump();
+              }}
+            />
+            Impressionist
+          </label>
+        </>
+      )}
       {tool.kind === 'pencil' && (
         <label className="option-check" title="A stroke starting on the foreground colour paints the background colour">
           <input

@@ -34,3 +34,9 @@ export const ERASER_CURSOR = iconCursor(
   6,
   18,
 );
+
+export const STAMP_CURSOR = iconCursor(
+  ['M9 4.5h6v3.5l-1.5 3h-3L9 8Z', 'M5 14.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2V16H5Z', 'M5 19.5h14'],
+  12,
+  20,
+);

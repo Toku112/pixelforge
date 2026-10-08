@@ -452,3 +452,22 @@ holds one object per gradient, the gradient (class `Grdn`) under the key `Grad`:
   (`Gry ` 0–100, amount of black); colour-book colours (`BkCl`) hold no values.
 - Noise: `ShTr` add transparency, `VctC` restrict colours, `ClrS` enum `ClrS` (`RGBC`, `HSBl`, `LbCl`), `RndS` seed,
   `Smth` roughness (0–4096), `Mnm ` / `Mxm ` lists of four longs 0–100 (the fourth unused).
+
+## 12. Patterns
+
+**Use**: pattern pixels (8-bit RGBA sRGB) become document values per pixel: RGB / 255 (32-bit: linear light),
+Grayscale 0.299 R + 0.587 G + 0.114 B, alpha / 255. Edit > Fill repeats the pattern from document (0, 0): pattern
+pixel ((x mod w), (y mod h)). The Pattern Stamp uses ((⌊x + 0.5 − ox⌋ mod w), (⌊y + 0.5 − oy⌋ mod h)) with the origin
+(ox, oy) = (0, 0) when Aligned, else the pixel where the stroke began; the effective paint opacity is multiplied by
+the pattern's alpha. Impressionist: the dab's colour is the pattern pixel at the dab centre.
+
+**.pat files** (big-endian): `8BPT`, u16 version 1, u32 pattern count, then per pattern (possibly preceded by its
+length and padded to 4 bytes, as inside PSD files): u32 version 1, u32 image mode (0 bitmap, 1 grayscale, 2 indexed,
+3 RGB, 4 CMYK, 7 multichannel, 8 duotone, 9 Lab), u16 height, u16 width, name (Unicode string as in §11), id (Pascal
+string: u8 length + ASCII); for indexed, 768 bytes of palette and 4 more bytes; then the virtual memory array list:
+u32 version 3, u32 length, rectangle (u32 top, left, bottom, right), u32 channel count, then for each of channel
+count + 2 arrays (the last two: user and sheet masks): u32 written flag (nothing follows when 0), u32 length, u32
+depth (8 or 16), rectangle (4 × u32), u16 depth, u8 compression (0 raw, 1 RLE: a u16 byte count per row, then PackBits
+rows), data. 16-bit values are big-endian. CMYK channels hold 255 − ink. We read the colour channels from the first
+written arrays and the transparency from the next written one; we write 24 channel slots with R, G, B (and alpha when
+the pattern has transparency) written raw and the rest unwritten.

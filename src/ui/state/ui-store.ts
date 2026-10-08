@@ -24,6 +24,7 @@ export const PANEL_IDS = [
   'color',
   'swatches',
   'gradients',
+  'patterns',
 ] as const;
 export type PanelKey = (typeof PANEL_IDS)[number];
 
@@ -172,7 +173,7 @@ export interface CanvasSizeResult {
   color: RGB;
 }
 
-export type FillContents = 'foreground' | 'background' | 'color' | 'black' | 'gray' | 'white';
+export type FillContents = 'foreground' | 'background' | 'color' | 'pattern' | 'black' | 'gray' | 'white';
 
 export interface FillRequest {
   contents: FillContents;
@@ -182,9 +183,13 @@ export interface FillRequest {
   /** Preserve Transparency is offered (not on the Background). */
   canPreserve: boolean;
   preserve: boolean;
+  /** The pattern offered for Pattern contents (an id). */
+  pattern: string;
 }
 
 export interface FillResult {
+  /** Pattern contents: the pattern's id (the colour is then unused). */
+  pattern?: string;
   color: RGB;
   mode: LayerBlendMode;
   opacity: number;

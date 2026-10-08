@@ -1,5 +1,5 @@
 /**
- * Brush and Pencil (B, Shift+B to switch) and Eraser (E) tools.
+ * Brush and Pencil (B, Shift+B to switch), Eraser (E) and Pattern Stamp (S) tools.
  *
  * Behaviour (own summary of the reference app):
  * - Drag to paint with the foreground colour (Brush) or to erase (Eraser: to
@@ -21,11 +21,15 @@
  *   the crosshair.
  * - With the Brush, Alt/Option-click (or drag) picks the foreground colour off the
  *   image, as the Eyedropper does (with its options).
+ * - The Pattern Stamp paints a pattern. Aligned keeps it continuous from stroke to
+ *   stroke (fixed to the document); otherwise each stroke starts it afresh where the
+ *   stroke begins. Impressionist paints each dab in one colour taken from the pattern.
  * - Alt+right-drag (Ctrl+Option-drag on macOS) shows the brush HUD: drag left or
  *   right for the size, up (softer) or down (harder) for a round tip's hardness —
  *   or the opacity, by preference and for sampled tips.
  */
 import type { PaintTool } from '../../core/commands/builtin/paint';
+import { DEFAULT_PATTERN_ID } from '../../core/pattern/pattern';
 import { DEFAULT_BRUSH, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
 import { DEFAULT_DYNAMICS, StrokeDabber } from '../../core/paint/dynamics';
 import {
@@ -45,8 +49,24 @@ import {
   type ToolContext,
   type ToolPointerEvent,
 } from '../types';
-import { BRUSH_CURSOR, ERASER_CURSOR, EYEDROPPER_CURSOR } from './cursors';
+import { BRUSH_CURSOR, ERASER_CURSOR, EYEDROPPER_CURSOR, STAMP_CURSOR } from './cursors';
 import { ColorSampler } from '../eyedropper/sampler';
+
+/** The Pattern Stamp's options. */
+export interface StampOptions {
+  patternId: string;
+  /** The pattern stays continuous from stroke to stroke. */
+  aligned: boolean;
+  /** Each dab paints one colour from the pattern. */
+  impressionist: boolean;
+}
+
+const TOOL_NAMES: Record<PaintTool, string> = {
+  brush: 'Brush Tool',
+  pencil: 'Pencil Tool',
+  eraser: 'Eraser Tool',
+  'pattern-stamp': 'Pattern Stamp Tool',
+};
 
 export class PaintingTool implements Tool {
   readonly id: string;
@@ -64,6 +84,8 @@ export class PaintingTool implements Tool {
   autoErase = false;
   /** Eraser: what it erases with. */
   eraserMode: 'brush' | 'pencil' | 'block' = 'brush';
+  /** Pattern Stamp: the pattern, Aligned and Impressionist. */
+  readonly stamp: StampOptions = { patternId: DEFAULT_PATTERN_ID, aligned: true, impressionist: false };
   #stroke: {
     session: PaintStroke;
     spacer: StrokeDabber;
@@ -91,8 +113,8 @@ export class PaintingTool implements Tool {
   constructor(kind: PaintTool) {
     this.kind = kind;
     this.id = kind;
-    this.name = kind === 'brush' ? 'Brush Tool' : kind === 'pencil' ? 'Pencil Tool' : 'Eraser Tool';
-    this.key = kind === 'eraser' ? 'E' : 'B';
+    this.name = TOOL_NAMES[kind];
+    this.key = kind === 'eraser' ? 'E' : kind === 'pattern-stamp' ? 'S' : 'B';
     const size = kind === 'brush' ? 30 : kind === 'pencil' ? 1 : 50;
     this.options = {
       ...DEFAULT_BRUSH,
@@ -110,6 +132,10 @@ export class PaintingTool implements Tool {
 
   setEraserMode(mode: 'brush' | 'pencil' | 'block'): void {
     this.eraserMode = mode;
+  }
+
+  setStamp(changes: Partial<StampOptions>): void {
+    Object.assign(this.stamp, changes);
   }
 
   /**
@@ -149,6 +175,7 @@ export class PaintingTool implements Tool {
         protectTexture: this.protectTexture,
         autoErase: this.autoErase,
         eraserMode: this.eraserMode,
+        stamp: this.stamp,
       }),
     );
   }
@@ -161,6 +188,7 @@ export class PaintingTool implements Tool {
       protectTexture?: boolean;
       autoErase?: boolean;
       eraserMode?: string;
+      stamp?: Partial<StampOptions>;
     };
     if (o.brush) this.setOptions(JSON.parse(JSON.stringify(o.brush)) as Partial<BrushSettings>);
     if (o.smoothing) this.setSmoothing(o.smoothing);
@@ -168,6 +196,11 @@ export class PaintingTool implements Tool {
     if (typeof o.autoErase === 'boolean') this.autoErase = o.autoErase;
     if (o.eraserMode === 'brush' || o.eraserMode === 'pencil' || o.eraserMode === 'block')
       this.eraserMode = o.eraserMode;
+    if (o.stamp) {
+      if (typeof o.stamp.patternId === 'string') this.stamp.patternId = o.stamp.patternId;
+      if (typeof o.stamp.aligned === 'boolean') this.stamp.aligned = o.stamp.aligned;
+      if (typeof o.stamp.impressionist === 'boolean') this.stamp.impressionist = o.stamp.impressionist;
+    }
     this.presetId = null;
   }
 
@@ -175,7 +208,7 @@ export class PaintingTool implements Tool {
     if (this.kind === 'brush' && (state.altKey || this.#sampler.active)) return EYEDROPPER_CURSOR;
     switch (state.paintCursor ?? 'precise') {
       case 'standard':
-        return this.kind === 'brush' ? BRUSH_CURSOR : ERASER_CURSOR;
+        return this.kind === 'brush' ? BRUSH_CURSOR : this.kind === 'pattern-stamp' ? STAMP_CURSOR : ERASER_CURSOR;
       case 'precise':
         return 'crosshair';
       default:
@@ -341,7 +374,19 @@ export class PaintingTool implements Tool {
     const session = ctx.paint.begin(
       this.kind,
       brush,
-      this.kind === 'pencil' && this.autoErase ? { autoEraseAt: startAt } : undefined,
+      this.kind === 'pencil' && this.autoErase
+        ? { autoEraseAt: startAt }
+        : this.kind === 'pattern-stamp'
+          ? {
+              pattern: {
+                id: this.stamp.patternId,
+                // Aligned: fixed to the document; otherwise starting where this stroke starts.
+                originX: this.stamp.aligned ? 0 : Math.floor(startAt.x),
+                originY: this.stamp.aligned ? 0 : Math.floor(startAt.y),
+                impressionist: this.stamp.impressionist,
+              },
+            }
+          : undefined,
     );
     if (!session) return;
     const spacer = new StrokeDabber(brush, session.seed, session.colors, session.symmetry);

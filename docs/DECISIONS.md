@@ -721,3 +721,32 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   which later features (styles, actions, tool presets, PSD descriptors) will reuse. Version 3 files (before 2000) are
   refused with a clear message. Colours other than RGB become sRGB as with swatch files; colour-book colours, whose
   values the file does not hold, become gray with a note.
+
+## D-046 — 2026-10-08 — Patterns: Define Pattern, Patterns panel, .pat files, pattern fill, Pattern Stamp
+
+**Decision:**
+
+- Patterns are kept as 8-bit RGBA sRGB images (the format the brush Texture already used). Define Pattern in a 16- or
+  32-bit document therefore stores 8 bits per channel (32-bit converted from linear light); a pattern is turned into
+  the document's values when it is used (Grayscale: luma; 32-bit: linear). Storing higher-depth patterns can come with
+  pattern fill layers if needed.
+- Edit > Define Pattern takes the visible image (all visible layers) in the selection's rectangle, or the whole canvas
+  without a selection, up to 4000 × 4000 pixels. As in the reference app it needs a rectangular selection without
+  feathering: the pixel worker checks that every pixel of the rectangle is fully selected and the user is told
+  otherwise (the menu item stays enabled, since checking the mask on every menu redraw would be costly).
+- The Patterns panel shows groups; our built-in patterns form "Textures". Deleting one of ours only hides it (brushes
+  and recordings may use it by id); Restore Default Patterns shows them again. The user's patterns live in IndexedDB;
+  the groups in the library value `patternGroups`. Patterns that belong to no group (from brush files made before
+  groups) appear under "Other Patterns". Restoring defaults (patterns, gradients, swatches) now keeps the user's own
+  items that were in a default group — before, swatches and gradients added to a default group were dropped.
+- Edit > Fill's Pattern contents repeat the pattern from the document's top left corner and honour its transparency;
+  the descriptor records the pattern's id. (Scripted patterns are not part of this item.)
+- The Pattern Stamp (S; the Clone Stamp will join it) paints through the brush engine with the pattern's colour at
+  each pixel, its transparency lowering the paint. Aligned fixes the pattern to the document's top left; otherwise it
+  starts where each stroke starts (the whole pixel under the press). Impressionist paints each dab in one colour: the
+  pattern's at the dab's centre. Strokes record the pattern id, origin and Impressionist, so they replay. These
+  strokes are painted by the TypeScript renderer (the WebAssembly painter handles plain colours only).
+- .pat files are read and written by our own code (`src/io/pat.ts`, FORMAT_NOTES §12) in the codec worker. Colour
+  channels are the first written arrays of the pattern's image; the next written one is its transparency. CMYK is
+  converted with the simple uncalibrated formula and Lab through D65 sRGB, as for swatches. We write RGB(A),
+  uncompressed.

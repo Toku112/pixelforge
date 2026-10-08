@@ -3,7 +3,7 @@
  * device pixels and act on the document view and the document (through commands)
  * via a context. The UI layer turns DOM events into these calls and draws overlays.
  */
-import type { PaintTool } from '../core/commands/builtin/paint';
+import type { PaintTool, StampPattern } from '../core/commands/builtin/paint';
 import type { CommandDescriptor } from '../core/commands/command';
 import type { RGB } from '../core/color/color';
 import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
@@ -196,11 +196,14 @@ export interface PaintStroke {
 
 /** Starts strokes on the active layer; null (after telling the user why) when it cannot be painted. */
 export interface PaintHost {
-  /** `autoEraseAt`: the Pencil's Auto Erase — paint the background colour if this pixel has the foreground colour. */
+  /**
+   * `autoEraseAt`: the Pencil's Auto Erase — paint the background colour if this pixel has the foreground colour;
+   * `pattern`: what the Pattern Stamp paints.
+   */
   begin(
     tool: PaintTool,
     brush: BrushSettings,
-    options?: { autoEraseAt?: { x: number; y: number } },
+    options?: { autoEraseAt?: { x: number; y: number }; pattern?: StampPattern },
   ): PaintStroke | null;
 }
 

@@ -43,6 +43,9 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
     brushTipFromImage(plan, rect, mask, canvas) {
       return worker.brushTipFromImage(plan, rect, mask, canvas);
     },
+    patternFromImage(plan, rect, mask, canvas) {
+      return worker.patternFromImage(plan, rect, mask, canvas);
+    },
     sampleColor(plan, rect) {
       return worker.sampleColor(plan, rect);
     },

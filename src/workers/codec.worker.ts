@@ -8,6 +8,8 @@ import init, * as codecs from '../wasm/pkg/codecs-st/codecs.js';
 import { withIccProfile } from '../io/webp-riff';
 import { readPsdFile, writePsdFile, type PsdFileData, type PsdNode, type PsdSaveData } from '../io/psd-format';
 import { importAbr, type AbrImport } from '../io/abr';
+import { readPat, writePat, type PatImport } from '../io/pat';
+import type { Pattern } from '../core/pattern/pattern';
 import { exposeApi, transfer } from './rpc';
 
 const ready = init();
@@ -167,6 +169,19 @@ const brushFiles = {
     for (const item of [...result.tips, ...result.patterns])
       if (!(item.data.buffer instanceof SharedArrayBuffer)) buffers.add(item.data.buffer);
     return transfer(result, [...buffers]);
+  },
+  /** Reads a .pat pattern file (see io/pat.ts). */
+  importPat(bytes: Uint8Array): PatImport {
+    const result = readPat(bytes);
+    return transfer(
+      result,
+      result.patterns.map((p) => p.data.buffer as ArrayBuffer),
+    );
+  },
+  /** Writes patterns as a .pat file. */
+  exportPat(patterns: Pattern[]): Uint8Array {
+    const bytes = writePat(patterns);
+    return transfer(bytes, [bytes.buffer as ArrayBuffer]);
   },
 };
 Object.assign(api, brushFiles);

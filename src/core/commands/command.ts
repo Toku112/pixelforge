@@ -89,6 +89,13 @@ export interface PixelOps {
   ): Promise<MaskData | null>;
   /** Edit > Define Brush Preset: tip coverage (0–255) of `rect` of the visible image (see core/paint/define-tip.ts). */
   brushTipFromImage(plan: FlattenPlan, rect: Rect, mask: MaskData | null, canvas: Rect): Promise<Uint8Array>;
+  /** Edit > Define Pattern: the visible image in `rect` as RGBA, and whether the selection covers it all sharply. */
+  patternFromImage(
+    plan: FlattenPlan,
+    rect: Rect,
+    mask: MaskData | null,
+    canvas: Rect,
+  ): Promise<{ data: Uint8Array; rectangular: boolean }>;
   /** The average colour of `plan` over `rect` (document channels 0–1), or null where nothing is painted. */
   sampleColor(plan: FlattenPlan, rect: Rect): Promise<number[] | null>;
   /** The exact bounds of the selected pixels within the canvas (Image > Crop); null when none are. */

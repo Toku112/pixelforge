@@ -1,11 +1,13 @@
 /**
- * Patterns: small images that repeat edge to edge (brush Texture now; Edit > Fill,
- * the Pattern Stamp and pattern layers later).
+ * Patterns: small images that repeat edge to edge (brush Texture, Edit > Fill, the
+ * Pattern Stamp; pattern layers later).
  *
  * The built-in set is ours, drawn by code (CLAUDE.md §1.1: no bundled presets from
  * elsewhere): seeded, so every copy of the app has exactly the same pixels, and
  * tileable, so the repeats never show a seam.
  */
+import { srgbToLinear } from '../color/srgb';
+import type { BitDepth, ColorMode } from '../document/pixel-format';
 import { seededRandom } from '../random';
 
 export interface Pattern {
@@ -176,6 +178,9 @@ export function builtInPatterns(): Pattern[] {
 
 export const DEFAULT_PATTERN_ID = 'pf-paper';
 
+/** Largest pattern side, in pixels (Define Pattern). */
+export const MAX_PATTERN_SIDE = 4000;
+
 /** The pattern as gray levels 0–255 (luminance, transparent parts counting as white). */
 export function patternGray(p: Pattern): Uint8Array {
   const out = new Uint8Array(p.width * p.height);
@@ -188,4 +193,52 @@ export function patternGray(p: Pattern): Uint8Array {
     out[i] = Math.round(255 - a * (255 - lum));
   }
   return out;
+}
+
+/** A group of patterns in the Patterns panel (by id). */
+export interface PatternGroup {
+  name: string;
+  ids: string[];
+}
+
+/** The Patterns panel's groups at first: our built-in patterns. */
+export function defaultPatternGroups(): PatternGroup[] {
+  return [{ name: 'Textures', ids: BUILT_IN.map((p) => p.id) }];
+}
+
+/** Whether a pattern is one of ours (always available, even when not shown in a group). */
+export function isBuiltInPattern(id: string): boolean {
+  return BUILT_IN.some((p) => p.id === id);
+}
+
+/**
+ * A pattern's pixels as a document's channel values (0–1; 32-bit: linear light) followed by
+ * alpha (0–1), per pixel. Grayscale takes the luma 0.299 R + 0.587 G + 0.114 B.
+ */
+export function patternSamples(p: Pattern, mode: ColorMode, depth: BitDepth): Float32Array {
+  const cc = mode === 'grayscale' ? 1 : mode === 'rgb' ? 3 : 0;
+  if (cc === 0) throw new Error(`Patterns in ${mode} documents need colour management, which is not available yet`);
+  const encode = depth === 32 ? (v: number) => srgbToLinear(v / 255) : (v: number) => v / 255;
+  const n = p.width * p.height;
+  const out = new Float32Array(n * (cc + 1));
+  for (let i = 0; i < n; i++) {
+    const r = p.data[i * 4]!;
+    const g = p.data[i * 4 + 1]!;
+    const b = p.data[i * 4 + 2]!;
+    const o = i * (cc + 1);
+    if (cc === 3) {
+      out[o] = encode(r);
+      out[o + 1] = encode(g);
+      out[o + 2] = encode(b);
+    } else out[o] = encode(0.299 * r + 0.587 * g + 0.114 * b);
+    out[o + cc] = p.data[i * 4 + 3]! / 255;
+  }
+  return out;
+}
+
+/** A pattern prepared for painting: channel values and alpha per pixel (see patternSamples). */
+export interface PatternPixels {
+  width: number;
+  height: number;
+  data: Float32Array;
 }

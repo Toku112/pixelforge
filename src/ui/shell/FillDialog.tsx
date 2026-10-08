@@ -1,7 +1,8 @@
 /**
- * Edit > Fill: what to fill with (foreground, background, a picked colour, black,
- * 50 % gray or white), the blend mode and opacity, and Preserve Transparency.
- * Choosing "Color…" opens the Color Picker straight away.
+ * Edit > Fill: what to fill with (foreground, background, a picked colour, a
+ * pattern, black, 50 % gray or white), the blend mode and opacity, and Preserve
+ * Transparency. Choosing "Color…" opens the Color Picker straight away; "Pattern"
+ * shows a pattern picker.
  */
 import { useState, type FormEvent } from 'react';
 import type { RGB } from '../../core/color/color';
@@ -10,11 +11,13 @@ import { NumberField } from '../controls/NumberField';
 import { useUi, type DialogRequest, type FillContents } from '../state/ui-store';
 import { BlendModeOptions } from '../controls/BlendModeOptions';
 import { Modal } from './Modal';
+import { PatternPicker } from './PatternPicker';
 
 const CONTENTS: [FillContents, string][] = [
   ['foreground', 'Foreground Color'],
   ['background', 'Background Color'],
   ['color', 'Color…'],
+  ['pattern', 'Pattern'],
   ['black', 'Black'],
   ['gray', '50% Gray'],
   ['white', 'White'],
@@ -30,6 +33,7 @@ export function FillDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 
   const [mode, setMode] = useState<LayerBlendMode>('normal');
   const [opacity, setOpacity] = useState(100);
   const [preserve, setPreserve] = useState(dialog.preserve && dialog.canPreserve);
+  const [pattern, setPattern] = useState(dialog.pattern);
 
   const colorFor = (c: FillContents): RGB => {
     switch (c) {
@@ -39,6 +43,7 @@ export function FillDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 
         return dialog.background;
       case 'color':
         return picked;
+      case 'pattern': // not used: the pattern fills
       case 'black':
         return { r: 0, g: 0, b: 0 };
       case 'gray':
@@ -69,7 +74,13 @@ export function FillDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     close(dialog);
-    dialog.resolve({ color: colorFor(contents), mode, opacity: opacity / 100, preserveTransparency: preserve });
+    dialog.resolve({
+      color: colorFor(contents),
+      mode,
+      opacity: opacity / 100,
+      preserveTransparency: preserve,
+      ...(contents === 'pattern' ? { pattern } : {}),
+    });
   };
 
   return (
@@ -85,6 +96,12 @@ export function FillDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 
             ))}
           </select>
         </label>
+        {contents === 'pattern' && (
+          <div className="dialog-field">
+            <span>Pattern</span>
+            <PatternPicker value={pattern} onChange={setPattern} label="Custom pattern" />
+          </div>
+        )}
         <label className="dialog-field">
           <span>Mode</span>
           <select value={mode} onChange={(e) => setMode(e.target.value as LayerBlendMode)}>
