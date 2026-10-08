@@ -79,6 +79,10 @@ export interface Dab {
   opacity?: number;
   /** This dab's colour samples (Color Dynamics; default: the brush colour). */
   color?: number[];
+  /** This dab's texture depth (Texture Each Tip with Depth Jitter; default: the texture's Depth). */
+  depth?: number;
+  /** A Dual Brush dab: it masks the stroke instead of painting. */
+  dual?: boolean;
 }
 
 /** A dab where the spacer put it, with what dynamics need: the pen there, its number and the stroke direction. */
@@ -177,11 +181,19 @@ export class DabSpacer {
   #index = 0;
   #direction = 0;
   #initialDirection: number | null = null;
+  /** Build-up: milliseconds between dabs while the pointer stays put (0: off). */
+  readonly #interval: number;
+  /** Time of the last dab (ms since the stroke began). */
+  #lastTime = 0;
 
-  /** `sizeScale`: how much dynamics will shrink or grow a dab, so the next one is spaced by its real size. */
-  constructor(settings: BrushSettings, sizeScale: ((placed: PlacedDab) => number) | null = null) {
+  /**
+   * `sizeScale`: how much dynamics will shrink or grow a dab, so the next one is spaced by its real size.
+   * `interval`: with Build-up, a dab at least this often (ms), even without moving.
+   */
+  constructor(settings: BrushSettings, sizeScale: ((placed: PlacedDab) => number) | null = null, interval = 0) {
     this.#settings = settings;
     this.#sizeScale = sizeScale;
+    this.#interval = interval;
   }
 
   #dab(p: StrokePoint): Dab {
@@ -220,6 +232,7 @@ export class DabSpacer {
     if (!last) {
       const first = this.#placed(this.#dab(p), p);
       this.#remaining = this.#step(first);
+      this.#lastTime = p.time;
       return [first];
     }
     const dabs: PlacedDab[] = [];
@@ -248,8 +261,19 @@ export class DabSpacer {
       const placed = this.#placed(this.#dab(point), point);
       dabs.push(placed);
       this.#remaining = this.#step(placed);
+      this.#lastTime = point.time;
     }
     this.#remaining -= length - travelled;
+    if (this.#interval > 0) {
+      // Build-up: paint keeps coming where the pointer is (at most a second's worth at once).
+      let n = 0;
+      while (p.time - this.#lastTime >= this.#interval && n < 30) {
+        this.#lastTime += this.#interval;
+        dabs.push(this.#placed(this.#dab(p), p));
+        n++;
+      }
+      if (n === 30) this.#lastTime = p.time;
+    }
     return dabs;
   }
 

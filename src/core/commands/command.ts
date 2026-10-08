@@ -7,6 +7,7 @@
 import type { CompositeTile } from '../composite/composite-tiles';
 import type { LayerSource, LayerTile } from '../geometry/layer-geometry';
 import type { BrushTip } from '../paint/brush';
+import type { PatternSource } from '../pattern/pattern';
 import type { Mat3 } from '../geometry/transform';
 import type { TransformPixelsSetup } from '../geometry/transform-pixels';
 import type { LayerGeometry } from './builtin/geometry';
@@ -181,6 +182,8 @@ export interface CommandServices {
   pixelOps: PixelOps;
   /** Where strokes find their sampled tips (absent: only the computed round tip). */
   brushTips?: BrushTipSource;
+  /** Where brush textures find their patterns (absent: the built-in patterns only). */
+  patterns?: PatternSource;
 }
 
 export interface CommandContext {

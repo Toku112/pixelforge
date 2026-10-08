@@ -14,12 +14,21 @@
  * - Color Dynamics varies the colour between foreground and background and in hue,
  *   saturation and brightness, per stroke or per dab; Purity shifts saturation.
  * - Brush Pose overrides the pen's tilt, rotation or pressure.
+ * - Texture, Dual Brush, Noise and Wet Edges are settings here too (the renderer
+ *   applies them; see texture.ts). Texture Each Tip can vary the depth per dab
+ *   (Depth Jitter, Minimum Depth); the dual tip is stamped along the same path with
+ *   its own size, spacing, scatter and count, scaled with the brush size.
+ * - Build-up (airbrush): paint keeps building while the pointer is held still.
  *
  * Randomness comes from a generator seeded per stroke, recorded with the stroke, so
  * replaying it paints exactly the same dabs.
  */
 import { hsbToRgb, rgbToHsb, type RGB } from '../color/color';
+import { seededRandom } from '../random';
 import { DabSpacer, type BrushSettings, type Dab, type StrokePoint } from './brush';
+import { DUAL_MODES, TEXTURE_MODES, type DualMode, type TextureMode } from './texture';
+
+export { seededRandom };
 
 export type DynamicsControl =
   'off' | 'fade' | 'pressure' | 'tilt' | 'wheel' | 'rotation' | 'initial-direction' | 'direction';
@@ -80,7 +89,52 @@ export interface BrushDynamics {
     overridePressure: boolean;
     pressure: number;
   };
+  texture: {
+    enabled: boolean;
+    /** Pattern id (pattern library). */
+    pattern: string;
+    invert: boolean;
+    /** 0.01–10 (1–1000 %). */
+    scale: number;
+    /** −150…150. */
+    brightness: number;
+    /** −50…100. */
+    contrast: number;
+    eachTip: boolean;
+    mode: TextureMode;
+    /** 0–1. */
+    depth: number;
+    /** Per-dab depth (Texture Each Tip only); its minimum is Minimum Depth. */
+    depthJitter: ControlledJitter;
+  };
+  dual: {
+    enabled: boolean;
+    mode: DualMode;
+    /** Flip each dual dab at random. */
+    flip: boolean;
+    /** Sampled tip id, or null for a round tip of `hardness`. */
+    tip: string | null;
+    hardness: number;
+    /** Diameter as a share of the brush size (it scales with the brush), 0.001–100. */
+    size: number;
+    /** Share of the dual diameter, 0.01–10. */
+    spacing: number;
+    /** Share of the dual diameter, 0–10. */
+    scatter: number;
+    bothAxes: boolean;
+    /** 1–16. */
+    count: number;
+  };
+  /** Roughens soft tip edges. */
+  noise: boolean;
+  /** Paint gathers at the stroke's edges. */
+  wetEdges: boolean;
+  /** Airbrush: paint builds up while the pointer is held still. */
+  buildUp: boolean;
 }
+
+/** Build-up: one dab every this many milliseconds while the pointer is held still (30 per second). */
+export const BUILD_UP_INTERVAL = 1000 / 30;
 
 const jitter = (control: DynamicsControl = 'off'): ControlledJitter => ({
   jitter: 0,
@@ -120,23 +174,50 @@ export const DEFAULT_DYNAMICS: BrushDynamics = {
     overridePressure: false,
     pressure: 1,
   },
+  texture: {
+    enabled: false,
+    pattern: 'pf-paper', // the first built-in pattern (core/pattern)
+    invert: false,
+    scale: 1,
+    brightness: 0,
+    contrast: 0,
+    eachTip: false,
+    mode: 'multiply',
+    depth: 1,
+    depthJitter: jitter(),
+  },
+  dual: {
+    enabled: false,
+    mode: 'multiply',
+    flip: false,
+    tip: null,
+    hardness: 1,
+    size: 0.5,
+    spacing: 0.25,
+    scatter: 0,
+    bothAxes: false,
+    count: 1,
+  },
+  noise: false,
+  wetEdges: false,
+  buildUp: false,
 };
 
-/** True when nothing varies (the plain brush). */
-export function dynamicsOff(d: BrushDynamics | undefined): boolean {
-  return !d || (!d.shape.enabled && !d.scatter.enabled && !d.transfer.enabled && !d.color.enabled && !d.pose.enabled);
-}
+/** True when Texture Each Tip varies the depth per dab. */
+const depthVaries = (t: BrushDynamics['texture']) =>
+  t.enabled && t.eachTip && (t.depthJitter.jitter > 0 || t.depthJitter.control !== 'off');
 
-/** A small, fast seeded generator (mulberry32): the same seed gives the same numbers. */
-export function seededRandom(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+/** True when no dab varies (the plain brush; texture, noise and wet edges may still apply). */
+export function dynamicsOff(d: BrushDynamics | undefined): boolean {
+  return (
+    !d ||
+    (!d.shape.enabled &&
+      !d.scatter.enabled &&
+      !d.transfer.enabled &&
+      !d.color.enabled &&
+      !d.pose.enabled &&
+      !depthVaries(d.texture))
+  );
 }
 
 /** A placed dab before dynamics: where, the pen there, and the stroke's direction (radians, screen). */
@@ -307,6 +388,7 @@ export class DabDynamics {
       if (d.color.perTip || !this.#strokeColor) this.#strokeColor = this.#color(p);
       dab.color = this.#strokeColor;
     }
+    if (depthVaries(d.texture)) dab.depth = d.texture.depth * this.#vary(d.texture.depthJitter, p);
     return dab;
   }
 
@@ -335,18 +417,78 @@ export class DabDynamics {
 export class StrokeDabber {
   readonly #spacer: DabSpacer;
   readonly #dynamics: DabDynamics | null;
+  readonly #dual: DualDabber | null;
 
   constructor(brush: BrushSettings, seed: number, colors: DynamicsColors | null) {
-    const dynamics = dynamicsOff(brush.dynamics) ? null : new DabDynamics(brush.dynamics!, seed, colors, brush.opacity);
+    const d = brush.dynamics;
+    const dynamics = dynamicsOff(d) ? null : new DabDynamics(d!, seed, colors, brush.opacity);
     this.#dynamics = dynamics;
-    this.#spacer = new DabSpacer(brush, dynamics && ((placed) => dynamics.sizeScale(placed)));
+    this.#spacer = new DabSpacer(
+      brush,
+      dynamics && ((placed) => dynamics.sizeScale(placed)),
+      d?.buildUp ? BUILD_UP_INTERVAL : 0,
+    );
+    this.#dual = d?.dual.enabled ? new DualDabber(brush, d.dual, seed) : null;
   }
 
+  /** The dabs a pointer sample adds: the brush's, then the dual tip's (marked `dual`). */
   add(p: StrokePoint): Dab[] {
     const placed = this.#spacer.place(p);
     const dyn = this.#dynamics;
-    if (!dyn) return placed.map((d) => d.dab);
-    return placed.flatMap((d) => dyn.apply(d.dab, d));
+    const dabs = dyn ? placed.flatMap((d) => dyn.apply(d.dab, d)) : placed.map((d) => d.dab);
+    if (this.#dual) dabs.push(...this.#dual.add(p));
+    return dabs;
+  }
+}
+
+/** The Dual Brush's dabs: its own spacing along the path, scattered and repeated, with its own random numbers. */
+class DualDabber {
+  readonly #spacer: DabSpacer;
+  readonly #dual: BrushDynamics['dual'];
+  readonly #size: number;
+  readonly #random: () => number;
+
+  constructor(brush: BrushSettings, dual: BrushDynamics['dual'], seed: number) {
+    this.#dual = dual;
+    this.#size = Math.max(1, dual.size * brush.size);
+    this.#spacer = new DabSpacer({
+      ...brush,
+      size: this.#size,
+      spacing: dual.spacing,
+      angle: 0,
+      roundness: 1,
+      flipX: false,
+      flipY: false,
+      pressureSize: false,
+      pressureOpacity: false,
+    });
+    // A stream apart from the brush's, so changing one never moves the other's dabs.
+    this.#random = seededRandom((seed ^ 0x5bd1e995) >>> 0);
+  }
+
+  add(p: StrokePoint): Dab[] {
+    const d = this.#dual;
+    const out: Dab[] = [];
+    for (const placed of this.#spacer.place(p)) {
+      for (let n = 0; n < d.count; n++) {
+        const dab: Dab = { ...placed.dab, strength: 1, dual: true };
+        if (d.scatter > 0) {
+          const reach = d.scatter * this.#size;
+          const across = (this.#random() * 2 - 1) * reach;
+          const along = d.bothAxes ? (this.#random() * 2 - 1) * reach : 0;
+          const cos = Math.cos(placed.direction);
+          const sin = Math.sin(placed.direction);
+          dab.x += cos * along - sin * across;
+          dab.y += sin * along + cos * across;
+        }
+        if (d.flip) {
+          dab.flipX = this.#random() < 0.5;
+          dab.flipY = this.#random() < 0.5;
+        }
+        out.push(dab);
+      }
+    }
+    return out;
   }
 }
 
@@ -403,6 +545,10 @@ export function parseDynamics(v: unknown): BrushDynamics {
   const transfer = obj(raw['transfer']);
   const color = obj(raw['color']);
   const pose = obj(raw['pose']);
+  const texture = obj(raw['texture']);
+  const dual = obj(raw['dual']);
+  const T = D.texture;
+  const B = D.dual;
   return {
     shape: {
       enabled: bool(shape, 'enabled', false),
@@ -446,5 +592,44 @@ export function parseDynamics(v: unknown): BrushDynamics {
       overridePressure: bool(pose, 'overridePressure', false),
       pressure: num(pose, 'pressure', 0, 1, 1),
     },
+    texture: {
+      enabled: bool(texture, 'enabled', false),
+      pattern: str(texture, 'pattern', T.pattern),
+      invert: bool(texture, 'invert', false),
+      scale: num(texture, 'scale', 0.01, 10, T.scale),
+      brightness: num(texture, 'brightness', -150, 150, T.brightness),
+      contrast: num(texture, 'contrast', -50, 100, T.contrast),
+      eachTip: bool(texture, 'eachTip', T.eachTip),
+      mode: oneOf(texture, 'mode', TEXTURE_MODES, T.mode),
+      depth: num(texture, 'depth', 0, 1, T.depth),
+      depthJitter: controlled(texture['depthJitter'], T.depthJitter),
+    },
+    dual: {
+      enabled: bool(dual, 'enabled', false),
+      mode: oneOf(dual, 'mode', DUAL_MODES, B.mode),
+      flip: bool(dual, 'flip', false),
+      tip: dual['tip'] === undefined || dual['tip'] === null ? null : str(dual, 'tip', ''),
+      hardness: num(dual, 'hardness', 0, 1, B.hardness),
+      size: num(dual, 'size', 0.001, 100, B.size),
+      spacing: num(dual, 'spacing', 0.01, 10, B.spacing),
+      scatter: num(dual, 'scatter', 0, 10, B.scatter),
+      bothAxes: bool(dual, 'bothAxes', false),
+      count: num(dual, 'count', 1, 16, B.count),
+    },
+    noise: bool(raw, 'noise', false),
+    wetEdges: bool(raw, 'wetEdges', false),
+    buildUp: bool(raw, 'buildUp', false),
   };
+}
+
+function str(raw: Raw, key: string, fallback: string): string {
+  const v = raw[key] ?? fallback;
+  if (typeof v !== 'string' || v === '') throw new Error(`brush dynamics: ${key} must be a name`);
+  return v;
+}
+
+function oneOf<T extends string>(raw: Raw, key: string, options: readonly [T, string][], fallback: T): T {
+  const v = raw[key] ?? fallback;
+  if (!options.some(([id]) => id === v)) throw new Error(`brush dynamics: unknown ${key} ${JSON.stringify(v)}`);
+  return v as T;
 }

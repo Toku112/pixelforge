@@ -8,6 +8,7 @@
  * - Shift-click paints a straight line from the end of the previous stroke.
  * - Painting stays inside the selection, if there is one.
  * - The brush outline follows the pointer.
+ * - With Build-up (airbrush), holding the pointer still keeps adding paint.
  */
 import type { PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_BRUSH, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
@@ -23,6 +24,8 @@ export class PaintingTool implements Tool {
   #stroke: { session: PaintStroke; spacer: StrokeDabber; points: StrokePoint[]; start: number } | null = null;
   /** End of the last stroke, for Shift-click lines. */
   #lastEnd: StrokePoint | null = null;
+  /** Build-up: repeats the pointer's last sample while it is held still. */
+  #hold: ReturnType<typeof setInterval> | null = null;
 
   constructor(kind: PaintTool) {
     this.kind = kind;
@@ -44,7 +47,7 @@ export class PaintingTool implements Tool {
     return this.#stroke !== null;
   }
 
-  #point(e: ToolPointerEvent, ctx: ToolContext, start = e.time ?? 0): StrokePoint {
+  #point(e: ToolPointerEvent, ctx: ToolContext, start = e.time ?? performance.now()): StrokePoint {
     const p = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
     return {
       x: p.x,
@@ -54,8 +57,29 @@ export class PaintingTool implements Tool {
       tiltY: e.tiltY ?? 0,
       twist: e.twist ?? 0,
       wheel: e.wheel ?? 0,
-      time: Math.max(0, (e.time ?? 0) - start),
+      time: Math.max(0, (e.time ?? performance.now()) - start),
     };
+  }
+
+  /**
+   * Build-up: while the stroke lasts, the last sample is repeated with the current time
+   * (recorded like any sample), so the spacer can keep adding paint where the pointer rests.
+   */
+  #startHold(): void {
+    this.#stopHold();
+    this.#hold = setInterval(() => {
+      const stroke = this.#stroke;
+      const last = stroke?.points.at(-1);
+      if (!stroke || !last) return;
+      const p = { ...last, time: Math.max(last.time, performance.now() - stroke.start) };
+      stroke.points.push(p);
+      stroke.session.add(stroke.spacer.add(p));
+    }, 16);
+  }
+
+  #stopHold(): void {
+    if (this.#hold !== null) clearInterval(this.#hold);
+    this.#hold = null;
   }
 
   /** The cursor at the pointer — ahead of it where the browser predicts the next position. */
@@ -79,7 +103,7 @@ export class PaintingTool implements Tool {
     const session = ctx.paint.begin(this.kind, this.options);
     if (!session) return;
     const spacer = new StrokeDabber(this.options, session.seed, session.colors);
-    const start = e.time ?? 0;
+    const start = e.time ?? performance.now();
     const p = this.#point(e, ctx, start);
     const points: StrokePoint[] = [];
     this.#stroke = { session, spacer, points, start };
@@ -91,6 +115,7 @@ export class PaintingTool implements Tool {
     }
     points.push(p);
     session.add(spacer.add(p));
+    if (this.options.dynamics?.buildUp) this.#startHold();
     ctx.setBrushOutline(this.#outline(e, ctx));
   }
 
@@ -106,6 +131,7 @@ export class PaintingTool implements Tool {
   onPointerUp(_e: ToolPointerEvent, _ctx: ToolContext): void {
     const stroke = this.#stroke;
     this.#stroke = null;
+    this.#stopHold();
     if (!stroke) return;
     this.#lastEnd = stroke.points.at(-1) ?? null;
     void stroke.session.end(stroke.points).catch(() => {
@@ -125,6 +151,7 @@ export class PaintingTool implements Tool {
   cancel(ctx: ToolContext): void {
     const stroke = this.#stroke;
     this.#stroke = null;
+    this.#stopHold();
     ctx.setBrushOutline(null);
     if (stroke) void stroke.session.cancel();
   }

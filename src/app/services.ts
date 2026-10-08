@@ -7,6 +7,7 @@ import type { PixelOps } from '../core/commands/command';
 import type { Dab } from '../core/paint/brush';
 import type { StrokeSetup } from '../core/paint/stroke';
 import { BrushLibrary } from './brush-library';
+import { PatternLibrary } from './pattern-library';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
@@ -46,6 +47,8 @@ export interface AppServices {
   pixelOps: PixelOps;
   /** The user's sampled brush tips. */
   brushes: BrushLibrary;
+  /** Patterns (brush Texture). */
+  patterns: PatternLibrary;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -57,7 +60,12 @@ export async function createServices(): Promise<AppServices> {
   const pixelWorker = createPixelWorker();
   const pixelOps = createWorkerPixelOps(pixelWorker);
   const brushes = new BrushLibrary();
-  const workspace = new Workspace({ registry, services: { pixelOps, brushTips: brushes }, residency: tileStore });
+  const patterns = new PatternLibrary();
+  const workspace = new Workspace({
+    registry,
+    services: { pixelOps, brushTips: brushes, patterns },
+    residency: tileStore,
+  });
   return {
     tileStore,
     codec: createCodecWorker(),
@@ -69,5 +77,6 @@ export async function createServices(): Promise<AppServices> {
     strokes: createStrokeEngine(pixelWorker),
     pixelOps,
     brushes,
+    patterns,
   };
 }

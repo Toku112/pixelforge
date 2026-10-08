@@ -342,3 +342,24 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
     pixel is the highest of the dabs that touched it.
   - Brush Pose replaces the pen's tilt, rotation or pressure before the controls read them.
   - Random numbers come from mulberry32 seeded per stroke; the seed is recorded, so a replayed stroke is identical.
+- **Texture.** The pattern's gray level g (luminance composited on white) becomes
+  `t = clamp(((g − 127.5)·k + 127.5 + brightness) / 255)`, `k = 1 + contrast/25` (contrast ≥ 0) or `1 + contrast/50`,
+  then `1 − t` with Invert. It is fixed to the document: pixel (x, y) reads the pattern bilinearly at
+  `((x + 0.5)/scale − 0.5, (y + 0.5)/scale − 0.5)`, repeating. With paint amount a and depth d:
+  Multiply `a·(1 − d(1 − t))`; Subtract `a − d(1 − t)`; Darken `min(a, 1 − d(1 − t))`; Overlay with
+  `b = 0.5 + d(t − 0.5)`; Color Dodge `a / (1 − d·t)`; Color Burn `1 − (1 − a)/b`, `b = 1 − d(1 − t)`; Linear Burn
+  `a − 2d(1 − t)`; Hard Mix `(a − d(1 − t)) / (1 − d)`; Height: paint reaches relief above `1 − L`,
+  `L = a(1 + 4d)`, as `(t + L − 1)/0.25`; Linear Height `max(Height, a·t)` (all clamped to 0–1). Texture Each Tip
+  applies this to each dab's amount before it is added (depth per dab with Depth Jitter, floored by Minimum Depth);
+  otherwise to the stroke's coverage when shading.
+- **Dual Brush.** Its dabs (own tip, size = share × brush size, spacing, scatter, count, random flips, own random
+  stream from `seed ^ 0x5bd1e995`) build a coverage m of their own (`m ← m + (1 − m)·tip`). The stroke's coverage c
+  becomes: Multiply `c·m`; Darken `min(c, m)`; Overlay (c base); Color Dodge `c/(1 − m)`; Color Burn
+  `1 − (1 − c)/m`; Linear Burn `c + m − 1`; Hard Mix `(c + m − 1)/0.05`; Linear Height `max((m + c − 1)/0.25, c·m)`
+  — all 0 where c is 0, so paint stays inside the stroke.
+- **Noise** adds `(n − 0.5)·2·4a(1 − a)` to a tip's coverage a, with n a fixed hash of the document pixel.
+- **Wet Edges.** Each dab is also laid shrunk by 10 % of its diameter on every side (minus a pixel) into an
+  interior coverage i; with `k = i/c`, opacity = `max(c(0.5 + 0.4(1 − k)), min(c, 0.5 + 1.5(1 − c)))`: half in the
+  middle, up to 90 % along a hard tip's rim, a darker ring where a soft tip's coverage is about 80 %.
+- **Build-up.** While the pointer is down, its last sample is repeated every 16 ms with the current time (and
+  recorded); the spacer adds a dab whenever 1/30 s has passed since the last one.

@@ -1141,6 +1141,13 @@
 .brush-section:not(:has(input)) button {
   padding-left: 20px;
 }
+.brush-flag {
+  padding: 3px 2px;
+  cursor: default;
+}
+.brush-flag:first-of-type {
+  margin-top: 6px;
+}
 .brush-section.active {
   background: var(--bg-hover, rgb(255 255 255 / 8%));
 }

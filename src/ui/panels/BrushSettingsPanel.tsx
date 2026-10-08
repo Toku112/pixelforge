@@ -1,11 +1,15 @@
 /**
  * Brush Settings panel (Window > Brush Settings, F5): the active painting tool's
- * brush — tip shape and the dynamics sections, each switched on by its checkbox —
- * with a preview stroke at the bottom (painted in the worker).
+ * brush — tip shape and the sections that vary or texture it, each switched on by
+ * its checkbox (Noise, Wet Edges and Build-up are checkboxes only) — with a preview
+ * stroke at the bottom (painted in the worker by the same engine).
  */
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { brushStrokeSetup, resolveBrushResources } from '../../core/commands/builtin/paint';
 import { colorToSamples } from '../../core/color/color';
+import type { Pattern } from '../../core/pattern/pattern';
 import { strokePoint } from '../../core/paint/brush';
+import { DUAL_MODES, TEXTURE_MODES } from '../../core/paint/texture';
 import {
   DEFAULT_DYNAMICS,
   StrokeDabber,
@@ -19,15 +23,25 @@ import { NumberField } from '../controls/NumberField';
 import { TipThumbnail } from '../shell/BrushPicker';
 import { useUi } from '../state/ui-store';
 
-type Section = 'tip' | 'shape' | 'scatter' | 'color' | 'transfer' | 'pose';
+type Section = 'tip' | 'shape' | 'scatter' | 'texture' | 'dual' | 'color' | 'transfer' | 'pose';
+type SectionKey = Exclude<Section, 'tip'>;
+type Flag = 'noise' | 'wetEdges' | 'buildUp';
 
 const SECTIONS: [Section, string][] = [
   ['tip', 'Brush Tip Shape'],
   ['shape', 'Shape Dynamics'],
   ['scatter', 'Scattering'],
+  ['texture', 'Texture'],
+  ['dual', 'Dual Brush'],
   ['color', 'Color Dynamics'],
   ['transfer', 'Transfer'],
   ['pose', 'Brush Pose'],
+];
+
+const FLAGS: [Flag, string][] = [
+  ['noise', 'Noise'],
+  ['wetEdges', 'Wet Edges'],
+  ['buildUp', 'Build-up'],
 ];
 
 const CONTROL_LABELS: Record<DynamicsControl, string> = {
@@ -50,17 +64,24 @@ function ControlSelect({
   label,
   value,
   options,
+  disabled,
   onChange,
 }: {
   label: string;
   value: DynamicsControl;
   options: DynamicsControl[];
+  disabled?: boolean;
   onChange: (c: DynamicsControl) => void;
 }) {
   return (
     <label className="brush-row">
       <span>Control</span>
-      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value as DynamicsControl)}>
+      <select
+        aria-label={label}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as DynamicsControl)}
+      >
         {options.map((c) => (
           <option key={c} value={c}>
             {CONTROL_LABELS[c]}
@@ -77,12 +98,14 @@ function JitterRows({
   value,
   controls,
   minimum,
+  disabled,
   onChange,
 }: {
   label: string;
   value: ControlledJitter;
   controls: DynamicsControl[];
   minimum?: string;
+  disabled?: boolean;
   onChange: (v: ControlledJitter) => void;
 }) {
   const set = (changes: Partial<ControlledJitter>) => onChange({ ...value, ...changes });
@@ -95,12 +118,14 @@ function JitterRows({
         max={100}
         suffix="%"
         width={52}
+        disabled={disabled}
         onChange={(v) => set({ jitter: v / 100 })}
       />
       <ControlSelect
         label={`${label} control`}
         value={value.control}
         options={controls}
+        disabled={disabled}
         onChange={(c) => set({ control: c })}
       />
       {value.control === 'fade' && (
@@ -122,6 +147,7 @@ function JitterRows({
           max={100}
           suffix="%"
           width={52}
+          disabled={disabled}
           onChange={(v) => set({ minimum: v / 100 })}
         />
       )}
@@ -136,6 +162,31 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
       {label}
     </label>
   );
+}
+
+/** A pattern repeated over a square of `box` CSS pixels (its top-left corner at 1:1, or shrunk to fit). */
+function PatternThumbnail({ pattern, box }: { pattern: Pattern; box: number }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const el = canvas.current;
+    const ctx = el?.getContext('2d');
+    if (!el || !ctx) return;
+    el.width = box;
+    el.height = box;
+    const image = ctx.createImageData(box, box);
+    const step = Math.max(1, Math.max(pattern.width, pattern.height) / (box * 2));
+    for (let y = 0; y < box; y++)
+      for (let x = 0; x < box; x++) {
+        const sx = Math.floor(x * step) % pattern.width;
+        const sy = Math.floor(y * step) % pattern.height;
+        const i = (sy * pattern.width + sx) * 4;
+        const a = pattern.data[i + 3]! / 255;
+        for (let k = 0; k < 3; k++) image.data[(y * box + x) * 4 + k] = 255 - a * (255 - pattern.data[i + k]!);
+        image.data[(y * box + x) * 4 + 3] = 255;
+      }
+    ctx.putImageData(image, 0, 0);
+  }, [pattern, box]);
+  return <canvas ref={canvas} className="tip-thumb" style={{ width: box, height: box }} />;
 }
 
 export function BrushSettingsPanel() {
@@ -154,8 +205,9 @@ export function BrushSettingsPanel() {
     painting?.setOptions(changes);
     bump();
   };
-  const setDyn = <K extends keyof BrushDynamics>(key: K, changes: Partial<BrushDynamics[K]>) =>
+  const setDyn = <K extends SectionKey>(key: K, changes: Partial<BrushDynamics[K]>) =>
     set({ dynamics: { ...dyn, [key]: { ...dyn[key], ...changes } } });
+  const setFlag = (key: Flag, on: boolean) => set({ dynamics: { ...dyn, [key]: on } });
 
   // The preview stroke: an S-curve, pressure rising and falling, painted in the worker.
   const version = useUi((s) => s.toolOptionsVersion);
@@ -188,18 +240,23 @@ export function BrushSettingsPanel() {
       );
       dabs.push(...dabber.add(p));
     }
-    const tip = o.tip ? (controller.services.brushes.get(o.tip) ?? null) : null;
+    let res;
+    try {
+      res = resolveBrushResources(brush, controller.services.brushes, controller.services.patterns);
+    } catch {
+      return; // a tip that is no longer in the library: nothing to preview
+    }
+    // Painted in the paint colour (black for the Eraser), Normal, on transparent pixels.
+    const paint = painting.kind === 'brush' ? controller.colors.foreground : { r: 0, g: 0, b: 0 };
     const setup = {
-      format: { depth: 8 as const, colorChannels: 3, hasAlpha: true },
-      color: colorToSamples(painting.kind === 'brush' ? controller.colors.foreground : { r: 0, g: 0, b: 0 }, 'rgb', 8),
-      erase: false,
-      opacity: o.opacity,
-      flow: o.flow,
-      hardness: o.hardness,
-      mode: 'normal' as const,
-      tip: tip ? { width: tip.width, height: tip.height, data: tip.data } : null,
+      ...brushStrokeSetup(
+        { ...brush, mode: 'normal' },
+        'brush',
+        { depth: 8, colorChannels: 3, hasAlpha: true },
+        colorToSamples(paint, 'rgb', 8),
+        res,
+      ),
       varyColor,
-      varyOpacity: dyn.transfer.enabled,
       lockAlpha: false,
       offsetX: 0,
       offsetY: 0,
@@ -221,6 +278,9 @@ export function BrushSettingsPanel() {
   if (!painting || !o) return <p className="panel-empty">Choose the Brush or Eraser to set its brush here.</p>;
 
   const enabled = (s: Section) => s !== 'tip' && dyn[s].enabled;
+  const tips = controller.services.brushes.list();
+  const tex = dyn.texture;
+  const dual = dyn.dual;
   const body: Record<Section, ReactNode> = {
     tip: (
       <>
@@ -437,6 +497,191 @@ export function BrushSettingsPanel() {
         />
       </>
     ),
+    texture: (
+      <>
+        <div className="brush-tips" role="listbox" aria-label="Patterns">
+          {controller.services.patterns.list().map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="option"
+              aria-selected={tex.pattern === p.id}
+              aria-label={p.name}
+              title={`${p.name} (${p.width} × ${p.height})`}
+              className="brush-tip"
+              onClick={() => setDyn('texture', { pattern: p.id })}
+            >
+              <PatternThumbnail pattern={p} box={32} />
+            </button>
+          ))}
+        </div>
+        <div className="brush-group">
+          <Check label="Invert" checked={tex.invert} onChange={(invert) => setDyn('texture', { invert })} />
+          <NumberField
+            label="Scale"
+            value={pct(tex.scale)}
+            min={1}
+            max={1000}
+            suffix="%"
+            width={56}
+            onChange={(v) => setDyn('texture', { scale: v / 100 })}
+          />
+          <NumberField
+            label="Brightness"
+            value={tex.brightness}
+            min={-150}
+            max={150}
+            width={52}
+            onChange={(brightness) => setDyn('texture', { brightness })}
+          />
+          <NumberField
+            label="Contrast"
+            value={tex.contrast}
+            min={-50}
+            max={100}
+            width={52}
+            onChange={(contrast) => setDyn('texture', { contrast })}
+          />
+        </div>
+        <div className="brush-group">
+          <Check
+            label="Texture Each Tip"
+            checked={tex.eachTip}
+            onChange={(eachTip) => setDyn('texture', { eachTip })}
+          />
+          <label className="brush-row">
+            <span>Mode</span>
+            <select
+              aria-label="Texture mode"
+              value={tex.mode}
+              onChange={(e) => setDyn('texture', { mode: e.target.value as typeof tex.mode })}
+            >
+              {TEXTURE_MODES.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <NumberField
+            label="Depth"
+            value={pct(tex.depth)}
+            min={0}
+            max={100}
+            suffix="%"
+            width={52}
+            onChange={(v) => setDyn('texture', { depth: v / 100 })}
+          />
+        </div>
+        <JitterRows
+          label="Depth Jitter"
+          value={tex.depthJitter}
+          controls={BASIC}
+          minimum="Minimum Depth"
+          disabled={!tex.eachTip}
+          onChange={(depthJitter) => setDyn('texture', { depthJitter })}
+        />
+      </>
+    ),
+    dual: (
+      <>
+        <div className="brush-group">
+          <label className="brush-row">
+            <span>Mode</span>
+            <select
+              aria-label="Dual brush mode"
+              value={dual.mode}
+              onChange={(e) => setDyn('dual', { mode: e.target.value as typeof dual.mode })}
+            >
+              {DUAL_MODES.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Check label="Flip" checked={dual.flip} onChange={(flip) => setDyn('dual', { flip })} />
+        </div>
+        <div className="brush-tips" role="listbox" aria-label="Dual brush tips">
+          <button
+            type="button"
+            role="option"
+            aria-selected={dual.tip === null}
+            aria-label="Round"
+            className="brush-tip"
+            onClick={() => setDyn('dual', { tip: null })}
+          >
+            <TipThumbnail tip={null} box={32} roundHardness={dual.hardness} />
+          </button>
+          {tips.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="option"
+              aria-selected={dual.tip === t.id}
+              aria-label={t.name}
+              className="brush-tip"
+              onClick={() => setDyn('dual', { tip: t.id })}
+            >
+              <TipThumbnail tip={t} box={32} />
+            </button>
+          ))}
+        </div>
+        <div className="brush-group">
+          <NumberField
+            label="Size"
+            ariaLabel="Dual brush size"
+            value={Math.max(1, Math.round(dual.size * o.size))}
+            min={1}
+            max={5000}
+            suffix=" px"
+            width={64}
+            onChange={(px) => setDyn('dual', { size: Math.min(100, Math.max(0.001, px / o.size)) })}
+          />
+          <NumberField
+            label="Hardness"
+            ariaLabel="Dual brush hardness"
+            value={pct(dual.hardness)}
+            min={0}
+            max={100}
+            suffix="%"
+            width={52}
+            disabled={dual.tip !== null}
+            onChange={(v) => setDyn('dual', { hardness: v / 100 })}
+          />
+          <NumberField
+            label="Spacing"
+            ariaLabel="Dual brush spacing"
+            value={pct(dual.spacing)}
+            min={1}
+            max={1000}
+            suffix="%"
+            width={56}
+            onChange={(v) => setDyn('dual', { spacing: v / 100 })}
+          />
+          <NumberField
+            label="Scatter"
+            ariaLabel="Dual brush scatter"
+            value={pct(dual.scatter)}
+            min={0}
+            max={1000}
+            suffix="%"
+            width={56}
+            onChange={(v) => setDyn('dual', { scatter: v / 100 })}
+          />
+          <Check label="Both Axes" checked={dual.bothAxes} onChange={(bothAxes) => setDyn('dual', { bothAxes })} />
+          <NumberField
+            label="Count"
+            ariaLabel="Dual brush count"
+            value={dual.count}
+            min={1}
+            max={16}
+            width={44}
+            onChange={(count) => setDyn('dual', { count: Math.round(count) })}
+          />
+        </div>
+      </>
+    ),
     pose: (
       <div className="brush-group">
         <NumberField
@@ -510,6 +755,12 @@ export function BrushSettingsPanel() {
               {label}
             </button>
           </div>
+        ))}
+        {FLAGS.map(([id, label]) => (
+          <label key={id} className="brush-section brush-flag">
+            <input type="checkbox" checked={dyn[id]} onChange={(e) => setFlag(id, e.target.checked)} />
+            {label}
+          </label>
         ))}
       </div>
       <div className="brush-section-body" role="tabpanel" aria-label={SECTIONS.find((s) => s[0] === section)![1]}>

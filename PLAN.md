@@ -13,9 +13,9 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 2 (brush dynamics, with an early Brush Settings panel); item 1 (pen input and brush
-  tips); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 3 (Texture, Dual Brush, Noise, Wet Edges, Build-up, Protect Texture)
+- Last completed: Part E item 3 (Texture, Dual Brush, Noise, Wet Edges, Build-up); items 1–2 (pen input, brush tips,
+  dynamics and an early Brush Settings panel); Phase 1 Part D items 1–12 and the automated part of item 13
+- Next up: Part E item 4 (Brush Settings panel completion and the full Brush options bar, HUD, cursor preferences)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -637,11 +637,12 @@ engine first, then its controls, then the tools built on it.
   ↳ note: pen values are recorded with every stroke and drive the dynamics of the next item; predicted events move the cursor only; the brush preset picker replaces the Size/Hardness fields; tips are kept in IndexedDB (D-035, FORMAT_NOTES §8).
 - [x] Brush dynamics: Shape Dynamics (size/angle/roundness jitter, minimum diameter, tilt scale, flip jitter), Scattering, Transfer (opacity/flow jitter), Color Dynamics (FG/BG, hue/saturation/brightness, purity, per tip), Brush Pose; controls off/fade/pen pressure/pen tilt/stylus wheel/rotation/initial direction/direction; seeded jitter so recorded strokes replay identically
   ↳ note: set in the Brush Settings panel (F5), built early with these sections and a live preview stroke; item 4 completes the panel. Spacing follows control-driven size so tapers stay joined (D-036, FORMAT_NOTES §8).
-- [ ] Texture, Dual Brush, Noise, Wet Edges, Build-up (airbrush, paint while held still), Protect Texture
+- [x] Texture, Dual Brush, Noise, Wet Edges, Build-up (airbrush, paint while held still)
+  ↳ note: our own built-in patterns (Paper, Rough Paper, Canvas, Grain, Hatching, Dots) until Define Pattern (item 12); mode arithmetic is ours, to be checked against real output (D-037, FORMAT_NOTES §8). Protect Texture moved to item 7: it only matters when switching presets.
 - [ ] Brush Settings panel and the full Brush options bar (size, hardness, mode, opacity and flow with pressure toggles, airbrush, smoothing, angle, symmetry), on-canvas size/hardness HUD (Alt+right-drag / Ctrl+Option-drag), brush cursor preferences
 - [ ] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom
 - [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path
-- [ ] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel
+- [ ] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
 - [ ] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
 - [ ] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)
 - [ ] Pencil tool (aliased, Auto Erase) and Eraser modes (Brush/Pencil/Block)

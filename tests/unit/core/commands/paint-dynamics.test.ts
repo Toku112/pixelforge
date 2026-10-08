@@ -19,6 +19,14 @@ function layerPixels(seed: number) {
   dynamics.scatter.amount = 1;
   dynamics.color.enabled = true;
   dynamics.color.hue = 0.5;
+  // Texture (a built-in pattern), a scattered dual tip and wet edges replay too.
+  dynamics.texture.enabled = true;
+  dynamics.texture.eachTip = true;
+  dynamics.texture.depthJitter.jitter = 1;
+  dynamics.dual.enabled = true;
+  dynamics.dual.scatter = 1;
+  dynamics.dual.size = 0.5;
+  dynamics.wetEdges = true;
   const params: CommandDescriptor['params'] = {
     tool: 'brush',
     points: packPoints([strokePoint(10, 30), strokePoint(110, 30)]),

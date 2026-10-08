@@ -75,7 +75,14 @@ export class PaintSession implements PaintStroke {
     if (this.#flight || this.#queue.length === 0 || this.#failed) return;
     const dabs = this.#queue.splice(0);
     const layer = this.#layer;
-    const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, this.#brush.tip !== null);
+    const dual = this.#brush.dynamics?.dual;
+    const coords = dabTiles(
+      dabs,
+      layer.offsetX,
+      layer.offsetY,
+      this.#brush.tip !== null,
+      !!dual?.enabled && dual.tip !== null,
+    );
     const fresh: { tx: number; ty: number; data: SampleArray }[] = [];
     for (const [tx, ty] of coords) {
       const key = tileKey(tx, ty);

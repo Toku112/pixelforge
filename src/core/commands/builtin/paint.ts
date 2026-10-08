@@ -11,6 +11,8 @@ import { effectiveLocks, layerCapabilities, type PixelLayer } from '../../docume
 import type { Tile } from '../../document/tile';
 import { LAYER_BLEND_MODES } from '../../document/layers';
 import { colorToSamples, type RGB } from '../../color/color';
+import type { PixelFormat } from '../../document/pixel-format';
+import { builtInPattern, patternGray, type Pattern, type PatternSource } from '../../pattern/pattern';
 import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
 import {
   DEFAULT_BRUSH,
@@ -49,24 +51,66 @@ export function paintTarget(doc: ImageDocument): PixelLayer | undefined {
   return layer?.kind === 'pixel' && layerCapabilities(layer).editPixels ? layer : undefined;
 }
 
-/** How the worker paints a stroke on `layer`; `tip` is the brush's sampled tip, if it has one. */
+/** What a brush takes from the libraries: its sampled tip, the Dual Brush's tip and the Texture's pattern. */
+export interface BrushResources {
+  tip: BrushTip | null;
+  dualTip: BrushTip | null;
+  pattern: Pattern | null;
+}
+
+const tipData = (tip: BrushTip | null) => (tip ? { width: tip.width, height: tip.height, data: tip.data } : null);
+
+/** How the worker paints a stroke of `brush` in pixels of `format` (the layer and selection parts left out). */
+export function brushStrokeSetup(
+  brush: BrushSettings,
+  tool: PaintTool,
+  format: PixelFormat,
+  color: number[],
+  res: BrushResources,
+): Omit<StrokeSetup, 'lockAlpha' | 'offsetX' | 'offsetY' | 'selection'> {
+  const d = brush.dynamics;
+  const texture = d?.texture.enabled && res.pattern ? d.texture : null;
+  return {
+    format,
+    color,
+    erase: tool === 'eraser',
+    opacity: brush.opacity,
+    flow: brush.flow,
+    hardness: brush.hardness,
+    mode: brush.mode,
+    tip: tipData(res.tip),
+    varyColor: !!d?.color.enabled && tool === 'brush',
+    varyOpacity: !!d?.transfer.enabled,
+    texture:
+      texture && res.pattern
+        ? {
+            width: res.pattern.width,
+            height: res.pattern.height,
+            gray: patternGray(res.pattern),
+            scale: texture.scale,
+            brightness: texture.brightness,
+            contrast: texture.contrast,
+            invert: texture.invert,
+            eachTip: texture.eachTip,
+            mode: texture.mode,
+            depth: texture.depth,
+          }
+        : null,
+    dual: d?.dual.enabled ? { tip: tipData(res.dualTip), hardness: d.dual.hardness, mode: d.dual.mode } : null,
+    noise: !!d?.noise,
+    wetEdges: !!d?.wetEdges,
+  };
+}
+
+/** How the worker paints a stroke on `layer`. */
 export function strokeSetup(
   doc: ImageDocument,
   layer: PixelLayer,
   params: Omit<StrokeParams, 'points' | 'stride'>,
-  tip: BrushTip | null,
+  res: BrushResources,
 ): StrokeSetup {
   return {
-    format: layer.buffer.format,
-    color: params.color,
-    erase: params.tool === 'eraser',
-    opacity: params.brush.opacity,
-    flow: params.brush.flow,
-    hardness: params.brush.hardness,
-    mode: params.brush.mode,
-    tip: tip ? { width: tip.width, height: tip.height, data: tip.data } : null,
-    varyColor: !!params.brush.dynamics?.color.enabled && params.tool === 'brush',
-    varyOpacity: !!params.brush.dynamics?.transfer.enabled,
+    ...brushStrokeSetup(params.brush, params.tool, layer.buffer.format, params.color, res),
     lockAlpha: effectiveLocks(layer).transparency,
     offsetX: layer.offsetX,
     offsetY: layer.offsetY,
@@ -102,15 +146,15 @@ class PaintStrokeCommand implements Command {
     const { doc, services } = this.#ctx;
     const layer = paintTarget(doc);
     if (!layer) throw new CommandUnavailableError('Painting needs an editable pixel layer');
-    const tip = resolveTip(this.#params.brush, services.brushTips);
+    const res = resolveBrushResources(this.#params.brush, services.brushTips, services.patterns);
     const dabber = new StrokeDabber(this.#params.brush, this.#params.seed, dynamicsColors(doc, this.#params));
     const dabs = unpackPoints(this.#params.points, this.#params.stride).flatMap((p) => dabber.add(p));
-    const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, tip !== null);
+    const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, res.tip !== null, res.dualTip !== null);
     const diff = new LayerTileDiff(layer.id);
     for (const [tx, ty] of coords) diff.captureBefore(doc, tx, ty);
     const tiles = coords.map(([tx, ty]) => layer.buffer.writableTile(tx, ty).data);
     try {
-      await services.pixelOps.paintStroke(strokeSetup(doc, layer, this.#params, tip), tiles, coords, dabs);
+      await services.pixelOps.paintStroke(strokeSetup(doc, layer, this.#params, res), tiles, coords, dabs);
     } catch (error) {
       diff.undo(doc);
       throw error;
@@ -152,10 +196,38 @@ export function resolveTip(
   brush: BrushSettings,
   tips: { get(id: string): BrushTip | undefined } | undefined,
 ): BrushTip | null {
-  if (brush.tip === null) return null;
-  const tip = tips?.get(brush.tip);
-  if (!tip) throw new CommandUnavailableError('The brush tip this stroke uses is not in the brush library');
+  return libraryTip(brush.tip, tips, 'brush tip');
+}
+
+function libraryTip(
+  id: string | null,
+  tips: { get(id: string): BrushTip | undefined } | undefined,
+  what: string,
+): BrushTip | null {
+  if (id === null) return null;
+  const tip = tips?.get(id);
+  if (!tip) throw new CommandUnavailableError(`The ${what} this stroke uses is not in the brush library`);
   return tip;
+}
+
+/** Everything the brush takes from the libraries (built-in patterns are always there). */
+export function resolveBrushResources(
+  brush: BrushSettings,
+  tips: { get(id: string): BrushTip | undefined } | undefined,
+  patterns: PatternSource | undefined,
+): BrushResources {
+  const d = brush.dynamics;
+  let pattern: Pattern | null = null;
+  if (d?.texture.enabled) {
+    pattern = patterns?.get(d.texture.pattern) ?? builtInPattern(d.texture.pattern) ?? null;
+    if (!pattern)
+      throw new CommandUnavailableError('The texture pattern this stroke uses is not in the pattern library');
+  }
+  return {
+    tip: resolveTip(brush, tips),
+    dualTip: d?.dual.enabled ? libraryTip(d.dual.tip, tips, 'dual brush tip') : null,
+    pattern,
+  };
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

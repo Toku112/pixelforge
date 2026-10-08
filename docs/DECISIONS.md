@@ -525,3 +525,26 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   engine in the worker.
 - Small fixes found on the way: the app never grows wider than the window (a full options bar runs off the right edge
   instead of pushing the panels away), and the page cannot be scrolled sideways by focusing a control.
+
+## D-037 — 2026-10-08 — Texture, Dual Brush, Noise, Wet Edges, Build-up
+
+**Decision:**
+
+- The reference app does not publish the arithmetic of its texture and dual-brush modes. We wrote our own (FORMAT_NOTES
+  §8) from what each mode is described to do: depth 0 leaves the paint alone and 100 % leaves the pattern's darkest
+  parts bare; Height and Linear Height treat the pattern as a relief that more paint reaches deeper into, and grow
+  more opaque with depth (users report that above about 20 % depth those modes paint solid, so we match that). These
+  formulas are the first thing to check against real output when the owner can provide some; the golden tests will
+  then take that output as the expected images.
+- Patterns: a built-in set drawn by our own code (Paper, Rough Paper, Canvas, Grain, Hatching, Dots), seeded and
+  tileable, kept in core so recorded strokes find them anywhere. The pattern library gains user patterns with Edit >
+  Define Pattern (Part E item 12).
+- The Dual Brush's size is kept as a share of the brush size, shown in pixels, so it scales when the brush does (as
+  in the reference app). Its dabs use their own random stream, so changing the dual settings never moves the main
+  dabs.
+- Wet Edges uses a second, shrunken coverage to find the stroke's rim, so hard tips get a visible rim (a tenth of the
+  diameter) instead of a one-pixel line.
+- Build-up adds 30 dabs a second where the pointer rests; the repeated samples are recorded with their times, so a
+  held press replays the same.
+- Protect Texture keeps one texture across brush presets, so it comes with presets (Part E item 7) instead of now,
+  when there are no presets to switch between.

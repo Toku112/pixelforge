@@ -16,6 +16,10 @@
  *   paints the background colour instead.
  * - Tips: the computed round/elliptical tip, or a sampled tip read bilinearly from
  *   a pyramid of halved copies (so small dabs of a large tip stay smooth).
+ * - Texture, Dual Brush, Noise and Wet Edges (texture.ts): Noise and Texture Each
+ *   Tip change what each dab adds; the dual tip's dabs build a coverage of their own
+ *   that masks the stroke's; Texture (whole stroke) and Wet Edges then shape the
+ *   stroke's coverage before Opacity limits it.
  */
 import { blendChannel, blendColor, dissolveNoise, isWholeColorMode } from '../composite/blend';
 import type { Rect } from '../document/geometry';
@@ -24,6 +28,33 @@ import { TILE_SIZE, tileIndex, tileKey } from '../document/tile';
 import { MaskReader } from '../selection/mask-ops';
 import type { MaskData } from '../selection/selection';
 import { dabBounds, dabCoverage, type BrushMode, type Dab } from './brush';
+import {
+  WET_RIM,
+  addNoise,
+  applyTexture,
+  combineDual,
+  textureLut,
+  wetEdge,
+  type DualMode,
+  type TextureMode,
+} from './texture';
+
+type TipData = { width: number; height: number; data: Uint8Array };
+
+/** Brush Texture as the renderer needs it (the pattern as gray levels). */
+export interface StrokeTexture {
+  width: number;
+  height: number;
+  /** Gray levels 0–255, row by row. */
+  gray: Uint8Array;
+  scale: number;
+  brightness: number;
+  contrast: number;
+  invert: boolean;
+  eachTip: boolean;
+  mode: TextureMode;
+  depth: number;
+}
 
 export interface StrokeSetup {
   format: PixelFormat;
@@ -36,7 +67,13 @@ export interface StrokeSetup {
   /** How paint combines with the pixels (brush only). */
   mode: BrushMode;
   /** A sampled tip (coverage 0–255), or null for the computed round tip. */
-  tip: { width: number; height: number; data: Uint8Array } | null;
+  tip: TipData | null;
+  /** Brush Texture, when on. */
+  texture?: StrokeTexture | null;
+  /** Dual Brush, when on: its tip (null: round, of `hardness`) and how it masks the stroke. */
+  dual?: { tip: TipData | null; hardness: number; mode: DualMode } | null;
+  noise?: boolean;
+  wetEdges?: boolean;
   /** Dabs carry their own colours (Color Dynamics) / opacities (Transfer): keep them per pixel. */
   varyColor?: boolean;
   varyOpacity?: boolean;
@@ -59,6 +96,12 @@ interface TileState {
   paint: Float32Array | null;
   /** Highest dab opacity that reached each pixel (varied opacities only). */
   cap: Float32Array | null;
+  /** Coverage of the dual tip's dabs (Dual Brush only). */
+  dual: Float32Array | null;
+  /** Texture value 0–1 at each pixel (Texture only). */
+  texture: Float32Array | null;
+  /** Coverage of the dabs shrunk by the wet rim (Wet Edges only): what is interior. */
+  inner: Float32Array | null;
   /** Selection under the tile: per-pixel values, or uniform 0 / 255. */
   selection: Uint8Array | 0 | 255;
 }
@@ -70,7 +113,7 @@ interface TipPyramid {
   side: number;
 }
 
-function buildPyramid(tip: { width: number; height: number; data: Uint8Array }): TipPyramid {
+function buildPyramid(tip: TipData): TipPyramid {
   const first = new Float32Array(tip.width * tip.height);
   for (let i = 0; i < first.length; i++) first[i] = tip.data[i]! / 255;
   const levels = [{ w: tip.width, h: tip.height, data: first }];
@@ -126,6 +169,9 @@ export class StrokeRenderer {
   readonly #spp: number;
   readonly #max: number;
   readonly #tip: TipPyramid | null;
+  readonly #dualTip: TipPyramid | null;
+  /** The texture's values 0–1 after Brightness, Contrast and Invert (Texture only). */
+  readonly #texture: Float32Array | null;
   readonly #q: (v: number) => number;
   readonly #hdr: boolean;
   /** Scratch: the blended paint colour of the pixel being shaded. */
@@ -138,6 +184,14 @@ export class StrokeRenderer {
     this.#max = maxSampleValue(setup.format.depth);
     this.#reader = setup.selection ? new MaskReader(setup.selection.mask) : null;
     this.#tip = setup.tip ? buildPyramid(setup.tip) : null;
+    this.#dualTip = setup.dual?.tip ? buildPyramid(setup.dual.tip) : null;
+    const tex = setup.texture;
+    if (tex) {
+      const lut = textureLut(tex.brightness, tex.contrast, tex.invert);
+      this.#texture = Float32Array.from(tex.gray, (v) => lut[v]!);
+    } else {
+      this.#texture = null;
+    }
     const max = this.#max;
     this.#hdr = setup.format.depth === 32;
     this.#q = this.#hdr ? (v) => v : (v) => Math.round(Math.min(max, Math.max(0, v)));
@@ -160,19 +214,61 @@ export class StrokeRenderer {
       coverage: new Float32Array(TILE_SIZE * TILE_SIZE),
       paint: s.varyColor ? new Float32Array(TILE_SIZE * TILE_SIZE * s.format.colorChannels) : null,
       cap: s.varyOpacity ? new Float32Array(TILE_SIZE * TILE_SIZE) : null,
+      dual: s.dual ? new Float32Array(TILE_SIZE * TILE_SIZE) : null,
+      texture: this.#textureTile(tx, ty),
+      inner: s.wetEdges ? new Float32Array(TILE_SIZE * TILE_SIZE) : null,
       selection: this.#reader ? this.#reader.layerTile(s.selection!.canvas, s.offsetX, s.offsetY, tx, ty) : 255,
     });
   }
 
-  /** The tip's coverage (0–1) at offset (dx, dy) from a dab's centre (document px). */
-  #coverage(dab: Dab, cos: number, sin: number, level: number, scale: number, dx: number, dy: number): number {
+  /** The texture under a layer tile: fixed to the document, repeated, at its scale (bilinear). */
+  #textureTile(tx: number, ty: number): Float32Array | null {
+    const values = this.#texture;
+    const tex = this.#setup.texture;
+    if (!values || !tex) return null;
+    const out = new Float32Array(TILE_SIZE * TILE_SIZE);
+    const { width: w, height: h, scale } = tex;
+    const x0 = tx * TILE_SIZE + this.#setup.offsetX;
+    const y0 = ty * TILE_SIZE + this.#setup.offsetY;
+    const wrap = (v: number, n: number) => ((v % n) + n) % n;
+    for (let y = 0; y < TILE_SIZE; y++) {
+      const v = (y0 + y + 0.5) / scale - 0.5;
+      const j = Math.floor(v);
+      const fy = v - j;
+      const r0 = wrap(j, h) * w;
+      const r1 = wrap(j + 1, h) * w;
+      for (let x = 0; x < TILE_SIZE; x++) {
+        const u = (x0 + x + 0.5) / scale - 0.5;
+        const i = Math.floor(u);
+        const fx = u - i;
+        const c0 = wrap(i, w);
+        const c1 = wrap(i + 1, w);
+        const top = values[r0 + c0]! + (values[r0 + c1]! - values[r0 + c0]!) * fx;
+        const bottom = values[r1 + c0]! + (values[r1 + c1]! - values[r1 + c0]!) * fx;
+        out[y * TILE_SIZE + x] = top + (bottom - top) * fy;
+      }
+    }
+    return out;
+  }
+
+  /** A tip's coverage (0–1) at offset (dx, dy) from a dab's centre (document px); `tip` null = round of `hardness`. */
+  #coverage(
+    dab: Dab,
+    tip: TipPyramid | null,
+    hardness: number,
+    cos: number,
+    sin: number,
+    level: number,
+    scale: number,
+    dx: number,
+    dy: number,
+  ): number {
     let u = dx * cos - dy * sin;
     let v = dx * sin + dy * cos;
     if (dab.flipX) u = -u;
     if (dab.flipY) v = -v;
     v /= dab.roundness;
-    const tip = this.#tip;
-    if (!tip) return dabCoverage(Math.hypot(u, v), dab.size / 2, this.#setup.hardness);
+    if (!tip) return dabCoverage(Math.hypot(u, v), dab.size / 2, hardness);
     // Document px → tip px at level 0, then at the chosen level.
     const lv = tip.levels[level]!;
     const f = 2 ** level;
@@ -184,19 +280,27 @@ export class StrokeRenderer {
   applyDabs(dabs: readonly Dab[]): Set<number> {
     const changed = new Set<number>();
     const s = this.#setup;
-    const tip = this.#tip;
+    const tex = s.texture?.eachTip ? s.texture : null;
     for (const dab of dabs) {
+      const dual = dab.dual === true && !!s.dual;
+      if (dab.dual && !dual) continue;
+      const tip = dual ? this.#dualTip : this.#tip;
+      const hardness = dual ? s.dual!.hardness : s.hardness;
+      const depth = dab.depth ?? tex?.depth ?? 0;
       const b = dabBounds(dab, tip !== null);
       // In layer coordinates.
       const lx0 = b.x - s.offsetX;
       const ly0 = b.y - s.offsetY;
-      const amount = Math.min(1, s.flow * dab.strength);
+      const amount = dual ? 1 : Math.min(1, s.flow * dab.strength);
       const a = (dab.angle * Math.PI) / 180;
       const cos = Math.cos(a);
       const sin = Math.sin(a);
       // Sampled tips: document px per tip px, and the pyramid level that is about one tip px per document px.
       const scale = tip ? dab.size / tip.side : 1;
       const level = tip ? Math.min(tip.levels.length - 1, Math.max(0, Math.floor(Math.log2(1 / scale)))) : 0;
+      // Wet Edges: the same dab shrunk by the rim on every side.
+      const innerDab = s.wetEdges && !dual ? { ...dab, size: Math.max(0, dab.size * (1 - 2 * WET_RIM) - 2) } : null;
+      const innerScale = tip && innerDab ? innerDab.size / tip.side : scale;
       for (let ty = tileIndex(ly0); ty <= tileIndex(ly0 + b.h - 1); ty++) {
         for (let tx = tileIndex(lx0); tx <= tileIndex(lx0 + b.w - 1); tx++) {
           const tile = this.#tiles.get(tileKey(tx, ty));
@@ -209,11 +313,27 @@ export class StrokeRenderer {
           for (let ly = y0; ly < y1; ly++) {
             const dy = ly + s.offsetY + 0.5 - dab.y;
             for (let lx = x0; lx < x1; lx++) {
-              const cov = this.#coverage(dab, cos, sin, level, scale, lx + s.offsetX + 0.5 - dab.x, dy);
+              let cov = this.#coverage(dab, tip, hardness, cos, sin, level, scale, lx + s.offsetX + 0.5 - dab.x, dy);
               if (cov <= 0) continue;
               const p = (ly - ty * TILE_SIZE) * TILE_SIZE + (lx - tx * TILE_SIZE);
+              if (dual) {
+                const m = tile.dual!;
+                m[p] = m[p]! + (1 - m[p]!) * cov;
+                if (tile.coverage[p]! > 0) this.#shade(tile, p, lx + s.offsetX, ly + s.offsetY);
+                any = true;
+                continue;
+              }
+              if (s.noise) cov = addNoise(cov, lx + s.offsetX, ly + s.offsetY);
               const c = tile.coverage[p]!;
-              const add = cov * amount;
+              let add = cov * amount;
+              if (tex) add = applyTexture(tex.mode, add, tile.texture![p]!, depth);
+              if (add <= 0) continue;
+              if (innerDab && innerDab.size > 0) {
+                const dx = lx + s.offsetX + 0.5 - dab.x;
+                const inner = this.#coverage(innerDab, tip, hardness, cos, sin, level, innerScale, dx, dy) * amount;
+                const m = tile.inner!;
+                m[p] = m[p]! + (1 - m[p]!) * inner;
+              }
               const next = c + (1 - c) * add;
               if (tile.paint) {
                 // New paint over the paint so far.
@@ -241,7 +361,15 @@ export class StrokeRenderer {
   #shade(tile: TileState, p: number, x: number, y: number): void {
     const s = this.#setup;
     const sel = tile.selection === 255 ? 1 : (tile.selection as Uint8Array)[p]! / 255;
-    let e = (tile.cap ? tile.cap[p]! : s.opacity) * tile.coverage[p]! * sel;
+    let cover = tile.coverage[p]!;
+    if (s.dual) cover = combineDual(s.dual.mode, cover, tile.dual![p]!);
+    if (s.texture && !s.texture.eachTip)
+      cover = applyTexture(s.texture.mode, cover, tile.texture![p]!, s.texture.depth);
+    if (s.wetEdges) {
+      const raw = tile.coverage[p]!;
+      cover = wetEdge(cover, raw > 0 ? Math.min(1, tile.inner![p]! / raw) : 0);
+    }
+    let e = (tile.cap ? tile.cap[p]! : s.opacity) * cover * sel;
     const cc = s.format.colorChannels;
     const color = tile.paint ? this.#paintColor(tile.paint, p, cc) : s.color;
     const max = this.#max;
@@ -310,11 +438,17 @@ export class StrokeRenderer {
   }
 }
 
-/** Layer tiles (layer tile coordinates) the dabs touch. */
-export function dabTiles(dabs: readonly Dab[], offsetX: number, offsetY: number, sampled = false): [number, number][] {
+/** Layer tiles (layer tile coordinates) the dabs touch (`sampled` / `dualSampled`: the tips are images). */
+export function dabTiles(
+  dabs: readonly Dab[],
+  offsetX: number,
+  offsetY: number,
+  sampled = false,
+  dualSampled = false,
+): [number, number][] {
   const out = new Map<number, [number, number]>();
   for (const dab of dabs) {
-    const b = dabBounds(dab, sampled);
+    const b = dabBounds(dab, dab.dual ? dualSampled : sampled);
     const x0 = b.x - offsetX;
     const y0 = b.y - offsetY;
     for (let ty = tileIndex(y0); ty <= tileIndex(y0 + b.h - 1); ty++)

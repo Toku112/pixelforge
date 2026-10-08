@@ -14,15 +14,15 @@ import {
 import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
 import { colorToSamples, type RGB } from '../core/color/color';
-import { dynamicsColors, paintTarget, resolveTip, strokeSetup, type PaintTool } from '../core/commands/builtin/paint';
 import {
-  MAX_TIP_SIDE,
-  stepBrushSize,
-  stepHardness,
-  type BrushMode,
-  type BrushSettings,
-  type BrushTip,
-} from '../core/paint/brush';
+  dynamicsColors,
+  paintTarget,
+  resolveBrushResources,
+  strokeSetup,
+  type BrushResources,
+  type PaintTool,
+} from '../core/commands/builtin/paint';
+import { MAX_TIP_SIDE, stepBrushSize, stepHardness, type BrushMode, type BrushSettings } from '../core/paint/brush';
 import { planFromDocument } from '../core/composite/flatten';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
@@ -275,9 +275,9 @@ export class AppController {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
       return null;
     }
-    let tip: BrushTip | null;
+    let res: BrushResources;
     try {
-      tip = resolveTip(brush, this.services.brushes);
+      res = resolveBrushResources(brush, this.services.brushes, this.services.patterns);
     } catch (error) {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
       return null;
@@ -287,7 +287,7 @@ export class AppController {
     const varyColor = tool === 'brush' && !!brush.dynamics?.color.enabled;
     const colors = varyColor ? { foreground: this.colors.foreground, background: this.colors.background } : undefined;
     const params = { tool, brush, color, seed, ...(colors ? { colors } : {}) };
-    const live = this.services.strokes.begin(strokeSetup(doc, layer, params, tip));
+    const live = this.services.strokes.begin(strokeSetup(doc, layer, params, res));
     const stroke = new PaintSession(ws, doc, layer, live, tool, brush, color, seed, dynamicsColors(doc, params));
     return {
       seed,

@@ -231,3 +231,95 @@ test('scattering and colour dynamics are recorded with their seed and replay ide
   );
   expect(await layerPixels(page)).toEqual(painted);
 });
+
+/** Closes the floating Brush Settings window (F5), so it covers no part of the canvas. */
+async function closePanel(page: Page) {
+  await page.getByLabel('Document canvas').focus();
+  await page.keyboard.press('F5');
+  await expect(panel(page)).toHaveCount(0);
+}
+
+/** A mouse stroke along y = 32 from x = 15 to 80 (with the Brush Settings window closed). */
+async function mouseStroke(page: Page) {
+  await closePanel(page);
+  const a = await at(page, 15, 32);
+  const b = await at(page, 80, 32);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 8 });
+  await page.mouse.up();
+}
+
+/** Alpha values of the active layer along row y from x0 to x1. */
+const alphaRow = (pixels: number[], y: number, x0: number, x1: number) =>
+  Array.from({ length: x1 - x0 + 1 }, (_, i) => pixels[(y * 96 + x0 + i) * 4 + 3]!);
+
+test('Texture: a chosen pattern shows through the stroke and is recorded with it', async ({ page }) => {
+  await page.keyboard.press('F5');
+  await openSection(page, 'Texture');
+  await panel(page).getByRole('option', { name: 'Hatching' }).click();
+  await expect(panel(page).getByRole('option', { name: 'Hatching' })).toHaveAttribute('aria-selected', 'true');
+  // Minimum Depth and Depth Jitter need Texture Each Tip.
+  await expect(panel(page).getByRole('textbox', { name: 'Depth Jitter' })).toBeDisabled();
+  await mouseStroke(page);
+  const row = alphaRow(await layerPixels(page), 32, 30, 65);
+  // Hatching at full depth: bare lines across the paint.
+  expect(Math.max(...row)).toBe(255);
+  expect(Math.min(...row)).toBeLessThan(60);
+  const d = (await lastDescriptor(page)) as unknown as {
+    params: { brush: { dynamics: { texture: { enabled: boolean; pattern: string } } } };
+  };
+  expect(d.params.brush.dynamics.texture).toMatchObject({ enabled: true, pattern: 'pf-hatching' });
+});
+
+test('Dual Brush: a small scattered second tip bites into the stroke', async ({ page }) => {
+  await page.keyboard.press('F5');
+  await openSection(page, 'Dual Brush');
+  await setField(page, 'Dual brush size', '6');
+  await setField(page, 'Dual brush spacing', '300');
+  await mouseStroke(page);
+  const pixels = await layerPixels(page);
+  const row = alphaRow(pixels, 32, 25, 70);
+  expect(Math.max(...row)).toBe(255);
+  expect(row.filter((a) => a === 0).length).toBeGreaterThan(5); // gaps between the 6 px dual dabs
+  // Nothing outside the 30 px main stroke.
+  expect(alphaRow(pixels, 10, 0, 95).every((a) => a === 0)).toBe(true);
+});
+
+test('Wet Edges and Build-up: a lighter middle with a darker rim; holding still builds paint up', async ({ page }) => {
+  await page.keyboard.press('F5');
+  await panel(page).getByRole('checkbox', { name: 'Wet Edges' }).check();
+  await mouseStroke(page);
+  const wet = await layerPixels(page);
+  expect(wet[(32 * 96 + 48) * 4 + 3]).toBe(128); // the middle at half
+  expect(Math.max(...Array.from({ length: 14 }, (_, k) => wet[((18 + k) * 96 + 48) * 4 + 3]!))).toBeGreaterThan(200);
+
+  // Build-up with a low flow: a held press paints more than a quick click.
+  await page.keyboard.press('F5');
+  await panel(page).getByRole('checkbox', { name: 'Wet Edges' }).uncheck();
+  await panel(page).getByRole('checkbox', { name: 'Build-up' }).check();
+  await page.evaluate(() => {
+    const brush = (window as unknown as AppWindow).__pixelforge.tools.byId.get('brush') as unknown as {
+      setOptions(o: { flow: number }): void;
+    };
+    brush.setOptions({ flow: 0.1 });
+  });
+  await closePanel(page);
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+N');
+  await page.getByLabel('Document canvas').focus();
+  const quick = await at(page, 25.5, 20.5);
+  await page.mouse.click(quick.x, quick.y);
+  const held = await at(page, 70.5, 44.5);
+  await page.mouse.move(held.x, held.y);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  const after = await layerPixels(page);
+  const quickAlpha = after[(20 * 96 + 25) * 4 + 3]!;
+  const heldAlpha = after[(44 * 96 + 70) * 4 + 3]!;
+  expect(quickAlpha).toBeLessThan(40); // one dab at 10 % flow
+  expect(heldAlpha).toBeGreaterThan(200); // about 20 dabs in 0.7 s
+  // The held press is recorded with its samples over time, so it replays the same.
+  const d = (await lastDescriptor(page)) as unknown as { params: { points: number[] } };
+  expect(d.params.points.length / 8).toBeGreaterThan(10);
+});
