@@ -792,6 +792,17 @@ export function BrushSettingsPanel() {
             {label}
           </label>
         ))}
+        <label className="brush-section brush-flag" title="Curves through the pointer samples">
+          <input
+            type="checkbox"
+            checked={painting.smoothing.curves}
+            onChange={(e) => {
+              painting.setSmoothing({ curves: e.target.checked });
+              bump();
+            }}
+          />
+          Smoothing
+        </label>
       </div>
       <div className="brush-section-body" role="tabpanel" aria-label={SECTIONS.find((s) => s[0] === section)![1]}>
         {body[section]}

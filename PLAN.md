@@ -13,10 +13,10 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 4 (Brush Settings panel, Brush options bar, brush HUD, Edit > Preferences with painting
-  cursors); items 1–3 (pen input, tips, dynamics, texture, dual brush, wet edges, build-up); Phase 1 Part D items 1–12
-  and the automated part of item 13
-- Next up: Part E item 5 (stroke smoothing)
+- Last completed: Part E item 5 (stroke smoothing); items 1–4 (pen input, tips, dynamics, texture, dual brush, wet
+  edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors); Phase 1 Part D
+  items 1–12 and the automated part of item 13
+- Next up: Part E item 6 (paint symmetry)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -296,14 +296,17 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
 - [ ] Brush Settings panel:
   - [ ] Brush Tip Shape: size, flip X/Y, angle, roundness, hardness, spacing; computed/sampled/bristle/erodible/airbrush tips
   - [ ] Shape Dynamics: size/angle/roundness jitter with controls (off, fade, pen pressure, pen tilt, stylus wheel, rotation, initial direction, direction), minimum diameter, tilt scale, flip jitter, brush projection
-  - [ ] Scattering (both axes, count, count jitter)
-  - [ ] Texture (pattern, invert, scale, brightness, contrast, texture each tip, mode, depth, jitter)
-  - [ ] Dual Brush
-  - [ ] Color Dynamics (FG/BG jitter, hue/sat/brightness jitter, purity, apply per tip)
+  - [x] Scattering (both axes, count, count jitter)
+  - [x] Texture (pattern, invert, scale, brightness, contrast, texture each tip, mode, depth, jitter)
+  - [x] Dual Brush
+  - [x] Color Dynamics (FG/BG jitter, hue/sat/brightness jitter, purity, apply per tip)
   - [ ] Transfer (opacity/flow/wetness/mix jitter)
-  - [ ] Brush Pose (override tilt/rotation/pressure)
+    ↳ partial: opacity and flow jitter; wetness and mix come with the Mixer Brush.
+  - [x] Brush Pose (override tilt/rotation/pressure)
   - [ ] Noise, Wet Edges, Build-up, Smoothing, Protect Texture
+    ↳ partial: all but Protect Texture (with brush presets).
 - [ ] Options bar: size, hardness, mode, opacity, flow, airbrush, smoothing % with options (pulled string mode, stroke catch-up, catch-up on stroke end, adjust for zoom), angle, pressure for size/opacity, symmetry
+  ↳ partial: all but symmetry (Part E item 6).
 - [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial (segments), mandala (segments); symmetry path editing
 - [ ] Brushes panel: groups, search, recent brushes, preview stroke, show additional preset info, Get more → import
 - [ ] Import ABR brush files; export our brush format
@@ -644,7 +647,8 @@ engine first, then its controls, then the tools built on it.
   ↳ note: our own built-in patterns (Paper, Rough Paper, Canvas, Grain, Hatching, Dots) until Define Pattern (item 12); mode arithmetic is ours, to be checked against real output (D-037, FORMAT_NOTES §8). Protect Texture moved to item 7: it only matters when switching presets.
 - [x] Brush Settings panel and the full Brush options bar (size, hardness, mode, opacity and flow with pressure toggles, airbrush, angle), on-canvas size/hardness HUD (Alt+right-drag / Ctrl+Option-drag), brush cursor preferences
   ↳ note: the Smoothing and Symmetry controls of the options bar moved to items 5 and 6, with the features they set; Edit > Preferences starts with the Tools and Cursors pages (D-038).
-- [ ] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom; the Smoothing field and its options in the options bar and Brush Settings
+- [x] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom; the Smoothing field and its options in the options bar and Brush Settings
+  ↳ note: the smoothed path is what a stroke records; the string shows while painting (D-039).
 - [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path; the Symmetry menu in the options bar
 - [ ] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
 - [ ] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document

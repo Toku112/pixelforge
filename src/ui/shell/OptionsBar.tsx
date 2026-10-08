@@ -9,6 +9,7 @@ import { DEFAULT_DYNAMICS } from '../../core/paint/dynamics';
 import { isPanelOpen } from '../dock/dock-model';
 import { CropTool } from '../../tools/crop/crop-tool';
 import { BrushPicker } from './BrushPicker';
+import { SmoothingControls } from './SmoothingControls';
 import { TransformTool } from '../../tools/transform/transform-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
 import { MoveTool } from '../../tools/move/move-tool';
@@ -432,6 +433,7 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       >
         <Icon name="airbrush" size={16} />
       </button>
+      <SmoothingControls tool={tool} />
       <span className="options-divider" />
       <NumberField
         label={

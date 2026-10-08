@@ -280,6 +280,13 @@ const icons = {
       <circle cx="19" cy="19" r="3" />
     </Svg>
   ),
+  gear: (p: IconProps) => (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6" />
+      <circle cx="12" cy="12" r="6.3" />
+    </Svg>
+  ),
   brushSettings: (p: IconProps) => (
     <Svg {...p}>
       <rect x="3.5" y="4.5" width="17" height="15" rx="2" />

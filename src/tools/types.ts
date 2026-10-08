@@ -134,6 +134,10 @@ export interface BrushOutline {
   crosshair?: boolean;
   /** Only the crosshair, no outline. */
   crosshairOnly?: boolean;
+  /** Smoothing: where the paint is (the string runs from the pointer to it). */
+  paintAt?: { x: number; y: number };
+  /** Pulled String Mode: the string's length (document px), drawn as a circle round the paint. */
+  stringRadius?: number;
 }
 
 /** Free Transform's box (document coordinates): its corners, the 8 handles and the reference point (if shown). */

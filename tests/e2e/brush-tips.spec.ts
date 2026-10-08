@@ -76,6 +76,13 @@ async function newLayer(page: Page) {
 test('a pen stroke records pressure, tilt and barrel rotation', async ({ page }) => {
   await newLayer(page);
   await page.keyboard.press('b');
+  // The samples as they come (no smoothing or curves in between).
+  await page.evaluate(() => {
+    const brush = (window as unknown as AppWindow).__pixelforge.tools.byId.get('brush') as unknown as {
+      setSmoothing(o: { amount: number; curves: boolean }): void;
+    };
+    brush.setSmoothing({ amount: 0, curves: false });
+  });
   const a = await at(page, 20, 20);
   const b = await at(page, 60, 30);
   // Synthetic pen events (Playwright's mouse has no pen properties).

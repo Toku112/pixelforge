@@ -9,6 +9,9 @@
  * - Painting stays inside the selection, if there is one.
  * - The brush outline follows the pointer.
  * - With Build-up (airbrush), holding the pointer still keeps adding paint.
+ * - Smoothing (options bar) lets the paint trail the pointer on a string, shown
+ *   while painting; the brush's Smoothing setting draws curves through the samples
+ *   (see core/paint/smoothing.ts). The smoothed path is what the stroke records.
  * - The cursor follows Preferences > Cursors: the tool's icon, a crosshair, or the
  *   tip's outline (where it paints at least half, or at all); Caps Lock swaps in
  *   the crosshair.
@@ -19,6 +22,13 @@
 import type { PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_BRUSH, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
 import { DEFAULT_DYNAMICS, StrokeDabber } from '../../core/paint/dynamics';
+import {
+  CurveSmoother,
+  DEFAULT_SMOOTHING,
+  StrokeSmoother,
+  smoothingRadius,
+  type SmoothingOptions,
+} from '../../core/paint/smoothing';
 import {
   effectivePaintCursor,
   type BrushAdjuster,
@@ -37,11 +47,20 @@ export class PaintingTool implements Tool {
   readonly key: string;
   readonly kind: PaintTool;
   readonly options: BrushSettings;
-  #stroke: { session: PaintStroke; spacer: StrokeDabber; points: StrokePoint[]; start: number } | null = null;
+  /** Smoothing (options bar) and curves (the brush's Smoothing setting). */
+  readonly smoothing: SmoothingOptions = { ...DEFAULT_SMOOTHING };
+  #stroke: {
+    session: PaintStroke;
+    spacer: StrokeDabber;
+    smoother: StrokeSmoother;
+    curves: CurveSmoother | null;
+    points: StrokePoint[];
+    start: number;
+  } | null = null;
   /** End of the last stroke, for Shift-click lines. */
   #lastEnd: StrokePoint | null = null;
-  /** Build-up: repeats the pointer's last sample while it is held still. */
-  #hold: ReturnType<typeof setInterval> | null = null;
+  /** While a stroke lasts: Stroke Catch-up and Build-up go on with the pointer at rest. */
+  #timer: ReturnType<typeof setInterval> | null = null;
   /** The brush HUD gesture: where it started and the settings then. */
   #adjust: {
     x: number;
@@ -62,6 +81,10 @@ export class PaintingTool implements Tool {
 
   setOptions(changes: Partial<BrushSettings>): void {
     Object.assign(this.options, changes);
+  }
+
+  setSmoothing(changes: Partial<SmoothingOptions>): void {
+    Object.assign(this.smoothing, changes);
   }
 
   cursor(state: CursorState): string {
@@ -93,25 +116,38 @@ export class PaintingTool implements Tool {
     };
   }
 
+  /** Paint points (after smoothing) go through the curves, into the record and to the spacer. */
+  #feed(points: StrokePoint[]): void {
+    const stroke = this.#stroke;
+    if (!stroke) return;
+    for (const p of points) {
+      for (const q of stroke.curves ? stroke.curves.push(p) : [p]) {
+        stroke.points.push(q);
+        stroke.session.add(stroke.spacer.add(q));
+      }
+    }
+  }
+
   /**
-   * Build-up: while the stroke lasts, the last sample is repeated with the current time
-   * (recorded like any sample), so the spacer can keep adding paint where the pointer rests.
+   * While the stroke lasts and the pointer rests: Stroke Catch-up keeps the paint drifting to it,
+   * and Build-up repeats where the paint is with the current time (recorded like any sample), so
+   * the spacer keeps adding paint there.
    */
-  #startHold(): void {
-    this.#stopHold();
-    this.#hold = setInterval(() => {
+  #startTimer(buildUp: boolean): void {
+    this.#stopTimer();
+    this.#timer = setInterval(() => {
       const stroke = this.#stroke;
-      const last = stroke?.points.at(-1);
-      if (!stroke || !last) return;
-      const p = { ...last, time: Math.max(last.time, performance.now() - stroke.start) };
-      stroke.points.push(p);
-      stroke.session.add(stroke.spacer.add(p));
+      if (!stroke) return;
+      const now = performance.now() - stroke.start;
+      this.#feed(stroke.smoother.tick(now));
+      const at = stroke.smoother.paint;
+      if (buildUp && at) this.#feed([{ ...at, time: Math.max(at.time, now) }]);
     }, 16);
   }
 
-  #stopHold(): void {
-    if (this.#hold !== null) clearInterval(this.#hold);
-    this.#hold = null;
+  #stopTimer(): void {
+    if (this.#timer !== null) clearInterval(this.#timer);
+    this.#timer = null;
   }
 
   /**
@@ -134,9 +170,19 @@ export class PaintingTool implements Tool {
       flipY: o.flipY,
       tip: o.tip,
     };
-    if (painting && prefs.crosshairWhilePainting) return { ...base, crosshairOnly: true };
+    // While smoothing, the string from the pointer to where the paint is.
+    const smoother = painting ? this.#stroke?.smoother : undefined;
+    const paintAt = smoother?.active ? smoother.paint : null;
+    const string = paintAt
+      ? {
+          paintAt: { x: paintAt.x, y: paintAt.y },
+          ...(this.smoothing.pulledString ? { stringRadius: smoother!.radius } : {}),
+        }
+      : {};
+    if (painting && prefs.crosshairWhilePainting) return { ...base, ...string, crosshairOnly: true };
     return {
       ...base,
+      ...string,
       contour: mode === 'full' ? 'full' : 'normal',
       hardness: o.hardness,
       crosshair: prefs.crosshairInTip,
@@ -204,34 +250,39 @@ export class PaintingTool implements Tool {
     const spacer = new StrokeDabber(this.options, session.seed, session.colors);
     const start = e.time ?? performance.now();
     const p = this.#point(e, ctx, start);
-    const points: StrokePoint[] = [];
-    this.#stroke = { session, spacer, points, start };
+    const s = this.smoothing;
+    const smoother = new StrokeSmoother(s, smoothingRadius(s, ctx.viewport.zoom, ctx.devicePixelRatio));
+    const curves = s.curves ? new CurveSmoother() : null;
+    this.#stroke = { session, spacer, smoother, curves, points: [], start };
     if (e.shiftKey && this.#lastEnd) {
       // A straight line from where the last stroke ended.
-      const from = { ...this.#lastEnd, time: 0 };
-      points.push(from);
-      session.add(spacer.add(from));
+      this.#feed([{ ...this.#lastEnd, time: 0 }]);
     }
-    points.push(p);
-    session.add(spacer.add(p));
-    if (this.options.dynamics?.buildUp) this.#startHold();
+    this.#feed(smoother.add(p));
+    const buildUp = !!this.options.dynamics?.buildUp;
+    if (buildUp || (smoother.active && s.catchUp && !s.pulledString)) this.#startTimer(buildUp);
     ctx.setBrushOutline(this.#outline(e, ctx, true));
   }
 
   onPointerMove(e: ToolPointerEvent, ctx: ToolContext): void {
     const stroke = this.#stroke;
+    if (stroke) this.#feed(stroke.smoother.add(this.#point(e, ctx, stroke.start)));
     ctx.setBrushOutline(this.#outline(e, ctx, stroke !== null));
-    if (!stroke) return;
-    const p = this.#point(e, ctx, stroke.start);
-    stroke.points.push(p);
-    stroke.session.add(stroke.spacer.add(p));
   }
 
   onPointerUp(e: ToolPointerEvent, ctx: ToolContext): void {
     const stroke = this.#stroke;
-    this.#stroke = null;
-    this.#stopHold();
+    this.#stopTimer();
     if (!stroke) return;
+    // Catch-up on Stroke End, then the last stretch of the curve.
+    this.#feed(stroke.smoother.end());
+    if (stroke.curves) {
+      for (const q of stroke.curves.flush()) {
+        stroke.points.push(q);
+        stroke.session.add(stroke.spacer.add(q));
+      }
+    }
+    this.#stroke = null;
     ctx.setBrushOutline(this.#outline(e, ctx)); // back from the painting cursor
     this.#lastEnd = stroke.points.at(-1) ?? null;
     void stroke.session.end(stroke.points).catch(() => {
@@ -251,7 +302,7 @@ export class PaintingTool implements Tool {
   cancel(ctx: ToolContext): void {
     const stroke = this.#stroke;
     this.#stroke = null;
-    this.#stopHold();
+    this.#stopTimer();
     ctx.setBrushOutline(null);
     if (stroke) void stroke.session.cancel();
   }

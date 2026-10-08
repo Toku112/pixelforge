@@ -571,3 +571,22 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   after Flow (the Build-up setting), and a brush angle field (its icon is the drag handle). Spacing moved to the
   Brush Settings panel, which also gains the angle/roundness dial, the Spacing checkbox (off: one dab per pointer
   sample, so speed sets the spacing), Use Sample Size for sampled tips, and Clear Brush Controls in its menu.
+
+## D-039 — 2026-10-08 — Stroke smoothing
+
+**Decision:**
+
+- Smoothing is our own model of the behaviour described for the reference app: the paint hangs on a string from the
+  pointer. The string's length is Smoothing × 60 CSS pixels on screen (Adjust for Zoom on) or × 60 image pixels (off);
+  once the pointer is farther away the string pulls the paint after it. Except in Pulled String Mode, the paint also
+  drifts towards the pointer with a time constant of Smoothing × 150 ms — during pointer moves, and with Stroke
+  Catch-up also while the pointer rests (a timer); so small moves within reach still paint, lazily. Catch-up on
+  Stroke End paints the last stretch to where the pointer was released. Defaults as in the reference app: 10 %, Stroke
+  Catch-up and Adjust for Zoom on, the others off.
+- The brush's Smoothing setting (Brush Settings, on by default) is curve smoothing: a Catmull-Rom curve through the
+  points, drawn one point behind (imperceptible at pointer rates), every sample still on the path.
+- Smoothing happens before recording: a stroke records the path the paint took, so a replayed stroke needs no
+  smoothing settings and paints exactly the same; smoothing settings belong to the tool, not to the brush settings
+  a stroke records.
+- While painting with smoothing, the string is drawn from the pointer to the paint (with its reach as a circle in
+  Pulled String Mode).

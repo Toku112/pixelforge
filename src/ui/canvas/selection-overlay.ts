@@ -362,6 +362,37 @@ export class SelectionOverlay {
       ctx.stroke();
     }
     if (brush.crosshair || brush.crosshairOnly || tiny) this.#drawCrosshair(ctx, centre);
+    if (brush.paintAt) this.#drawString(ctx, centre, brush.paintAt, brush.stringRadius);
+  }
+
+  /** Smoothing's string: from the pointer to where the paint is (and its reach in Pulled String Mode). */
+  #drawString(
+    ctx: CanvasRenderingContext2D,
+    pointer: { x: number; y: number },
+    paintAt: { x: number; y: number },
+    radius: number | undefined,
+  ): void {
+    const v = this.#renderer.viewport;
+    const dpr = this.#renderer.devicePixelRatio;
+    const p = v.docToView(paintAt);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.beginPath();
+    ctx.moveTo(pointer.x, pointer.y);
+    ctx.lineTo(p.x, p.y);
+    if (radius !== undefined && radius > 0) {
+      ctx.moveTo(p.x + radius * v.zoom, p.y);
+      ctx.arc(p.x, p.y, radius * v.zoom, 0, 2 * Math.PI);
+    }
+    ctx.lineWidth = Math.max(1, Math.round(dpr)) * 3;
+    ctx.strokeStyle = 'rgb(0 0 0 / 35%)';
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, Math.round(dpr));
+    ctx.strokeStyle = 'rgb(176 132 255 / 95%)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5 * dpr, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgb(176 132 255)';
+    ctx.fill();
   }
 
   /** The brush HUD: the tip filled in the preview colour (soft where the tip is soft) and a readout. */

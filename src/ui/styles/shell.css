@@ -1262,3 +1262,17 @@
   stroke: var(--bg-panel);
   cursor: ns-resize;
 }
+
+/* Smoothing (options bar) */
+.smoothing {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.smoothing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
