@@ -363,3 +363,14 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
   middle, up to 90 % along a hard tip's rim, a darker ring where a soft tip's coverage is about 80 %.
 - **Build-up.** While the pointer is down, its last sample is repeated every 16 ms with the current time (and
   recorded); the spacer adds a dab whenever 1/30 s has passed since the last one.
+- **Symmetry.** A symmetry has a centre (cx, cy), an angle a (counter-clockwise on screen), a size s and segments n.
+  In its frame `u = dx·cos a − dy·sin a`, `v = dx·sin a + dy·cos a` (dx, dy from the centre; y down). Each dab of a
+  stroke is also painted at its images: mirror across the frame line at angle φ (`p' = 2(p·d)d − p`,
+  `d = (cos φ, −sin φ)`), the tip's angle becoming `2(a + φ) − angle` with its Flip Y toggled; turn by α
+  (`u' = u cos α + v sin α`, `v' = −u sin α + v cos α`), the tip turning by α. Vertical: φ = 90°; Horizontal: 0°;
+  Dual Axis: both and a half turn; Diagonal: ±45° and a half turn; Radial: turns by k·360°/n; Mandala: those and
+  mirrors at k·180°/n. Parallel Lines: mirrors across v = ±s/2. Circle: a point at radius r goes to `2s − r` on its
+  ray (none if that is negative), mirrored across the tangent. Spiral `r = s·(θ/2π + k)`: across the nearest arm
+  (`2·arm − r`), the tangent leaning `atan(2π·arm/s)` from the radius. Wavy `v = −(s/4)·sin(2πu/s)`: across the wave
+  vertically (`v' = 2·wave − v`), mirrored across its slope. The copies are part of one stroke (one coverage, one
+  History step); a stroke records its symmetry and replays it.

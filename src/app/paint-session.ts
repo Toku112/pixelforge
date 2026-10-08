@@ -16,6 +16,7 @@ import { tileKey } from '../core/document/tile';
 import { POINT_FIELDS, packPoints, type BrushSettings, type Dab, type StrokePoint } from '../core/paint/brush';
 import { dabTiles } from '../core/paint/stroke';
 import type { DynamicsColors } from '../core/paint/dynamics';
+import type { Symmetry } from '../core/paint/symmetry';
 import type { PaintStroke } from '../tools/types';
 import type { LiveStroke } from '../workers/stroke-client';
 import type { Workspace } from './workspace';
@@ -30,6 +31,7 @@ export class PaintSession implements PaintStroke {
   readonly #color: number[];
   readonly seed: number;
   readonly colors: DynamicsColors | null;
+  readonly symmetry: Symmetry | null;
   readonly #diff: LayerTileDiff;
   readonly #touched = new Set<number>();
   readonly #queue: Dab[] = [];
@@ -50,9 +52,11 @@ export class PaintSession implements PaintStroke {
     color: number[],
     seed: number,
     colors: DynamicsColors | null,
+    symmetry: Symmetry | null = null,
   ) {
     this.seed = seed;
     this.colors = colors;
+    this.symmetry = symmetry;
     this.#workspace = workspace;
     this.#doc = doc;
     this.#layer = layer;
@@ -137,6 +141,7 @@ export class PaintSession implements PaintStroke {
       color: this.#color,
       seed: this.seed,
       ...(this.colors ? { colors: { foreground: this.colors.foreground, background: this.colors.background } } : {}),
+      ...(this.symmetry ? { symmetry: { ...this.symmetry } } : {}),
     };
     const diff = this.#diff;
     await this.#workspace.executePrepared(this.#doc, (ctx) => preparedStroke(ctx, params, diff));

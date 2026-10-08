@@ -13,10 +13,10 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 5 (stroke smoothing); items 1–4 (pen input, tips, dynamics, texture, dual brush, wet
-  edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors); Phase 1 Part D
-  items 1–12 and the automated part of item 13
-- Next up: Part E item 6 (paint symmetry)
+- Last completed: Part E item 6 (paint symmetry); items 1–5 (pen input, tips, dynamics, texture, dual brush, wet
+  edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors, smoothing);
+  Phase 1 Part D items 1–12 and the automated part of item 13
+- Next up: Part E item 7 (Brushes panel, presets, ABR import, Tool Presets)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -305,9 +305,9 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
   - [x] Brush Pose (override tilt/rotation/pressure)
   - [ ] Noise, Wet Edges, Build-up, Smoothing, Protect Texture
     ↳ partial: all but Protect Texture (with brush presets).
-- [ ] Options bar: size, hardness, mode, opacity, flow, airbrush, smoothing % with options (pulled string mode, stroke catch-up, catch-up on stroke end, adjust for zoom), angle, pressure for size/opacity, symmetry
-  ↳ partial: all but symmetry (Part E item 6).
+- [x] Options bar: size, hardness, mode, opacity, flow, airbrush, smoothing % with options (pulled string mode, stroke catch-up, catch-up on stroke end, adjust for zoom), angle, pressure for size/opacity, symmetry
 - [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial (segments), mandala (segments); symmetry path editing
+  ↳ partial: every type, placed by moving, turning and sizing its guide; path point editing and PSD storage with paths (Phase 5).
 - [ ] Brushes panel: groups, search, recent brushes, preview stroke, show additional preset info, Get more → import
 - [ ] Import ABR brush files; export our brush format
 - [ ] Our own default brush library (general, dry media, wet media, special effects) — created from scratch
@@ -352,7 +352,7 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
 
 ## B12. Paths, shapes & vectors
 
-- [ ] Paths panel: Work Path, saved paths, shape paths, vector mask paths; fill path, stroke path (with any painting tool, simulate pressure), load as selection, make work path from selection (tolerance), new/delete/duplicate, Clipping Path for export
+- [ ] Paths panel: Work Path, saved paths, shape paths, vector mask paths; fill path, stroke path (with any painting tool, simulate pressure), load as selection, make work path from selection (tolerance), new/delete/duplicate, Clipping Path for export; symmetry paths (edit a paint symmetry's guide as a path, store it in PSD)
 - [ ] Path operations: combine, subtract, intersect, exclude, merge shape components
 - [ ] Path alignment & arrangement
 - [ ] Shape layers with fill & stroke (solid/gradient/pattern, stroke alignment, caps, corners, dashes), live shape properties in Properties panel (W/H/X/Y, angle, per-corner radii, polygon sides/star)
@@ -649,7 +649,8 @@ engine first, then its controls, then the tools built on it.
   ↳ note: the Smoothing and Symmetry controls of the options bar moved to items 5 and 6, with the features they set; Edit > Preferences starts with the Tools and Cursors pages (D-038).
 - [x] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom; the Smoothing field and its options in the options bar and Brush Settings
   ↳ note: the smoothed path is what a stroke records; the string shows while painting (D-039).
-- [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path; the Symmetry menu in the options bar
+- [x] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path; the Symmetry menu in the options bar
+  ↳ note: the guide is moved, turned and sized on the canvas; editing its points and storing it in PSD files come with paths (Phase 5) (D-040, FORMAT_NOTES §8).
 - [ ] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
 - [ ] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
 - [ ] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)

@@ -35,6 +35,8 @@ function setup() {
     cursorPreferences: DEFAULT_CURSOR_PREFERENCES,
     setBrushHud: () => {},
     toolOptionsChanged: () => {},
+    showSymmetry: () => {},
+    setSymmetryEdit: () => {},
   };
   const tool = new TransformTool();
   tool.begin(

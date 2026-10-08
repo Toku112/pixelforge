@@ -10,6 +10,7 @@ import { moveSelectedPixelsCommand } from './move-pixels';
 import { paintStrokeCommand } from './paint';
 import { selectionCommands } from './selection';
 import { setLayerPropsCommand } from './set-layer-props';
+import { setSymmetryCommand } from './symmetry';
 import { translateLayersCommand } from './translate';
 
 /** Registers every built-in document command. */
@@ -26,4 +27,5 @@ export function registerBuiltinCommands(registry: CommandRegistry): void {
   for (const definition of selectionCommands) registry.register(definition);
   for (const definition of geometryCommands) registry.register(definition);
   registry.register(freeTransformCommand);
+  registry.register(setSymmetryCommand);
 }

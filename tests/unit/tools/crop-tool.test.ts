@@ -33,6 +33,8 @@ function setup() {
     cursorPreferences: DEFAULT_CURSOR_PREFERENCES,
     setBrushHud: () => {},
     toolOptionsChanged: () => {},
+    showSymmetry: () => {},
+    setSymmetryEdit: () => {},
   };
   const tool = new CropTool();
   tool.activate(ctx);

@@ -7,6 +7,7 @@
  * the renderer and panels use to update.
  */
 import type { Selection } from '../selection/selection';
+import type { Symmetry } from '../paint/symmetry';
 import { Emitter } from './events';
 import { isEmptyRect, type Rect } from './geometry';
 import {
@@ -33,7 +34,9 @@ export type DocumentChange =
   /** The active layer or the set of selected layers changed. */
   | { kind: 'active-layer'; layerId: string | null }
   /** The pixel selection (marching ants) changed. */
-  | { kind: 'selection' };
+  | { kind: 'selection' }
+  /** The paint symmetry changed. */
+  | { kind: 'symmetry' };
 
 /** Canvas-level properties (changed by Image Size, Canvas Size, Mode conversions…). */
 export interface CanvasProps {
@@ -108,6 +111,7 @@ export class ImageDocument {
   #selectedIds: string[] = [];
   #selection: Selection | null = null;
   #reselect: Selection | null = null;
+  #symmetry: Symmetry | null = null;
   #nextGroupNumber = 1;
   #nextLayerId = 1;
   #nextLayerNumber = 1;
@@ -139,6 +143,19 @@ export class ImageDocument {
   /** The pixel selection, or null when nothing is selected (the whole layer is the target). */
   get selection(): Selection | null {
     return this.#selection;
+  }
+
+  /** The paint symmetry (its guide, and whether it is on), or null. */
+  get symmetry(): Symmetry | null {
+    return this.#symmetry;
+  }
+
+  /** Replaces the paint symmetry; returns the previous one for undo. */
+  setSymmetry(symmetry: Symmetry | null): Symmetry | null {
+    const previous = this.#symmetry;
+    this.#symmetry = symmetry ? Object.freeze({ ...symmetry }) : null;
+    this.changes.emit({ kind: 'symmetry' });
+    return previous;
   }
 
   /** The selection Select > Reselect brings back (the last one removed by Deselect). */

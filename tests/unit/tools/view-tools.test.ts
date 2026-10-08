@@ -33,6 +33,8 @@ function setup(zoom = 1) {
     cursorPreferences: DEFAULT_CURSOR_PREFERENCES,
     setBrushHud: () => {},
     toolOptionsChanged: () => {},
+    showSymmetry: () => {},
+    setSymmetryEdit: () => {},
   };
   return { viewport, ctx, overlays, changes: () => changes };
 }

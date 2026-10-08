@@ -25,6 +25,7 @@ import {
 import { MAX_TIP_SIDE, stepBrushSize, stepHardness, type BrushMode, type BrushSettings } from '../core/paint/brush';
 import { planFromDocument } from '../core/composite/flatten';
 import { DEFAULT_DYNAMICS } from '../core/paint/dynamics';
+import { SYMMETRY_KINDS, defaultSymmetry, hasSegments, type SymmetryKind } from '../core/paint/symmetry';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
 import type { PaintHost, PaintStroke } from '../tools/types';
@@ -136,6 +137,8 @@ export interface UiBridge {
   brushName(tip: { width: number; height: number; data: Uint8Array }, name: string): Promise<string | null>;
   /** Edit > Preferences; the new values, or null when cancelled. */
   preferences(values: PreferenceValues): Promise<PreferenceValues | null>;
+  /** Radial / Mandala symmetry: the segment count (2–12), or null when cancelled. */
+  symmetrySegments(kind: 'radial' | 'mandala', segments: number): Promise<number | null>;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -292,10 +295,23 @@ export class AppController {
     const colors = varyColor ? { foreground: this.colors.foreground, background: this.colors.background } : undefined;
     const params = { tool, brush, color, seed, ...(colors ? { colors } : {}) };
     const live = this.services.strokes.begin(strokeSetup(doc, layer, params, res));
-    const stroke = new PaintSession(ws, doc, layer, live, tool, brush, color, seed, dynamicsColors(doc, params));
+    const symmetry = doc.symmetry?.enabled ? doc.symmetry : null;
+    const stroke = new PaintSession(
+      ws,
+      doc,
+      layer,
+      live,
+      tool,
+      brush,
+      color,
+      seed,
+      dynamicsColors(doc, params),
+      symmetry,
+    );
     return {
       seed,
       colors: stroke.colors,
+      symmetry,
       add: (dabs) => stroke.add(dabs),
       end: async (points) => {
         try {
@@ -422,6 +438,55 @@ export class AppController {
   }
 
   /** Edit > Free Transform: opens the transform box around the selection or the selected layers. */
+  #symmetryHidden = false;
+
+  /** Whether the paint symmetry guide is hidden (Hide Symmetry). */
+  get symmetryHidden(): boolean {
+    return this.#symmetryHidden;
+  }
+
+  /** A new paint symmetry of a type (Radial and Mandala ask for segments), then placing its guide. */
+  async newSymmetry(kind: SymmetryKind): Promise<void> {
+    const ws = this.workspace;
+    const doc = ws.active?.doc;
+    if (!doc || ws.running || this.tools.symmetry.active) return;
+    let segments = doc.symmetry?.segments ?? 5;
+    if (kind === 'radial' || kind === 'mandala') {
+      const answer = await this.#ui.symmetrySegments(kind, segments);
+      if (answer === null || ws.active?.doc !== doc) return;
+      segments = answer;
+    }
+    await this.runDocumentCommand(
+      { name: 'setSymmetry', params: { symmetry: { ...defaultSymmetry(kind, doc.width, doc.height, segments) } } },
+      doc,
+    );
+    if (this.#symmetryHidden) this.toggleSymmetryHidden();
+    this.transformSymmetry();
+  }
+
+  /** Places the current symmetry's guide (move, turn, size); Enter applies. */
+  transformSymmetry(): void {
+    const doc = this.workspace.active?.doc;
+    const ctx = this.#canvas?.context;
+    const tool = this.tools.symmetry;
+    const symmetry = doc?.symmetry;
+    if (!doc || !ctx || !symmetry?.enabled || tool.active) return;
+    const previous = this.#ui.activeToolId();
+    this.#ui.setActiveTool(tool.id, '');
+    tool.begin(ctx, symmetry, {
+      finish: (next) => {
+        if (next) void this.runDocumentCommand({ name: 'setSymmetry', params: { symmetry: { ...next } } }, doc);
+        if (this.#ui.activeToolId() === tool.id) this.#ui.setActiveTool(previous, this.groupOf(previous));
+      },
+    });
+  }
+
+  toggleSymmetryHidden(): void {
+    this.#symmetryHidden = !this.#symmetryHidden;
+    this.#canvas?.setSymmetryHidden(this.#symmetryHidden);
+    this.#ui.toolOptionsChanged();
+  }
+
   async freeTransform(): Promise<void> {
     const ws = this.workspace;
     const doc = ws.active?.doc;
@@ -934,6 +999,38 @@ export class AppController {
         if (!doc?.selection) return ws.execute({ name: 'deleteLayers', params: {} });
         const color = this.#backgroundSamples();
         return ws.execute({ name: 'clear', params: color ? { color } : {} });
+      },
+    });
+    for (const [kind, label] of SYMMETRY_KINDS) {
+      add({
+        id: `symmetry.${kind}`,
+        label: hasSegments(kind) ? `${label}…` : label,
+        enabled: () => !toolBusy() && ws.active !== null,
+        checked: () => ws.active?.doc.symmetry?.enabled === true && ws.active.doc.symmetry.kind === kind,
+        run: () => this.newSymmetry(kind),
+      });
+    }
+    const symmetryOn = () => ws.active?.doc.symmetry?.enabled === true;
+    add({
+      id: 'symmetry.transform',
+      label: 'Transform Symmetry',
+      enabled: () => !toolBusy() && symmetryOn(),
+      run: () => this.transformSymmetry(),
+    });
+    add({
+      id: 'symmetry.hide',
+      label: 'Hide Symmetry',
+      enabled: () => symmetryOn(),
+      checked: () => this.#symmetryHidden,
+      run: () => this.toggleSymmetryHidden(),
+    });
+    add({
+      id: 'symmetry.off',
+      label: 'Turn Off Symmetry',
+      enabled: () => !toolBusy() && symmetryOn(),
+      run: async () => {
+        const s = ws.active?.doc.symmetry;
+        if (s) await this.runDocumentCommand({ name: 'setSymmetry', params: { symmetry: { ...s, enabled: false } } });
       },
     });
     add({

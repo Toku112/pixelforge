@@ -105,6 +105,8 @@ export class CanvasView {
         return options.cursorPreferences?.() ?? DEFAULT_CURSOR_PREFERENCES;
       },
       setBrushHud: (hud) => this.#ants?.setBrushHud(hud),
+      showSymmetry: (show) => this.#ants?.setSymmetryShown(show),
+      setSymmetryEdit: (edit) => this.#ants?.setSymmetryEdit(edit),
       toolOptionsChanged: () => options.toolOptionsChanged?.(),
     };
     canvas.tabIndex = 0; // focusable, so keyboard tools work after clicking the canvas
@@ -181,6 +183,11 @@ export class CanvasView {
     viewport.fit(doc.width, doc.height, FIT_MARGIN * this.renderer.devicePixelRatio);
     if (atMost100 && viewport.zoom > 1) viewport.centerDocument(doc.width, doc.height, 1);
     this.#viewChanged();
+  }
+
+  /** View > Hide/Show Symmetry: the paint symmetry guide (painting still mirrors). */
+  setSymmetryHidden(hidden: boolean): void {
+    this.#ants?.setSymmetryHidden(hidden);
   }
 
   /** Preferences changed: the cursor and the view limits (Overscroll) follow at once. */

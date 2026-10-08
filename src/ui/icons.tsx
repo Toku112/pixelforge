@@ -280,6 +280,13 @@ const icons = {
       <circle cx="19" cy="19" r="3" />
     </Svg>
   ),
+  symmetry: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M12 4v16" strokeDasharray="2 2" />
+      <path d="M11 11C9 6.5 6 5 4 5.5c-1.5.5-1 4 1 5.5 1 .7 2.5 1 3.5 1-1.5.5-3 2-2.5 3.5.5 2 3.5 1.5 5-1.5" />
+      <path d="M13 11c2-4.5 5-6 7-5.5 1.5.5 1 4-1 5.5-1 .7-2.5 1-3.5 1 1.5.5 3 2 2.5 3.5-.5 2-3.5 1.5-5-1.5" />
+    </Svg>
+  ),
   gear: (p: IconProps) => (
     <Svg {...p}>
       <circle cx="12" cy="12" r="3" />

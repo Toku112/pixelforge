@@ -10,7 +10,9 @@ import { isPanelOpen } from '../dock/dock-model';
 import { CropTool } from '../../tools/crop/crop-tool';
 import { BrushPicker } from './BrushPicker';
 import { SmoothingControls } from './SmoothingControls';
+import { SymmetryMenu, SymmetryOptions } from './SymmetryMenu';
 import { TransformTool } from '../../tools/transform/transform-tool';
+import { SymmetryTool } from '../../tools/symmetry/symmetry-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
 import { MoveTool } from '../../tools/move/move-tool';
 import { PaintingTool } from '../../tools/paint/paint-tool';
@@ -459,6 +461,8 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       >
         <Icon name="penPressureSize" size={16} />
       </button>
+      <span className="options-divider" />
+      <SymmetryMenu />
     </>
   );
 }
@@ -616,6 +620,7 @@ export function OptionsBar() {
       {tool instanceof MoveTool && <MoveOptions tool={tool} />}
       {tool instanceof CropTool && <CropOptions tool={tool} />}
       {tool instanceof TransformTool && <TransformOptions tool={tool} />}
+      {tool instanceof SymmetryTool && <SymmetryOptions tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}
       {toolId === 'zoom' && (
         <>

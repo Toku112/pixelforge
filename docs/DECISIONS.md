@@ -590,3 +590,19 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   a stroke records.
 - While painting with smoothing, the string is drawn from the pointer to the paint (with its reach as a circle in
   Pulled String Mode).
+
+## D-040 — 2026-10-08 — Paint symmetry
+
+**Decision:**
+
+- A symmetry is part of the document (not of a tool): a type, centre, angle, size and segment count, set by the
+  `setSymmetry` command, so choosing a type ("New Symmetry"), placing it ("Transform Symmetry") and turning it off
+  are History steps. Hide Symmetry only hides the guide on screen.
+- The reference app keeps symmetry as a special path; we have no paths yet (Phase 5), so the guide is placed by
+  moving, turning and sizing it, and is not yet written to PSD files. Paths will bring both: editing the guide's
+  points, and storing it in the file.
+- Copies are made from the dabs (after spacing, dynamics and the dual brush): every copy is an exact mirror or turn of
+  the original stroke, jitter included, and all of them are one stroke for Opacity. The Wavy, Circle and Spiral
+  mirrors are our own geometry from the descriptions of those types (FORMAT_NOTES §8).
+- Radial and Mandala ask for 2–12 segments (5 the first time, then the last count). A new symmetry is centred on the
+  canvas, then placed at once (Enter applies, Escape keeps it where it was created).

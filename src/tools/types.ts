@@ -8,6 +8,7 @@ import type { CommandDescriptor } from '../core/commands/command';
 import type { RGB } from '../core/color/color';
 import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
 import type { DynamicsColors } from '../core/paint/dynamics';
+import type { Symmetry } from '../core/paint/symmetry';
 import type { ImageDocument } from '../core/document/document';
 import type { SelectionShape } from '../core/selection/mask-ops';
 import type { Viewport } from '../engine/viewport/viewport';
@@ -88,6 +89,13 @@ export interface BrushHud {
   lines: string[];
 }
 
+/** A paint symmetry's guide being placed, with its turn handle and (for sized types) its size handle. */
+export interface SymmetryEditOverlay {
+  symmetry: Symmetry;
+  rotate: { x: number; y: number };
+  scale: { x: number; y: number } | null;
+}
+
 /** Tools whose brush can be sized on the canvas (Alt+right-drag, or Ctrl+Option-drag on macOS). */
 export interface BrushAdjuster {
   /** Starts the gesture at the pointer; false when there is nothing to adjust. */
@@ -153,6 +161,8 @@ export interface PaintStroke {
   readonly seed: number;
   /** The colours Color Dynamics vary between, or null. */
   readonly colors: DynamicsColors | null;
+  /** The paint symmetry the stroke mirrors its dabs with, or null. */
+  readonly symmetry: Symmetry | null;
   add(dabs: Dab[]): void;
   /** Ends the stroke (one History step); `points` are its pointer samples, for Actions. */
   end(points: StrokePoint[]): Promise<void>;
@@ -197,6 +207,10 @@ export interface ToolContext {
   setBrushHud(hud: BrushHud | null): void;
   /** A tool changed its own options (e.g. the brush HUD): refresh what shows them. */
   toolOptionsChanged(): void;
+  /** Shows the document's paint symmetry guide (while a painting tool is active), or not. */
+  showSymmetry(show: boolean): void;
+  /** Shows a symmetry guide being placed, or hides it with null. */
+  setSymmetryEdit(edit: SymmetryEditOverlay | null): void;
 }
 
 /** Modifier and drag state that decides a tool's cursor. */

@@ -247,7 +247,7 @@ export class PaintingTool implements Tool {
     if (!ctx.document || !ctx.paint || this.#stroke) return;
     const session = ctx.paint.begin(this.kind, this.options);
     if (!session) return;
-    const spacer = new StrokeDabber(this.options, session.seed, session.colors);
+    const spacer = new StrokeDabber(this.options, session.seed, session.colors, session.symmetry);
     const start = e.time ?? performance.now();
     const p = this.#point(e, ctx, start);
     const s = this.smoothing;
@@ -296,6 +296,15 @@ export class PaintingTool implements Tool {
   }
 
   onPointerLeave(ctx: ToolContext): void {
+    ctx.setBrushOutline(null);
+  }
+
+  activate(ctx: ToolContext): void {
+    ctx.showSymmetry(true);
+  }
+
+  deactivate(ctx: ToolContext): void {
+    ctx.showSymmetry(false);
     ctx.setBrushOutline(null);
   }
 

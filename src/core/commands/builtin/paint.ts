@@ -13,6 +13,7 @@ import { LAYER_BLEND_MODES } from '../../document/layers';
 import { colorToSamples, type RGB } from '../../color/color';
 import type { PixelFormat } from '../../document/pixel-format';
 import { builtInPattern, patternGray, type Pattern, type PatternSource } from '../../pattern/pattern';
+import { parseSymmetry, type Symmetry } from '../../paint/symmetry';
 import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
 import {
   DEFAULT_BRUSH,
@@ -41,6 +42,8 @@ export interface StrokeParams {
   seed: number;
   /** The foreground and background colours (sRGB 0–1), when Color Dynamics vary between them. */
   colors?: { foreground: RGB; background: RGB };
+  /** The paint symmetry the stroke was painted with (its mirror images are part of it). */
+  symmetry?: Symmetry;
 }
 
 export const PAINT_LABELS: Record<PaintTool, string> = { brush: 'Brush Tool', eraser: 'Eraser' };
@@ -147,7 +150,12 @@ class PaintStrokeCommand implements Command {
     const layer = paintTarget(doc);
     if (!layer) throw new CommandUnavailableError('Painting needs an editable pixel layer');
     const res = resolveBrushResources(this.#params.brush, services.brushTips, services.patterns);
-    const dabber = new StrokeDabber(this.#params.brush, this.#params.seed, dynamicsColors(doc, this.#params));
+    const dabber = new StrokeDabber(
+      this.#params.brush,
+      this.#params.seed,
+      dynamicsColors(doc, this.#params),
+      this.#params.symmetry ?? null,
+    );
     const dabs = unpackPoints(this.#params.points, this.#params.stride).flatMap((p) => dabber.add(p));
     const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, res.tip !== null, res.dualTip !== null);
     const diff = new LayerTileDiff(layer.id);
@@ -298,6 +306,7 @@ export const paintStrokeCommand: CommandDefinition = {
       raw === undefined
         ? undefined
         : { foreground: parseRgb(raw.foreground, 'foreground'), background: parseRgb(raw.background, 'background') };
+    const symmetry = p['symmetry'] === undefined || p['symmetry'] === null ? undefined : parseSymmetry(p['symmetry']);
     return new PaintStrokeCommand(ctx, {
       tool,
       points,
@@ -306,6 +315,7 @@ export const paintStrokeCommand: CommandDefinition = {
       color,
       seed: seed as number,
       ...(colors ? { colors } : {}),
+      ...(symmetry ? { symmetry } : {}),
     });
   },
 };

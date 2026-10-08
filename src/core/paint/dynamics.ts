@@ -27,6 +27,7 @@ import { hsbToRgb, rgbToHsb, type RGB } from '../color/color';
 import { seededRandom } from '../random';
 import { DabSpacer, type BrushSettings, type Dab, type StrokePoint } from './brush';
 import { DUAL_MODES, TEXTURE_MODES, type DualMode, type TextureMode } from './texture';
+import { applySymmetry, symmetryCopies, type Symmetry } from './symmetry';
 
 export { seededRandom };
 
@@ -418,8 +419,11 @@ export class StrokeDabber {
   readonly #spacer: DabSpacer;
   readonly #dynamics: DabDynamics | null;
   readonly #dual: DualDabber | null;
+  readonly #mirror: ReturnType<typeof symmetryCopies> | null;
 
-  constructor(brush: BrushSettings, seed: number, colors: DynamicsColors | null) {
+  /** `symmetry`: every dab is also painted at its mirror images. */
+  constructor(brush: BrushSettings, seed: number, colors: DynamicsColors | null, symmetry: Symmetry | null = null) {
+    this.#mirror = symmetry?.enabled ? symmetryCopies(symmetry) : null;
     const d = brush.dynamics;
     const dynamics = dynamicsOff(d) ? null : new DabDynamics(d!, seed, colors, brush.opacity);
     this.#dynamics = dynamics;
@@ -431,13 +435,13 @@ export class StrokeDabber {
     this.#dual = d?.dual.enabled ? new DualDabber(brush, d.dual, seed) : null;
   }
 
-  /** The dabs a pointer sample adds: the brush's, then the dual tip's (marked `dual`). */
+  /** The dabs a pointer sample adds: the brush's, then the dual tip's (marked `dual`), and their mirror images. */
   add(p: StrokePoint): Dab[] {
     const placed = this.#spacer.place(p);
     const dyn = this.#dynamics;
     const dabs = dyn ? placed.flatMap((d) => dyn.apply(d.dab, d)) : placed.map((d) => d.dab);
     if (this.#dual) dabs.push(...this.#dual.add(p));
-    return dabs;
+    return this.#mirror ? applySymmetry(dabs, this.#mirror) : dabs;
   }
 }
 

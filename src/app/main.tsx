@@ -50,6 +50,8 @@ const bridge: UiBridge = {
   webpOptions: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'webp-options', ...request, resolve })),
   brushName: (tip, name) => new Promise((resolve) => ui().pushDialog({ kind: 'brush-name', tip, name, resolve })),
   preferences: (values) => new Promise((resolve) => ui().pushDialog({ kind: 'preferences', values, resolve })),
+  symmetrySegments: (symmetry, segments) =>
+    new Promise((resolve) => ui().pushDialog({ kind: 'symmetry-segments', symmetry, segments, resolve })),
   pickColor: (title, color) =>
     new Promise((resolve) => ui().pushDialog({ kind: 'color-picker', title, color, resolve })),
 };

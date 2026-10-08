@@ -10,7 +10,15 @@ import type { ImageDocument } from '../../core/document/document';
 import { shapePoints } from '../../core/selection/mask-ops';
 import type { Selection } from '../../core/selection/selection';
 import type { Renderer } from '../../engine/gl/renderer';
-import type { BrushHud, BrushOutline, CropBoxOverlay, SelectionPreview, TransformBoxOverlay } from '../../tools/types';
+import { symmetryGuide, type Symmetry } from '../../core/paint/symmetry';
+import type {
+  BrushHud,
+  BrushOutline,
+  CropBoxOverlay,
+  SelectionPreview,
+  SymmetryEditOverlay,
+  TransformBoxOverlay,
+} from '../../tools/types';
 
 type TipOutline = { loops: Float32Array[]; width: number; height: number };
 
@@ -30,6 +38,10 @@ export class SelectionOverlay {
   #preview: SelectionPreview | null = null;
   #brush: BrushOutline | null = null;
   #hud: BrushHud | null = null;
+  /** The document's symmetry guide shows (a painting tool is active) unless hidden. */
+  #symmetryShown = false;
+  #symmetryHidden = false;
+  #symmetryEdit: SymmetryEditOverlay | null = null;
   readonly #tipOutline: ((id: string, contour: 'normal' | 'full') => Promise<TipOutline | null>) | undefined;
   readonly #tipOutlines = new Map<string, TipOutline | 'pending' | null>();
   #crop: CropBoxOverlay | null = null;
@@ -60,7 +72,7 @@ export class SelectionOverlay {
     this.#preview = null;
     this.#stopDoc =
       doc?.changes.on((change) => {
-        if (change.kind === 'selection' || change.kind === 'canvas') this.draw();
+        if (change.kind === 'selection' || change.kind === 'canvas' || change.kind === 'symmetry') this.draw();
       }) ?? null;
     this.draw();
   }
@@ -73,6 +85,22 @@ export class SelectionOverlay {
   /** The brush outline at a document point (diameter in document px, tip pose), or none. */
   setBrushOutline(outline: BrushOutline | null): void {
     this.#brush = outline;
+    this.draw();
+  }
+
+  setSymmetryShown(shown: boolean): void {
+    this.#symmetryShown = shown;
+    this.draw();
+  }
+
+  setSymmetryHidden(hidden: boolean): void {
+    this.#symmetryHidden = hidden;
+    this.draw();
+  }
+
+  /** A symmetry guide being placed (drawn with its handles), or none. */
+  setSymmetryEdit(edit: SymmetryEditOverlay | null): void {
+    this.#symmetryEdit = edit;
     this.draw();
   }
 
@@ -121,6 +149,9 @@ export class SelectionOverlay {
     const doc = this.#doc;
     const loops = this.#loopsToDraw(doc);
     this.#animate(loops.length > 0);
+    if (doc && this.#symmetryEdit) this.#drawSymmetry(ctx, doc, this.#symmetryEdit.symmetry, this.#symmetryEdit);
+    else if (doc?.symmetry?.enabled && this.#symmetryShown && !this.#symmetryHidden)
+      this.#drawSymmetry(ctx, doc, doc.symmetry, null);
     if (doc && this.#crop) this.#drawCrop(ctx, doc, this.#crop);
     if (doc && this.#transform) this.#drawTransform(ctx, this.#transform);
     if (doc && this.#hud) this.#drawHud(ctx, this.#hud);
@@ -363,6 +394,70 @@ export class SelectionOverlay {
     }
     if (brush.crosshair || brush.crosshairOnly || tiny) this.#drawCrosshair(ctx, centre);
     if (brush.paintAt) this.#drawString(ctx, centre, brush.paintAt, brush.stringRadius);
+  }
+
+  /** A paint symmetry's guide (and, while it is placed, its centre, turn and size handles). */
+  #drawSymmetry(
+    ctx: CanvasRenderingContext2D,
+    doc: ImageDocument,
+    s: Symmetry,
+    edit: SymmetryEditOverlay | null,
+  ): void {
+    const v = this.#renderer.viewport;
+    const dpr = this.#renderer.devicePixelRatio;
+    const line = Math.max(1, Math.round(dpr));
+    const reach = Math.hypot(doc.width, doc.height) + Math.hypot(s.cx - doc.width / 2, s.cy - doc.height / 2);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    for (const { points, closed } of symmetryGuide(s, reach)) {
+      for (let i = 0; i < points.length; i += 2) {
+        const p = v.docToView({ x: points[i]!, y: points[i + 1]! });
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      if (closed) ctx.closePath();
+    }
+    ctx.lineWidth = line * 3;
+    ctx.strokeStyle = 'rgb(0 0 0 / 30%)';
+    ctx.stroke();
+    ctx.lineWidth = line;
+    ctx.strokeStyle = 'rgb(150 120 255 / 95%)';
+    ctx.stroke();
+    // The centre.
+    const c = v.docToView({ x: s.cx, y: s.cy });
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 3 * dpr, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgb(150 120 255)';
+    ctx.fill();
+    if (!edit) return;
+    const size = 8 * dpr;
+    const r = v.docToView(edit.rotate);
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(r.x, r.y);
+    ctx.lineWidth = line;
+    ctx.strokeStyle = 'rgb(150 120 255 / 95%)';
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = 'rgb(110 80 230)';
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, size / 2 + 1, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    if (edit.scale) {
+      const q = v.docToView(edit.scale);
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y - size * 0.7);
+      ctx.lineTo(q.x + size * 0.7, q.y);
+      ctx.lineTo(q.x, q.y + size * 0.7);
+      ctx.lineTo(q.x - size * 0.7, q.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillRect(c.x - size / 2, c.y - size / 2, size, size);
+    ctx.strokeRect(c.x - size / 2, c.y - size / 2, size, size);
   }
 
   /** Smoothing's string: from the pointer to where the paint is (and its reach in Pulled String Mode). */

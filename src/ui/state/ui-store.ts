@@ -66,7 +66,13 @@ export type DialogRequest =
       name: string;
       resolve: (name: string | null) => void;
     }
-  | { kind: 'preferences'; values: PreferenceValues; resolve: (values: PreferenceValues | null) => void };
+  | { kind: 'preferences'; values: PreferenceValues; resolve: (values: PreferenceValues | null) => void }
+  | {
+      kind: 'symmetry-segments';
+      symmetry: 'radial' | 'mandala';
+      segments: number;
+      resolve: (segments: number | null) => void;
+    };
 
 export interface WebpOptionsRequest {
   options: WebpSaveOptions;
