@@ -10,9 +10,11 @@
 
 _Update this section at the end of every session._
 
-- Phase: 1 — Core editor MVP (task list in Part D)
-- Last completed: Part D items 1–12 (layer commands, Layers panel, blend modes, merges, selections, colours, brush/eraser, fill, Move tool, crop/canvas size/image size/rotation, Free Transform, Save As JPEG/WebP and basic PSD)
-- Next up: the owner's check with real Photoshop (`docs/phase1-check/README.md`), which completes Phase 1 (item 13). Work stops here until the owner has checked and says to start Phase 2.
+- Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
+  Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
+  when it arrives.
+- Last completed: Phase 1, Part D items 1–12 and the automated part of item 13
+- Next up: Part E item 1 (pen input and brush tips)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -619,3 +621,29 @@ scope (all modes, masks, etc.) is complete.
   ↳ note: Save As dialog with formats, JPEG Options (our own encoder: quality 0–12, baseline/optimised/progressive, matte, ICC, resolution), WebP Options (lossless ours; lossy via the browser's encoder, not in Safari), PSD open (8/16/32-bit RGB/Gray, groups, locks, Background; simplified features listed) and save (8-bit RGB) (D-033, D-034, FORMAT_NOTES §7).
 - [ ] Phase 1 exit test: edit a layered composition and round-trip it as PSD (automated), plus owner check with real Photoshop
   ↳ partial: the automated round trip passes in Chromium, Firefox and WebKit (`tests/e2e/phase1-exit.spec.ts`: canvas size, brush stroke, move, Multiply square with opacity/fill and a lock, feathered ellipse turned with Free Transform inside a Screen group, a hidden layer — same layers and same image after saving and reopening, and again after a second save). Waiting for the owner's check with real Photoshop (`docs/phase1-check/README.md`).
+
+---
+
+# PART E — PHASE 2 TASK BREAKDOWN
+
+Goal: a digital painter can paint a full illustration. Each item ticks only when its Definition of Done (CLAUDE.md §5)
+holds for the scope stated; the matching Part B items stay unticked until their full scope is complete. Order: the
+engine first, then its controls, then the tools built on it.
+
+- [ ] Pen input and brush tips: Pointer Events pressure, tilt (tiltX/Y, altitude/azimuth), twist and stylus wheel, coalesced and predicted events; computed tips with angle, roundness, flip X/Y; sampled tips from images (Define Brush Preset); brush paint modes (the tool's blend mode in the options bar, and the blend-mode shortcuts setting it while a painting tool is active)
+- [ ] Brush dynamics: Shape Dynamics (size/angle/roundness jitter, minimum diameter, tilt scale, flip jitter), Scattering, Transfer (opacity/flow jitter), Color Dynamics (FG/BG, hue/saturation/brightness, purity, per tip), Brush Pose; controls off/fade/pen pressure/pen tilt/stylus wheel/rotation/initial direction/direction; seeded jitter so recorded strokes replay identically
+- [ ] Texture, Dual Brush, Noise, Wet Edges, Build-up (airbrush, paint while held still), Protect Texture
+- [ ] Brush Settings panel and the full Brush options bar (size, hardness, mode, opacity and flow with pressure toggles, airbrush, smoothing, angle, symmetry), on-canvas size/hardness HUD (Alt+right-drag / Ctrl+Option-drag), brush cursor preferences
+- [ ] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom
+- [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path
+- [ ] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel
+- [ ] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
+- [ ] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)
+- [ ] Pencil tool (aliased, Auto Erase) and Eraser modes (Brush/Pencil/Block)
+- [ ] Gradient tool (G), classic mode: linear, radial, angle, reflected, diamond; reverse, dither, transparency; methods perceptual/linear/classic/smooth/stripes; Gradient Editor (colour and opacity stops, midpoints, smoothness, noise gradients); Gradients panel; GRD import
+- [ ] Patterns: Edit > Define Pattern, Patterns panel, PAT import, Pattern contents in Edit > Fill, Pattern Stamp tool
+- [ ] Paint Bucket: foreground or pattern, tolerance, contiguous, anti-alias, all layers, mode and opacity
+- [ ] History Brush (Y), Art History Brush, the History panel's source column, Eraser's Erase to History, History contents in Edit > Fill
+- [ ] Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers, presets
+- [ ] Brush-based retouching that painters rely on: Smudge (finger painting), Blur and Sharpen (protect detail), Dodge, Burn and Sponge
+- [ ] Phase 2 exit test: a scripted painting session (pressure strokes, dynamics, symmetry, gradient, pattern, history brush, mixer brush) round-trips through PSD, plus the owner painting a small illustration with a tablet
