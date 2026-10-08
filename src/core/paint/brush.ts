@@ -45,6 +45,8 @@ export interface BrushSettings {
   flipY: boolean;
   /** A sampled tip's id, or null for the computed round tip. */
   tip: string | null;
+  /** Hard pixels only, no soft or anti-aliased edge (the Pencil, the Eraser's Pencil and Block modes). */
+  aliased: boolean;
   mode: BrushMode;
   /** How dabs vary (Brush Settings panel); absent or all off: they do not. */
   dynamics?: BrushDynamics;
@@ -64,6 +66,7 @@ export const DEFAULT_BRUSH: Readonly<BrushSettings> = Object.freeze({
   flipX: false,
   flipY: false,
   tip: null,
+  aliased: false,
   mode: 'normal',
 });
 

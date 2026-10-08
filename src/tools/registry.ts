@@ -40,6 +40,7 @@ export function createTools() {
   // Not on the toolbar either: placing a paint symmetry's guide.
   const symmetry = new SymmetryTool();
   const brush = new PaintingTool('brush');
+  const pencil = new PaintingTool('pencil');
   const eraser = new PaintingTool('eraser');
   const groups: ToolGroup[] = [
     { id: 'move-group', tools: [move] },
@@ -51,7 +52,7 @@ export function createTools() {
     { id: 'lasso-group', tools: [lasso, polygonalLasso] },
     { id: 'crop-group', tools: [crop] },
     { id: 'eyedropper-group', tools: [eyedropper] },
-    { id: 'brush-group', tools: [brush] },
+    { id: 'brush-group', tools: [brush, pencil] },
     { id: 'eraser-group', tools: [eraser] },
     { id: 'hand-group', tools: [hand, rotateView] },
     { id: 'zoom-group', tools: [zoom] },
@@ -75,6 +76,7 @@ export function createTools() {
     transform,
     symmetry,
     brush,
+    pencil,
     eraser,
     groups,
     byId,

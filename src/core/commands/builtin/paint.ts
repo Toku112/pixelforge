@@ -29,7 +29,7 @@ import { CommandUnavailableError, type Command, type CommandContext, type JsonOb
 import type { CommandDefinition } from '../registry';
 import { LayerTileDiff } from '../tile-diff';
 
-export type PaintTool = 'brush' | 'eraser';
+export type PaintTool = 'brush' | 'pencil' | 'eraser';
 
 export interface StrokeParams {
   tool: PaintTool;
@@ -47,7 +47,7 @@ export interface StrokeParams {
   symmetry?: Symmetry;
 }
 
-export const PAINT_LABELS: Record<PaintTool, string> = { brush: 'Brush Tool', eraser: 'Eraser' };
+export const PAINT_LABELS: Record<PaintTool, string> = { brush: 'Brush Tool', pencil: 'Pencil', eraser: 'Eraser' };
 
 /** The layer a stroke paints on: the active pixel layer, if its pixels may change. */
 export function paintTarget(doc: ImageDocument): PixelLayer | undefined {
@@ -83,7 +83,8 @@ export function brushStrokeSetup(
     hardness: brush.hardness,
     mode: brush.mode,
     tip: tipData(res.tip),
-    varyColor: !!d?.color.enabled && tool === 'brush',
+    aliased: brush.aliased,
+    varyColor: !!d?.color.enabled && tool !== 'eraser',
     varyOpacity: !!d?.transfer.enabled,
     texture:
       texture && res.pattern
@@ -196,7 +197,7 @@ export function dynamicsColors(
   doc: ImageDocument,
   params: Pick<StrokeParams, 'colors' | 'tool'>,
 ): DynamicsColors | null {
-  if (!params.colors || params.tool !== 'brush') return null;
+  if (!params.colors || params.tool === 'eraser') return null;
   return { ...params.colors, toSamples: (c) => colorToSamples(c, doc.mode, doc.depth) };
 }
 
@@ -273,6 +274,7 @@ function parseBrush(v: unknown): BrushSettings {
     flipX: b['flipX'] === true,
     flipY: b['flipY'] === true,
     tip: tip ?? null,
+    aliased: b['aliased'] === true,
     mode: mode as BrushMode,
     ...(b['dynamics'] !== undefined ? { dynamics: parseDynamics(b['dynamics']) } : {}),
   };
@@ -290,7 +292,8 @@ export const paintStrokeCommand: CommandDefinition = {
   isAvailable: (ctx) => paintTarget(ctx.doc) !== undefined,
   create: (ctx, p) => {
     const tool = p['tool'];
-    if (tool !== 'brush' && tool !== 'eraser') throw new Error('paintStroke: tool must be brush or eraser');
+    if (tool !== 'brush' && tool !== 'pencil' && tool !== 'eraser')
+      throw new Error('paintStroke: tool must be brush, pencil or eraser');
     const points = p['points'];
     const stride = p['stride'] ?? 3;
     if (stride !== 3 && stride !== POINT_FIELDS.length)

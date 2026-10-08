@@ -190,7 +190,12 @@ export interface PaintStroke {
 
 /** Starts strokes on the active layer; null (after telling the user why) when it cannot be painted. */
 export interface PaintHost {
-  begin(tool: PaintTool, brush: BrushSettings): PaintStroke | null;
+  /** `autoEraseAt`: the Pencil's Auto Erase — paint the background colour if this pixel has the foreground colour. */
+  begin(
+    tool: PaintTool,
+    brush: BrushSettings,
+    options?: { autoEraseAt?: { x: number; y: number } },
+  ): PaintStroke | null;
 }
 
 export interface ToolContext {

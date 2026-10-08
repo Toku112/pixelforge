@@ -327,6 +327,7 @@ export function parsePreset(raw: unknown): BrushPreset {
     flipX: b['flipX'] === true,
     flipY: b['flipY'] === true,
     tip: typeof b['tip'] === 'string' ? b['tip'] : null,
+    aliased: b['aliased'] === true,
     mode: typeof b['mode'] === 'string' ? (b['mode'] as BrushSettings['mode']) : 'normal',
     dynamics: parseDynamics(b['dynamics'] ?? {}),
   };

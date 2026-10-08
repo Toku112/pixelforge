@@ -254,6 +254,22 @@ describe('stroke renderer', () => {
     expect(full).toBeLessThan(250);
   });
 
+  it('aliased (the Pencil): hard pixels only, one pixel for a 1 px dab', () => {
+    const one = tileOf([0, 0, 0, 0]);
+    const pencil = new StrokeRenderer(setup({ aliased: true, hardness: 0 }));
+    pencil.addTile(0, 0, one);
+    pencil.applyDabs([dab(10.5, 10.5, 1)]);
+    let painted = 0;
+    for (let i = 3; i < one.length; i += 4) if (one[i]! > 0) painted++;
+    expect(painted).toBe(1);
+    expect(px(one, 10, 10)).toEqual([255, 0, 0, 255]);
+    const big = tileOf([0, 0, 0, 0]);
+    const hard = new StrokeRenderer(setup({ aliased: true, hardness: 0 }));
+    hard.addTile(0, 0, big);
+    hard.applyDabs([dab(40.3, 40.7, 13), dab(47.1, 44.2, 13)]);
+    for (let i = 3; i < big.length; i += 4) expect([0, 255]).toContain(big[i]);
+  });
+
   it('keeps the colour and opacity of each dab when they vary', () => {
     const data = tileOf([0, 0, 0, 0]);
     const r = new StrokeRenderer(setup({ varyColor: true, varyOpacity: true, opacity: 1 }));

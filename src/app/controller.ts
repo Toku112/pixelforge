@@ -170,7 +170,6 @@ const TOOL_COMMANDS: Record<string, string> = {
   'tool.rotateView': 'rotate-view',
   'tool.zoom': 'zoom',
   'tool.move': 'move',
-  'tool.brush': 'brush',
   'tool.eraser': 'eraser',
   'tool.crop': 'crop',
   'tool.eyedropper': 'eyedropper',
@@ -183,6 +182,7 @@ const DIGIT_PAIR_MS = 400;
 const GROUP_COMMANDS: Record<string, string> = {
   'tool.marquee': 'marquee-group',
   'tool.lasso': 'lasso-group',
+  'tool.brush': 'brush-group',
 };
 
 export class AppController {
@@ -193,7 +193,7 @@ export class AppController {
   readonly tools: ToolSet = createTools();
   readonly colors = new ColorSwatches();
   /** Starts brush/eraser strokes on the active document. */
-  readonly paintHost: PaintHost = { begin: (tool, brush) => this.#beginStroke(tool, brush) };
+  readonly paintHost: PaintHost = { begin: (tool, brush, options) => this.#beginStroke(tool, brush, options) };
   /** The colours, and sampling them off the active document (Eyedropper, Alt with the Brush). */
   readonly colorHost: ColorHost = {
     sample: (x, y, options) => this.#sampleColor(x, y, options),
@@ -291,12 +291,16 @@ export class AppController {
     }
   }
 
-  #beginStroke(tool: PaintTool, brush: BrushSettings): PaintStroke | null {
+  #beginStroke(
+    tool: PaintTool,
+    brush: BrushSettings,
+    options: { autoEraseAt?: { x: number; y: number } } = {},
+  ): PaintStroke | null {
     const ws = this.workspace;
     const session = ws.active;
     if (!session || ws.running) return null;
     const doc = session.doc;
-    const what = tool === 'brush' ? 'the Brush Tool' : 'the Eraser';
+    const what = tool === 'brush' ? 'the Brush Tool' : tool === 'pencil' ? 'the Pencil' : 'the Eraser';
     const layer = paintTarget(doc);
     if (!layer) {
       const active = doc.activeLayer;
@@ -310,7 +314,10 @@ export class AppController {
     }
     let color: number[];
     try {
-      color = colorToSamples(tool === 'brush' ? this.colors.foreground : this.colors.background, doc.mode, doc.depth);
+      color = colorToSamples(tool === 'eraser' ? this.colors.background : this.colors.foreground, doc.mode, doc.depth);
+      // Auto Erase: a Pencil stroke starting on the foreground colour paints the background colour.
+      if (options.autoEraseAt && this.#hasColorAt(layer, options.autoEraseAt, color))
+        color = colorToSamples(this.colors.background, doc.mode, doc.depth);
     } catch (error) {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
       return null;
@@ -324,7 +331,7 @@ export class AppController {
     }
     // A fresh seed per stroke; the colours only when Color Dynamics vary between them.
     const seed = Math.floor(Math.random() * 2 ** 31);
-    const varyColor = tool === 'brush' && !!brush.dynamics?.color.enabled;
+    const varyColor = tool !== 'eraser' && !!brush.dynamics?.color.enabled;
     const colors = varyColor ? { foreground: this.colors.foreground, background: this.colors.background } : undefined;
     const params = { tool, brush, color, seed, ...(colors ? { colors } : {}) };
     const live = this.services.strokes.begin(strokeSetup(doc, layer, params, res));
@@ -355,6 +362,16 @@ export class AppController {
       },
       cancel: () => stroke.cancel(),
     };
+  }
+
+  /** Whether a layer's pixel at a document point has these colour samples (and is not transparent). */
+  #hasColorAt(layer: PixelLayer, at: { x: number; y: number }, color: readonly number[]): boolean {
+    const x = Math.floor(at.x) - layer.offsetX;
+    const y = Math.floor(at.y) - layer.offsetY;
+    const px = layer.buffer.getPixel(x, y);
+    const cc = color.length;
+    if (layer.buffer.format.hasAlpha && (px[cc] ?? 0) === 0) return false;
+    return color.every((v, i) => px[i] === v);
   }
 
   /** The active tool when it is the Brush or the Eraser. */
@@ -715,7 +732,7 @@ export class AppController {
     });
     if (!ok) return;
     await this.services.brushes.removeGroup(group);
-    for (const t of [this.tools.brush, this.tools.eraser])
+    for (const t of [this.tools.brush, this.tools.pencil, this.tools.eraser])
       if (t.presetId && !this.services.brushes.preset(t.presetId)) t.presetId = null;
     this.#ui.toolOptionsChanged();
   }
@@ -737,7 +754,8 @@ export class AppController {
     });
     if (!ok) return;
     await this.services.brushes.removePreset(preset.id);
-    for (const t of [this.tools.brush, this.tools.eraser]) if (t.presetId === preset.id) t.presetId = null;
+    for (const t of [this.tools.brush, this.tools.pencil, this.tools.eraser])
+      if (t.presetId === preset.id) t.presetId = null;
     this.#ui.toolOptionsChanged();
   }
 

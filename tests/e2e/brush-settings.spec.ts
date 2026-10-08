@@ -156,7 +156,7 @@ test('F5 opens Brush Settings in its own window; its sections edit the Brush and
   await expect(panel(page).getByRole('checkbox', { name: 'Use Color Dynamics' })).toBeDisabled();
   // Other tools have no brush.
   await page.keyboard.press('v');
-  await expect(page.locator('.floating-panel')).toContainText('Choose the Brush or Eraser');
+  await expect(page.locator('.floating-panel')).toContainText('Choose the Brush, Pencil or Eraser');
 
   // F5 again closes it.
   await page.keyboard.press('F5');

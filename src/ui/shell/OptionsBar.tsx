@@ -425,6 +425,35 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
   const layer = doc?.activeLayer;
   // Behind and Clear need transparency that may change (not the Background or locked transparency).
   const alphaEditable = layer?.kind === 'pixel' && layer.buffer.format.hasAlpha && !layer.locks.transparency;
+  const eraser = tool.kind === 'eraser';
+  // The Eraser's Block mode is a fixed square at full strength: nothing else to set.
+  const block = eraser && tool.eraserMode === 'block';
+  const eraserMode = eraser && (
+    <label className="option-field">
+      Mode:
+      <select
+        className="option-select"
+        aria-label="Eraser mode"
+        value={tool.eraserMode}
+        onChange={(e) => {
+          tool.setEraserMode(e.target.value as typeof tool.eraserMode);
+          bump();
+        }}
+      >
+        <option value="brush">Brush</option>
+        <option value="pencil">Pencil</option>
+        <option value="block">Block</option>
+      </select>
+    </label>
+  );
+  if (block)
+    return (
+      <>
+        {eraserMode}
+        <span className="options-divider" />
+        <SymmetryMenu />
+      </>
+    );
   return (
     <>
       <BrushPicker tool={tool} />
@@ -438,7 +467,8 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       >
         <Icon name="brushSettings" size={16} />
       </button>
-      {tool.kind === 'brush' && (
+      {eraserMode}
+      {!eraser && (
         <label className="option-field">
           Mode:
           <select
@@ -475,25 +505,29 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       >
         <Icon name="penPressure" size={16} />
       </button>
-      <NumberField
-        label="Flow:"
-        value={percent(o.flow)}
-        min={1}
-        max={100}
-        suffix="%"
-        width={46}
-        onChange={(v) => set({ flow: v / 100 })}
-      />
-      <button
-        type="button"
-        className={`option-icon${buildUp ? ' active' : ''}`}
-        aria-pressed={buildUp}
-        aria-label="Airbrush-style build-up"
-        title="Airbrush-style build-up: paint keeps flowing while the pointer rests"
-        onClick={() => set({ dynamics: { ...dynamics, buildUp: !buildUp } })}
-      >
-        <Icon name="airbrush" size={16} />
-      </button>
+      {tool.kind !== 'pencil' && (
+        <>
+          <NumberField
+            label="Flow:"
+            value={percent(o.flow)}
+            min={1}
+            max={100}
+            suffix="%"
+            width={46}
+            onChange={(v) => set({ flow: v / 100 })}
+          />
+          <button
+            type="button"
+            className={`option-icon${buildUp ? ' active' : ''}`}
+            aria-pressed={buildUp}
+            aria-label="Airbrush-style build-up"
+            title="Airbrush-style build-up: paint keeps flowing while the pointer rests"
+            onClick={() => set({ dynamics: { ...dynamics, buildUp: !buildUp } })}
+          >
+            <Icon name="airbrush" size={16} />
+          </button>
+        </>
+      )}
       <SmoothingControls tool={tool} />
       <span className="options-divider" />
       <NumberField
@@ -520,6 +554,19 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       >
         <Icon name="penPressureSize" size={16} />
       </button>
+      {tool.kind === 'pencil' && (
+        <label className="option-check" title="A stroke starting on the foreground colour paints the background colour">
+          <input
+            type="checkbox"
+            checked={tool.autoErase}
+            onChange={(e) => {
+              tool.setAutoErase(e.target.checked);
+              bump();
+            }}
+          />
+          Auto Erase
+        </label>
+      )}
       <span className="options-divider" />
       <SymmetryMenu />
     </>

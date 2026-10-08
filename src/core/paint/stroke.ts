@@ -68,6 +68,8 @@ export interface StrokeSetup {
   mode: BrushMode;
   /** A sampled tip (coverage 0–255), or null for the computed round tip. */
   tip: TipData | null;
+  /** Hard pixels only: a pixel is painted fully where the tip covers at least half of it, else not at all. */
+  aliased?: boolean;
   /** Brush Texture, when on. */
   texture?: StrokeTexture | null;
   /** Dual Brush, when on: its tip (null: round, of `hardness`) and how it masks the stroke. */
@@ -268,12 +270,17 @@ export class StrokeRenderer {
     if (dab.flipX) u = -u;
     if (dab.flipY) v = -v;
     v /= dab.roundness;
-    if (!tip) return dabCoverage(Math.hypot(u, v), dab.size / 2, hardness);
+    if (!tip) {
+      const d = Math.hypot(u, v);
+      if (this.#setup.aliased) return d <= dab.size / 2 ? 1 : 0;
+      return dabCoverage(d, dab.size / 2, hardness);
+    }
     // Document px → tip px at level 0, then at the chosen level.
     const lv = tip.levels[level]!;
     const f = 2 ** level;
     const t0 = tip.levels[0]!;
-    return sampleLevel(lv, (u / scale + t0.w / 2) / f, (v / scale + t0.h / 2) / f);
+    const c = sampleLevel(lv, (u / scale + t0.w / 2) / f, (v / scale + t0.h / 2) / f);
+    return this.#setup.aliased ? (c >= 0.5 ? 1 : 0) : c;
   }
 
   /** Paints dabs (document coordinates). Returns the keys of the tiles that changed. */

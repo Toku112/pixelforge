@@ -671,3 +671,18 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   management (Phase 7) converts them properly. Click sets the foreground, Ctrl/Cmd-click the background, as in the
   reference app.
 - Panels opening as floating windows cascade (each a little lower and further left) instead of covering each other.
+
+## D-044 — 2026-10-08 — Pencil and Eraser modes
+
+**Decision:**
+
+- Hard pixels (`aliased` brushes): a round tip paints a pixel fully when the pixel's centre is within the tip's radius
+  (so a 1 px pencil paints exactly one pixel), a sampled tip where it covers at least half the pixel; nothing else is
+  painted. The Pencil is aliased, sized 1 px by default, has no Flow or airbrush, and starts with Smoothing at 0 % so
+  pixel work goes exactly where the pointer goes. The Eraser's Pencil mode is its brush, aliased.
+- Auto Erase compares the pixel under the start of the stroke with the foreground colour exactly (as samples of the
+  document; transparent pixels never match) and, when they match, paints the background colour for the whole stroke.
+- The Eraser's Block mode erases a full-strength square 16 screen pixels wide (our square built-in tip, aliased) at the
+  current zoom; the stroke records it in image pixels, so a replay erases the same square at any zoom. Block has no
+  other options, as in the reference app.
+- The Brush and Pencil share B (Shift+B switches), as in the reference app's toolbar group.

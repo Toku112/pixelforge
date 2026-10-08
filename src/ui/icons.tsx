@@ -285,6 +285,12 @@ const icons = {
       <circle cx="19" cy="19" r="3" />
     </Svg>
   ),
+  pencil: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M16.5 3.5 20.5 7.5 9 19H5v-4Z" />
+      <path d="M14 6l4 4M5 15l4 4" />
+    </Svg>
+  ),
   eyedropper: (p: IconProps) => (
     <Svg {...p}>
       <path d="M14.5 4.5a2.1 2.1 0 0 1 3 0l2 2a2.1 2.1 0 0 1 0 3l-2 2-5-5Z" />

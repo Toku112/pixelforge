@@ -48,6 +48,11 @@ const disc = (d: number, r: number, inner: number) =>
 
 const BUILT_IN: readonly { id: string; name: string; make: () => BrushTip }[] = [
   {
+    id: 'pf-tip-square',
+    name: 'Square',
+    make: () => tip('pf-tip-square', 'Square', 8, 8, () => 1),
+  },
+  {
     id: 'pf-tip-charcoal',
     name: 'Charcoal',
     make: () => {

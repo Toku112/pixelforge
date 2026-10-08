@@ -123,6 +123,12 @@ describe('brush strokes in WebAssembly', () => {
       dabs,
     );
     expectSame(base({ offsetX: -37, offsetY: 21 }), dabs);
+    // Hard pixels only (the Pencil): round and sampled tips.
+    expectSame(base({ aliased: true }), dabs);
+    expectSame(
+      base({ aliased: true, erase: true, format: { depth: 16, colorChannels: 3, hasAlpha: true }, color: [1, 2, 3] }),
+      dabs,
+    );
     const canvas = { x: 0, y: 0, w: 512, h: 512 };
     const mask = selectShape(null, { kind: 'ellipse', x: 30, y: 50, w: 300, h: 380 }, 'new', 8, true, canvas)!;
     expectSame(base({ selection: { mask, canvas }, offsetX: 10 }), dabs);
@@ -132,6 +138,7 @@ describe('brush strokes in WebAssembly', () => {
     const random = seededRandom(11);
     const tip = { width: 37, height: 23, data: Uint8Array.from({ length: 37 * 23 }, () => Math.round(random() * 255)) };
     expectSame(base({ tip }), randomDabs(5, 30, true));
+    expectSame(base({ tip, aliased: true }), randomDabs(8, 30, true));
     expectSame(
       base({ tip, format: { depth: 16, colorChannels: 3, hasAlpha: true }, color: [60000, 100, 3000] }),
       randomDabs(6, 20, true),

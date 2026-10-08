@@ -221,9 +221,9 @@ export function BrushSettingsPanel() {
     const width = 240;
     const height = 70;
     // Painted in the paint colour (black for the Eraser, which has no colour to vary).
-    const paint = painting.kind === 'brush' ? controller.colors.foreground : { r: 0, g: 0, b: 0 };
+    const paint = painting.kind !== 'eraser' ? controller.colors.foreground : { r: 0, g: 0, b: 0 };
     const brush = { ...o, size: Math.min(o.size, 40) };
-    void brushPreview(controller, brush, width, height, paint, painting.kind === 'brush' && dyn.color.enabled).then(
+    void brushPreview(controller, brush, width, height, paint, painting.kind !== 'eraser' && dyn.color.enabled).then(
       (rgba) => {
         if (!current || !rgba) return;
         canvas.width = width;
@@ -237,7 +237,7 @@ export function BrushSettingsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- redraw on any option or colour change
   }, [version, colorVersion, toolId]);
 
-  if (!painting || !o) return <p className="panel-empty">Choose the Brush or Eraser to set its brush here.</p>;
+  if (!painting || !o) return <p className="panel-empty">Choose the Brush, Pencil or Eraser to set its brush here.</p>;
 
   const enabled = (s: Section) => s !== 'tip' && dyn[s].enabled;
   const tips = controller.services.brushes.list();
@@ -749,7 +749,7 @@ export function BrushSettingsPanel() {
                 type="checkbox"
                 aria-label={`Use ${label}`}
                 checked={enabled(id)}
-                disabled={id === 'color' && painting.kind !== 'brush'}
+                disabled={id === 'color' && painting.kind === 'eraser'}
                 onChange={(e) => setDyn(id, { enabled: e.target.checked })}
               />
             )}

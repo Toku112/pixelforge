@@ -183,6 +183,7 @@ pub struct BrushStroke {
     opacity: f64,
     flow: f64,
     hardness: f64,
+    aliased: bool,
     mode: Mode,
     lock_alpha: bool,
     offset_x: i32,
@@ -310,15 +311,23 @@ fn paint_tile<T: Sample>(s: &Shading, tip: Option<&Pyramid>, d: &Dab, tile: &mut
             }
             v /= d.roundness;
             let cov = match tip {
-                None => round_coverage((u * u + v * v).sqrt(), r, s.hardness),
+                None => {
+                    let d = (u * u + v * v).sqrt();
+                    if s.aliased {
+                        if d <= r { 1.0 } else { 0.0 }
+                    } else {
+                        round_coverage(d, r, s.hardness)
+                    }
+                }
                 Some(t) => {
                     let f = (1u64 << level) as f64;
                     let (w0, h0, _) = &t.levels[0];
-                    t.sample(
+                    let c = t.sample(
                         level,
                         (u / scale + *w0 as f64 / 2.0) / f,
                         (v / scale + *h0 as f64 / 2.0) / f,
-                    )
+                    );
+                    if s.aliased { if c >= 0.5 { 1.0 } else { 0.0 } } else { c }
                 }
             };
             if cov <= 0.0 {
@@ -344,6 +353,7 @@ struct Shading {
     opacity: f64,
     flow: f64,
     hardness: f64,
+    aliased: bool,
     mode: Mode,
     keep_alpha: bool,
     max: f64,
@@ -446,6 +456,7 @@ impl BrushStroke {
         lock_alpha: bool,
         offset_x: i32,
         offset_y: i32,
+        aliased: bool,
     ) -> Result<BrushStroke, JsError> {
         let color_channels = color_channels as usize;
         if !(1..=crate::MAX_CHANNELS).contains(&color_channels) || color.len() != color_channels {
@@ -470,6 +481,7 @@ impl BrushStroke {
             opacity,
             flow,
             hardness,
+            aliased,
             mode,
             lock_alpha,
             offset_x,
@@ -581,6 +593,7 @@ impl BrushStroke {
             opacity: self.opacity,
             flow: self.flow,
             hardness: self.hardness,
+            aliased: self.aliased,
             mode: self.mode,
             keep_alpha: !self.has_alpha || self.lock_alpha,
             max: self.max,
@@ -670,6 +683,7 @@ mod tests {
             false,
             0,
             0,
+            false,
         )
         .ok()
         .unwrap()

@@ -33,6 +33,7 @@ type BrushStrokeClass = new (
   lockAlpha: boolean,
   offsetX: number,
   offsetY: number,
+  aliased: boolean,
 ) => BrushStroke;
 
 const MODES = { normal: 0, behind: 1, clear: 2 } as const;
@@ -62,6 +63,7 @@ export class WasmStrokeRenderer implements StrokePainter {
       setup.lockAlpha,
       setup.offsetX,
       setup.offsetY,
+      !!setup.aliased,
     );
     if (setup.tip) this.#stroke.set_tip(setup.tip.width, setup.tip.height, setup.tip.data);
     this.#reader = setup.selection ? new MaskReader(setup.selection.mask) : null;

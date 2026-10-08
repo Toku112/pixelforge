@@ -1,11 +1,15 @@
 /**
- * Brush (B) and Eraser (E) tools.
+ * Brush and Pencil (B, Shift+B to switch) and Eraser (E) tools.
  *
  * Behaviour (own summary of the reference app):
  * - Drag to paint with the foreground colour (Brush) or to erase (Eraser: to
  *   transparency, or to the background colour on the Background and on layers
  *   with locked transparency). Each stroke is one History step.
  * - Shift-click paints a straight line from the end of the previous stroke.
+ * - The Pencil paints hard pixels only (no soft or anti-aliased edge). With Auto
+ *   Erase, a stroke that starts on the foreground colour paints the background colour.
+ * - Eraser modes: Brush, Pencil (hard pixels) and Block (a square of fixed size on
+ *   screen, at full strength).
  * - Painting stays inside the selection, if there is one.
  * - The brush outline follows the pointer.
  * - With Build-up (airbrush), holding the pointer still keeps adding paint.
@@ -56,6 +60,10 @@ export class PaintingTool implements Tool {
   presetId: string | null = null;
   /** Protect Texture (Brush Settings): switching presets keeps the texture's pattern and scale. */
   protectTexture = false;
+  /** Pencil: Auto Erase. */
+  autoErase = false;
+  /** Eraser: what it erases with. */
+  eraserMode: 'brush' | 'pencil' | 'block' = 'brush';
   #stroke: {
     session: PaintStroke;
     spacer: StrokeDabber;
@@ -83,9 +91,41 @@ export class PaintingTool implements Tool {
   constructor(kind: PaintTool) {
     this.kind = kind;
     this.id = kind;
-    this.name = kind === 'brush' ? 'Brush Tool' : 'Eraser Tool';
-    this.key = kind === 'brush' ? 'B' : 'E';
-    this.options = { ...DEFAULT_BRUSH, size: kind === 'brush' ? 30 : 50, dynamics: structuredClone(DEFAULT_DYNAMICS) };
+    this.name = kind === 'brush' ? 'Brush Tool' : kind === 'pencil' ? 'Pencil Tool' : 'Eraser Tool';
+    this.key = kind === 'eraser' ? 'E' : 'B';
+    const size = kind === 'brush' ? 30 : kind === 'pencil' ? 1 : 50;
+    this.options = {
+      ...DEFAULT_BRUSH,
+      size,
+      aliased: kind === 'pencil',
+      dynamics: structuredClone(DEFAULT_DYNAMICS),
+    };
+    // The Pencil draws exact lines: no smoothing unless asked.
+    if (kind === 'pencil') this.smoothing.amount = 0;
+  }
+
+  setAutoErase(on: boolean): void {
+    this.autoErase = on;
+  }
+
+  setEraserMode(mode: 'brush' | 'pencil' | 'block'): void {
+    this.eraserMode = mode;
+  }
+
+  /**
+   * The brush a stroke paints with: the tool's, or for the Eraser's Pencil mode the same with hard
+   * pixels, and for Block mode a full-strength square of 16 screen pixels.
+   */
+  #strokeBrush(ctx: ToolContext): BrushSettings {
+    if (this.kind !== 'eraser' || this.eraserMode === 'brush') return this.options;
+    if (this.eraserMode === 'pencil') return { ...this.options, aliased: true };
+    return {
+      ...DEFAULT_BRUSH,
+      size: Math.max(1, Math.round((16 * ctx.devicePixelRatio) / ctx.viewport.zoom)),
+      tip: 'pf-tip-square',
+      aliased: true,
+      dynamics: structuredClone(DEFAULT_DYNAMICS),
+    };
   }
 
   setOptions(changes: Partial<BrushSettings>): void {
@@ -103,7 +143,13 @@ export class PaintingTool implements Tool {
   /** The tool's settings for a tool preset (plain data). */
   presetOptions(): unknown {
     return JSON.parse(
-      JSON.stringify({ brush: this.options, smoothing: this.smoothing, protectTexture: this.protectTexture }),
+      JSON.stringify({
+        brush: this.options,
+        smoothing: this.smoothing,
+        protectTexture: this.protectTexture,
+        autoErase: this.autoErase,
+        eraserMode: this.eraserMode,
+      }),
     );
   }
 
@@ -113,10 +159,15 @@ export class PaintingTool implements Tool {
       brush?: Partial<BrushSettings>;
       smoothing?: Partial<SmoothingOptions>;
       protectTexture?: boolean;
+      autoErase?: boolean;
+      eraserMode?: string;
     };
     if (o.brush) this.setOptions(JSON.parse(JSON.stringify(o.brush)) as Partial<BrushSettings>);
     if (o.smoothing) this.setSmoothing(o.smoothing);
     if (typeof o.protectTexture === 'boolean') this.protectTexture = o.protectTexture;
+    if (typeof o.autoErase === 'boolean') this.autoErase = o.autoErase;
+    if (o.eraserMode === 'brush' || o.eraserMode === 'pencil' || o.eraserMode === 'block')
+      this.eraserMode = o.eraserMode;
     this.presetId = null;
   }
 
@@ -193,7 +244,7 @@ export class PaintingTool implements Tool {
     const mode = effectivePaintCursor(prefs.painting, e.capsLock ?? false);
     if (mode === 'standard' || mode === 'precise') return null;
     const p = ctx.viewport.viewToDoc(e.predicted ?? { x: e.x, y: e.y });
-    const o = this.options;
+    const o = this.#strokeBrush(ctx);
     const base = {
       x: p.x,
       y: p.y,
@@ -285,9 +336,15 @@ export class PaintingTool implements Tool {
       return;
     }
     if (!ctx.paint) return;
-    const session = ctx.paint.begin(this.kind, this.options);
+    const brush = this.#strokeBrush(ctx);
+    const startAt = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
+    const session = ctx.paint.begin(
+      this.kind,
+      brush,
+      this.kind === 'pencil' && this.autoErase ? { autoEraseAt: startAt } : undefined,
+    );
     if (!session) return;
-    const spacer = new StrokeDabber(this.options, session.seed, session.colors, session.symmetry);
+    const spacer = new StrokeDabber(brush, session.seed, session.colors, session.symmetry);
     const start = e.time ?? performance.now();
     const p = this.#point(e, ctx, start);
     const s = this.smoothing;
