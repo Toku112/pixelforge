@@ -5,6 +5,8 @@ import { useEffect, useReducer } from 'react';
 import type { ResampleMethod } from '../../core/geometry/layer-geometry';
 import { BLEND_MODE_LABELS, brushModeMenu } from '../../core/composite/blend';
 import type { BrushMode } from '../../core/paint/brush';
+import { DEFAULT_DYNAMICS } from '../../core/paint/dynamics';
+import { isPanelOpen } from '../dock/dock-model';
 import { CropTool } from '../../tools/crop/crop-tool';
 import { BrushPicker } from './BrushPicker';
 import { TransformTool } from '../../tools/transform/transform-tool';
@@ -354,6 +356,9 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
     bump();
   };
   const percent = (v: number) => Math.round(v * 100);
+  const dynamics = o.dynamics ?? DEFAULT_DYNAMICS;
+  const buildUp = dynamics.buildUp;
+  const brushSettingsOpen = useUi((s) => isPanelOpen(s.dock, 'brush-settings'));
   const doc = controller.workspace.active?.doc;
   const layer = doc?.activeLayer;
   // Behind and Clear need transparency that may change (not the Background or locked transparency).
@@ -361,6 +366,16 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
   return (
     <>
       <BrushPicker tool={tool} />
+      <button
+        type="button"
+        className={`option-icon${brushSettingsOpen ? ' active' : ''}`}
+        aria-pressed={brushSettingsOpen}
+        aria-label="Toggle the Brush Settings panel"
+        title="Toggle the Brush Settings panel (F5)"
+        onClick={() => controller.commands.run('window.brushSettings')}
+      >
+        <Icon name="brushSettings" size={16} />
+      </button>
       {tool.kind === 'brush' && (
         <label className="option-field">
           Mode:
@@ -407,14 +422,30 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
         width={46}
         onChange={(v) => set({ flow: v / 100 })}
       />
+      <button
+        type="button"
+        className={`option-icon${buildUp ? ' active' : ''}`}
+        aria-pressed={buildUp}
+        aria-label="Airbrush-style build-up"
+        title="Airbrush-style build-up: paint keeps flowing while the pointer rests"
+        onClick={() => set({ dynamics: { ...dynamics, buildUp: !buildUp } })}
+      >
+        <Icon name="airbrush" size={16} />
+      </button>
+      <span className="options-divider" />
       <NumberField
-        label="Spacing:"
-        value={percent(o.spacing)}
-        min={1}
-        max={1000}
-        suffix="%"
-        width={50}
-        onChange={(v) => set({ spacing: v / 100 })}
+        label={
+          <span className="option-icon-label" title="Brush angle (drag to change)">
+            <Icon name="angle" size={16} />
+          </span>
+        }
+        ariaLabel="Brush angle"
+        value={o.angle}
+        min={-180}
+        max={180}
+        suffix="°"
+        width={46}
+        onChange={(angle) => set({ angle })}
       />
       <button
         type="button"

@@ -280,6 +280,30 @@ const icons = {
       <circle cx="19" cy="19" r="3" />
     </Svg>
   ),
+  brushSettings: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M7 9.5h10M7 14.5h10" />
+      <circle cx="10" cy="9.5" r="1.6" fill="currentColor" />
+      <circle cx="14.5" cy="14.5" r="1.6" fill="currentColor" />
+    </Svg>
+  ),
+  airbrush: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M4 15.5 10.5 9l4.5 4.5L8.5 20Z" />
+      <path d="M12.5 11 15 8.5" />
+      <circle cx="17" cy="6.5" r="0.7" fill="currentColor" />
+      <circle cx="19.5" cy="9" r="0.7" fill="currentColor" />
+      <circle cx="19.5" cy="4.5" r="0.7" fill="currentColor" />
+      <circle cx="15" cy="4" r="0.7" fill="currentColor" />
+    </Svg>
+  ),
+  angle: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M4 19h16M4 19 15 6" />
+      <path d="M10.5 19a6.5 6.5 0 0 0-2.1-4.8" />
+    </Svg>
+  ),
   swapColors: (p: IconProps) => (
     <Svg {...p} strokeWidth={2}>
       <path d="M5 9a7 7 0 0 1 10-5" />

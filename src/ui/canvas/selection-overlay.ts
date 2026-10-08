@@ -10,7 +10,7 @@ import type { ImageDocument } from '../../core/document/document';
 import { shapePoints } from '../../core/selection/mask-ops';
 import type { Selection } from '../../core/selection/selection';
 import type { Renderer } from '../../engine/gl/renderer';
-import type { BrushOutline, CropBoxOverlay, SelectionPreview, TransformBoxOverlay } from '../../tools/types';
+import type { BrushHud, BrushOutline, CropBoxOverlay, SelectionPreview, TransformBoxOverlay } from '../../tools/types';
 
 type TipOutline = { loops: Float32Array[]; width: number; height: number };
 
@@ -29,7 +29,8 @@ export class SelectionOverlay {
   #stopDoc: (() => void) | null = null;
   #preview: SelectionPreview | null = null;
   #brush: BrushOutline | null = null;
-  readonly #tipOutline: ((id: string) => Promise<TipOutline | null>) | undefined;
+  #hud: BrushHud | null = null;
+  readonly #tipOutline: ((id: string, contour: 'normal' | 'full') => Promise<TipOutline | null>) | undefined;
   readonly #tipOutlines = new Map<string, TipOutline | 'pending' | null>();
   #crop: CropBoxOverlay | null = null;
   #transform: TransformBoxOverlay | null = null;
@@ -41,7 +42,7 @@ export class SelectionOverlay {
     canvas: HTMLCanvasElement,
     renderer: Renderer,
     trace: OutlineTracer,
-    tipOutline?: (id: string) => Promise<TipOutline | null>,
+    tipOutline?: (id: string, contour: 'normal' | 'full') => Promise<TipOutline | null>,
   ) {
     this.#canvas = canvas;
     this.#renderer = renderer;
@@ -72,6 +73,12 @@ export class SelectionOverlay {
   /** The brush outline at a document point (diameter in document px, tip pose), or none. */
   setBrushOutline(outline: BrushOutline | null): void {
     this.#brush = outline;
+    this.draw();
+  }
+
+  /** The brush HUD (a filled tip preview and readout), or none. */
+  setBrushHud(hud: BrushHud | null): void {
+    this.#hud = hud;
     this.draw();
   }
 
@@ -116,7 +123,9 @@ export class SelectionOverlay {
     this.#animate(loops.length > 0);
     if (doc && this.#crop) this.#drawCrop(ctx, doc, this.#crop);
     if (doc && this.#transform) this.#drawTransform(ctx, this.#transform);
-    if (doc && this.#brush) this.#drawBrush(ctx, this.#brush);
+    if (doc && this.#hud) this.#drawHud(ctx, this.#hud);
+    else if (doc && this.#brush) this.#drawBrush(ctx, this.#brush);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (!doc || loops.length === 0) return;
 
     // Build the paths in document coordinates through the view transform…
@@ -251,64 +260,152 @@ export class SelectionOverlay {
     }
   }
 
-  /** A sampled tip's outline (traced once, in the worker), or null while it is being traced. */
-  #outlineOfTip(id: string): TipOutline | null {
-    const cached = this.#tipOutlines.get(id);
+  /** A sampled tip's outline at a contour (traced once, in the worker), or null while it is being traced. */
+  #outlineOfTip(id: string, contour: 'normal' | 'full'): TipOutline | null {
+    const key = `${contour}:${id}`;
+    const cached = this.#tipOutlines.get(key);
     if (cached !== undefined) return cached === 'pending' ? null : cached;
-    this.#tipOutlines.set(id, 'pending');
-    void this.#tipOutline?.(id).then(
+    this.#tipOutlines.set(key, 'pending');
+    void this.#tipOutline?.(id, contour).then(
       (outline) => {
-        this.#tipOutlines.set(id, outline);
+        this.#tipOutlines.set(key, outline);
         this.draw();
       },
-      () => this.#tipOutlines.set(id, null),
+      () => this.#tipOutlines.set(key, null),
     );
     return null;
   }
 
-  #drawBrush(ctx: CanvasRenderingContext2D, brush: BrushOutline): void {
+  /**
+   * Sets the 2D transform to a tip's own frame — units of document pixels, centred on the tip,
+   * before its angle, flips and roundness — so paths and gradients drawn there land on the view.
+   */
+  #tipFrame(ctx: CanvasRenderingContext2D, tip: Omit<BrushOutline, 'size'>): void {
     const v = this.#renderer.viewport;
-    const r = (brush.size / 2) * v.zoom;
-    if (r < 2) return; // tiny brushes: the crosshair cursor is enough
-    const dpr = this.#renderer.devicePixelRatio;
-    const a = ((brush.angle ?? 0) * Math.PI) / 180;
+    const a = ((tip.angle ?? 0) * Math.PI) / 180;
     const c = Math.cos(a);
     const s = Math.sin(a);
-    const roundness = brush.roundness ?? 1;
-    // Tip frame (u, v) → document: undo the flips, squash by roundness, turn counter-clockwise.
-    const toDoc = (u: number, w: number) => {
-      const fu = brush.flipX ? -u : u;
-      const fv = (brush.flipY ? -w : w) * roundness;
-      return v.docToView({ x: brush.x + c * fu + s * fv, y: brush.y - s * fu + c * fv });
+    const roundness = tip.roundness ?? 1;
+    const at = (u: number, w: number) => {
+      const fu = tip.flipX ? -u : u;
+      const fv = (tip.flipY ? -w : w) * roundness;
+      return v.docToView({ x: tip.x + c * fu + s * fv, y: tip.y - s * fu + c * fv });
     };
+    const o = at(0, 0);
+    const pu = at(1, 0);
+    const pw = at(0, 1);
+    ctx.setTransform(pu.x - o.x, pu.y - o.y, pw.x - o.x, pw.y - o.y, o.x, o.y);
+  }
+
+  /** The tip's outline as a path in its own frame (see #tipFrame): the traced sampled tip, or an ellipse. */
+  #tipPath(ctx: CanvasRenderingContext2D, size: number, tipId: string | null | undefined, radius: number): void {
     ctx.beginPath();
-    const tip = brush.tip ? this.#outlineOfTip(brush.tip) : null;
+    const tip = tipId ? this.#outlineOfTip(tipId, radius === size / 2 ? 'full' : 'normal') : null;
     if (tip && tip.loops.length > 0) {
-      const scale = brush.size / Math.max(tip.width, tip.height);
+      const scale = size / Math.max(tip.width, tip.height);
       for (const loop of tip.loops) {
         for (let i = 0; i < loop.length; i += 2) {
-          const p = toDoc((loop[i]! - tip.width / 2) * scale, (loop[i + 1]! - tip.height / 2) * scale);
-          if (i === 0) ctx.moveTo(p.x, p.y);
-          else ctx.lineTo(p.x, p.y);
+          const x = (loop[i]! - tip.width / 2) * scale;
+          const y = (loop[i + 1]! - tip.height / 2) * scale;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
         }
         ctx.closePath();
       }
     } else {
-      // The round tip: an ellipse (a polygon fine enough to look smooth).
-      const steps = Math.min(128, Math.max(24, Math.round(r)));
-      for (let i = 0; i <= steps; i++) {
-        const t = (i / steps) * 2 * Math.PI;
-        const p = toDoc((Math.cos(t) * brush.size) / 2, (Math.sin(t) * brush.size) / 2);
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      }
+      ctx.arc(0, 0, Math.max(0.01, radius), 0, 2 * Math.PI);
     }
-    ctx.lineWidth = Math.max(1, Math.round(dpr)) * 2;
-    ctx.strokeStyle = 'rgb(255 255 255 / 70%)';
+  }
+
+  /** A small crosshair at a view point. */
+  #drawCrosshair(ctx: CanvasRenderingContext2D, p: { x: number; y: number }): void {
+    const dpr = this.#renderer.devicePixelRatio;
+    const arm = 6 * dpr;
+    const gap = 2 * dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.beginPath();
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      ctx.moveTo(p.x + dx * gap, p.y + dy * gap);
+      ctx.lineTo(p.x + dx * arm, p.y + dy * arm);
+    }
+    ctx.lineWidth = Math.max(1, Math.round(dpr)) * 3;
+    ctx.strokeStyle = 'rgb(255 255 255 / 80%)';
     ctx.stroke();
     ctx.lineWidth = Math.max(1, Math.round(dpr));
-    ctx.strokeStyle = 'rgb(0 0 0 / 80%)';
+    ctx.strokeStyle = '#000';
     ctx.stroke();
+  }
+
+  #drawBrush(ctx: CanvasRenderingContext2D, brush: BrushOutline): void {
+    const v = this.#renderer.viewport;
+    const dpr = this.#renderer.devicePixelRatio;
+    const centre = v.docToView({ x: brush.x, y: brush.y });
+    const tiny = (brush.size / 2) * v.zoom < 2;
+    if (!brush.crosshairOnly && !tiny) {
+      // Normal: where the round tip paints at least half — the middle of its soft rim (see dabCoverage).
+      const r = brush.size / 2;
+      const soft = Math.max(1, (1 - (brush.hardness ?? 1)) * r);
+      const radius = brush.contour === 'full' ? r : Math.max(0.5, r - soft / 2);
+      this.#tipFrame(ctx, brush);
+      this.#tipPath(ctx, brush.size, brush.tip, radius);
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // stroke in screen pixels
+      ctx.lineWidth = Math.max(1, Math.round(dpr)) * 2;
+      ctx.strokeStyle = 'rgb(255 255 255 / 70%)';
+      ctx.stroke();
+      ctx.lineWidth = Math.max(1, Math.round(dpr));
+      ctx.strokeStyle = 'rgb(0 0 0 / 80%)';
+      ctx.stroke();
+    }
+    if (brush.crosshair || brush.crosshairOnly || tiny) this.#drawCrosshair(ctx, centre);
+  }
+
+  /** The brush HUD: the tip filled in the preview colour (soft where the tip is soft) and a readout. */
+  #drawHud(ctx: CanvasRenderingContext2D, hud: BrushHud): void {
+    const v = this.#renderer.viewport;
+    const dpr = this.#renderer.devicePixelRatio;
+    const r = hud.size / 2;
+    const { r: cr, g: cg, b: cb } = hud.color;
+    const rgb = `${Math.round(cr * 255)} ${Math.round(cg * 255)} ${Math.round(cb * 255)}`;
+    this.#tipFrame(ctx, hud);
+    if (hud.tip) {
+      this.#tipPath(ctx, hud.size, hud.tip, r - 1);
+      ctx.fillStyle = `rgb(${rgb} / 50%)`;
+      ctx.fill();
+    } else {
+      const soft = Math.max(1, (1 - hud.hardness) * r);
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+      gradient.addColorStop(0, `rgb(${rgb} / 50%)`);
+      gradient.addColorStop(Math.max(0, (r - soft) / r), `rgb(${rgb} / 50%)`);
+      gradient.addColorStop(1, `rgb(${rgb} / 0%)`);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, 2 * Math.PI);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+    }
+    // The readout, to the right of the preview.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const centre = v.docToView({ x: hud.x, y: hud.y });
+    const font = 12 * dpr;
+    ctx.font = `${font}px system-ui, sans-serif`;
+    const pad = 6 * dpr;
+    const lineHeight = font * 1.35;
+    const width = Math.max(...hud.lines.map((l) => ctx.measureText(l).width)) + pad * 2;
+    const height = hud.lines.length * lineHeight + pad * 2 - (lineHeight - font);
+    // Right of the preview, or left of it where the canvas ends; never past the top or bottom.
+    const gap = r * v.zoom + 12 * dpr;
+    const right = centre.x + gap;
+    const x = right + width <= this.#canvas.width ? right : Math.max(0, centre.x - gap - width);
+    const y = Math.min(Math.max(0, centre.y - height / 2), Math.max(0, this.#canvas.height - height));
+    ctx.fillStyle = 'rgb(30 30 30 / 88%)';
+    ctx.fillRect(x, y, width, height);
+    ctx.fillStyle = '#eee';
+    ctx.textBaseline = 'top';
+    hud.lines.forEach((line, i) => ctx.fillText(line, x + pad, y + pad + i * lineHeight));
   }
 
   #loopsToDraw(doc: ImageDocument | null): { points: ArrayLike<number>; closed: boolean }[] {

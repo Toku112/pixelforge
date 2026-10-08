@@ -3,12 +3,13 @@
  * to scrub the value, arrow keys step it (Shift = ×10), and typed math is accepted
  * ("+10", "*2", "90-15"). Enter or leaving the field applies; Escape reverts.
  */
-import { useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { evaluateNumberInput } from './number-expr';
 
 export interface NumberFieldProps {
-  label: string;
+  /** Text, or an icon (then give `ariaLabel`). */
+  label: ReactNode;
   value: number;
   onChange: (value: number) => void;
   min?: number;
@@ -139,7 +140,7 @@ export function NumberField({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={onKeyDown}
-        aria-label={ariaLabel ?? label}
+        aria-label={ariaLabel ?? (typeof label === 'string' ? label : undefined)}
         data-autofocus={autofocus || undefined}
       />
     </label>

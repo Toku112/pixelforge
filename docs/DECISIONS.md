@@ -548,3 +548,26 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   held press replays the same.
 - Protect Texture keeps one texture across brush presets, so it comes with presets (Part E item 7) instead of now,
   when there are no presets to switch between.
+
+## D-038 — 2026-10-08 — Brush options bar, brush HUD, painting cursors and Preferences
+
+**Decision:**
+
+- Edit > Preferences (Ctrl/Cmd+K) is a dialog with a page list; it starts with the pages that have settings so far
+  (Tools: Overscroll and the HUD's vertical axis; Cursors: painting cursors and the HUD preview colour). Values live in
+  IndexedDB (database `pixelforge-settings`, apart from the brush library so neither needs a version upgrade for the
+  other), apply as soon as OK is pressed, and fall back to the defaults where storage is blocked or values are damaged.
+- Painting cursors as in the reference app: Normal Brush Tip (the default) hides the system pointer and outlines
+  where the tip paints at least half — for a round tip the middle of its soft rim, for a sampled tip the traced 50 %
+  contour; Full Size outlines all of it; Precise is the crosshair; Standard is the tool's own icon (our drawing). Tiny
+  outlines show a crosshair instead. Caps Lock swaps any of them for the crosshair (and the crosshair for the
+  outline).
+- The brush HUD: Alt+right-drag on Windows/Linux, Ctrl+Option-drag on macOS. Horizontally the outline's edge follows
+  the pointer (diameter ± 2 × the distance in image pixels); vertically 1 % per screen pixel, up softer and down
+  harder — or the opacity for sampled tips or with the preference off. The preview is the tip filled in the preview
+  colour at half opacity, soft where the tip is soft, with a readout beside it. The canvas has no browser context
+  menu (the right button belongs to the app).
+- The options bar follows the reference app: a Brush Settings toggle beside the preset picker, an airbrush toggle
+  after Flow (the Build-up setting), and a brush angle field (its icon is the drag handle). Spacing moved to the
+  Brush Settings panel, which also gains the angle/roundness dial, the Spacing checkbox (off: one dab per pointer
+  sample, so speed sets the spacing), Use Sample Size for sampled tips, and Clear Brush Controls in its menu.

@@ -3,7 +3,12 @@ import type { CommandDescriptor } from '../../../src/core/commands/command';
 import { ImageDocument } from '../../../src/core/document/document';
 import { Viewport } from '../../../src/engine/viewport/viewport';
 import { CropTool, cropHitTest, drawCropRect, fitRatio, resizeCropRect } from '../../../src/tools/crop/crop-tool';
-import type { CropBoxOverlay, ToolContext, ToolPointerEvent } from '../../../src/tools/types';
+import {
+  DEFAULT_CURSOR_PREFERENCES,
+  type CropBoxOverlay,
+  type ToolContext,
+  type ToolPointerEvent,
+} from '../../../src/tools/types';
 
 /** A 400 × 300 document shown at 100 %, document (0, 0) at view (0, 0). */
 function setup() {
@@ -25,6 +30,9 @@ function setup() {
     preview: () => {},
     selectLayers: () => {},
     report: () => {},
+    cursorPreferences: DEFAULT_CURSOR_PREFERENCES,
+    setBrushHud: () => {},
+    toolOptionsChanged: () => {},
   };
   const tool = new CropTool();
   tool.activate(ctx);

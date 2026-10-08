@@ -33,7 +33,8 @@ export const PANELS: Record<string, PanelDefinition> = {
     title: 'Brush Settings',
     icon: 'brush',
     component: BrushSettingsPanel,
-    float: { width: 430, height: 480 },
+    float: { width: 430, height: 500 },
+    menu: [{ label: 'Clear Brush Controls', command: 'brush.clearControls' }],
   },
   layers: {
     id: 'layers',

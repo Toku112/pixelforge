@@ -2,6 +2,7 @@
  * UI state (Zustand): active tool, panel layout, dialogs and the current view
  * readout. Document data lives in the Workspace, not here.
  */
+import type { PreferenceValues } from '../../app/preferences';
 import { create } from 'zustand';
 import type { RGB } from '../../core/color/color';
 import type { BlendMode, LayerBlendMode } from '../../core/document/layers';
@@ -64,7 +65,8 @@ export type DialogRequest =
       tip: { width: number; height: number; data: Uint8Array };
       name: string;
       resolve: (name: string | null) => void;
-    };
+    }
+  | { kind: 'preferences'; values: PreferenceValues; resolve: (values: PreferenceValues | null) => void };
 
 export interface WebpOptionsRequest {
   options: WebpSaveOptions;

@@ -21,6 +21,7 @@ import { PaintingTool } from '../../tools/paint/paint-tool';
 import { useController } from '../AppContext';
 import { NumberField } from '../controls/NumberField';
 import { TipThumbnail } from '../shell/BrushPicker';
+import { TipPoseWidget } from './TipPoseWidget';
 import { useUi } from '../state/ui-store';
 
 type Section = 'tip' | 'shape' | 'scatter' | 'texture' | 'dual' | 'color' | 'transfer' | 'pose';
@@ -279,6 +280,7 @@ export function BrushSettingsPanel() {
 
   const enabled = (s: Section) => s !== 'tip' && dyn[s].enabled;
   const tips = controller.services.brushes.list();
+  const currentTip = o.tip ? (controller.services.brushes.get(o.tip) ?? null) : null;
   const tex = dyn.texture;
   const dual = dyn.dual;
   const body: Record<Section, ReactNode> = {
@@ -319,26 +321,44 @@ export function BrushSettingsPanel() {
             width={64}
             onChange={(size) => set({ size })}
           />
+          {currentTip && (
+            <button
+              type="button"
+              className="option-button"
+              title="Back to the tip's own size"
+              disabled={o.size === Math.max(currentTip.width, currentTip.height)}
+              onClick={() => set({ size: Math.max(currentTip.width, currentTip.height) })}
+            >
+              Use Sample Size
+            </button>
+          )}
           <Check label="Flip X" checked={o.flipX} onChange={(flipX) => set({ flipX })} />
           <Check label="Flip Y" checked={o.flipY} onChange={(flipY) => set({ flipY })} />
-          <NumberField
-            label="Angle"
-            value={o.angle}
-            min={-180}
-            max={180}
-            suffix="°"
-            width={52}
-            onChange={(angle) => set({ angle })}
-          />
-          <NumberField
-            label="Roundness"
-            value={pct(o.roundness)}
-            min={1}
-            max={100}
-            suffix="%"
-            width={52}
-            onChange={(v) => set({ roundness: v / 100 })}
-          />
+        </div>
+        <div className="brush-group brush-pose">
+          <TipPoseWidget angle={o.angle} roundness={o.roundness} onChange={(pose) => set(pose)} />
+          <div className="brush-pose-fields">
+            <NumberField
+              label="Angle"
+              value={o.angle}
+              min={-180}
+              max={180}
+              suffix="°"
+              width={52}
+              onChange={(angle) => set({ angle })}
+            />
+            <NumberField
+              label="Roundness"
+              value={pct(o.roundness)}
+              min={1}
+              max={100}
+              suffix="%"
+              width={52}
+              onChange={(v) => set({ roundness: v / 100 })}
+            />
+          </div>
+        </div>
+        <div className="brush-group">
           <NumberField
             label="Hardness"
             value={pct(o.hardness)}
@@ -349,6 +369,14 @@ export function BrushSettingsPanel() {
             disabled={o.tip !== null}
             onChange={(v) => set({ hardness: v / 100 })}
           />
+          <label className="option-check">
+            <input
+              type="checkbox"
+              aria-label="Use spacing"
+              checked={o.spacingEnabled}
+              onChange={(e) => set({ spacingEnabled: e.target.checked })}
+            />
+          </label>
           <NumberField
             label="Spacing"
             value={pct(o.spacing)}
@@ -356,6 +384,8 @@ export function BrushSettingsPanel() {
             max={1000}
             suffix="%"
             width={52}
+            disabled={!o.spacingEnabled}
+            title={o.spacingEnabled ? undefined : 'Off: the pointer’s speed spaces the dabs'}
             onChange={(v) => set({ spacing: v / 100 })}
           />
         </div>

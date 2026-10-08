@@ -1181,3 +1181,84 @@
   padding: 12px;
   color: var(--text-dim, #999);
 }
+
+/* Preferences */
+.modal.preferences {
+  width: min(560px, calc(100vw - 32px));
+}
+.preferences-body {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  min-height: 260px;
+}
+.preferences-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-right: 1px solid var(--border-soft);
+  padding-right: 8px;
+}
+.preferences-pages button {
+  text-align: left;
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  border-radius: 3px;
+}
+.preferences-pages button.active {
+  background: var(--bg-hover, rgb(255 255 255 / 8%));
+}
+.preferences-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.preferences-page [role='radiogroup'] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+/* Brush Settings: tip angle and roundness */
+.brush-pose {
+  align-items: center;
+}
+.brush-pose-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tip-pose {
+  flex: none;
+  cursor: crosshair;
+  touch-action: none;
+  border-radius: 4px;
+}
+.tip-pose:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.tip-pose-ring {
+  fill: var(--bg-input, #1d1d1d);
+  stroke: var(--border);
+}
+.tip-pose-tip {
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 1.5;
+}
+.tip-pose-axis {
+  stroke: var(--fg-dim, #888);
+  stroke-dasharray: 2 2;
+}
+.tip-pose-arrow {
+  fill: var(--accent);
+  cursor: grab;
+}
+.tip-pose-dot {
+  fill: var(--fg);
+  stroke: var(--bg-panel);
+  cursor: ns-resize;
+}

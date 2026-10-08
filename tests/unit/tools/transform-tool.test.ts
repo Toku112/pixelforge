@@ -4,7 +4,12 @@ import { ImageDocument } from '../../../src/core/document/document';
 import type { Mat3 } from '../../../src/core/geometry/transform';
 import { Viewport } from '../../../src/engine/viewport/viewport';
 import { TransformTool } from '../../../src/tools/transform/transform-tool';
-import type { ToolContext, ToolPointerEvent, TransformBoxOverlay } from '../../../src/tools/types';
+import {
+  DEFAULT_CURSOR_PREFERENCES,
+  type ToolContext,
+  type ToolPointerEvent,
+  type TransformBoxOverlay,
+} from '../../../src/tools/types';
 
 /** A 400 × 300 document at 100 %, document (0, 0) at view (0, 0); a box over (100, 100)–(200, 150). */
 function setup() {
@@ -27,6 +32,9 @@ function setup() {
     preview: () => {},
     selectLayers: () => {},
     report: () => {},
+    cursorPreferences: DEFAULT_CURSOR_PREFERENCES,
+    setBrushHud: () => {},
+    toolOptionsChanged: () => {},
   };
   const tool = new TransformTool();
   tool.begin(

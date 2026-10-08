@@ -9,11 +9,27 @@
  * - Painting stays inside the selection, if there is one.
  * - The brush outline follows the pointer.
  * - With Build-up (airbrush), holding the pointer still keeps adding paint.
+ * - The cursor follows Preferences > Cursors: the tool's icon, a crosshair, or the
+ *   tip's outline (where it paints at least half, or at all); Caps Lock swaps in
+ *   the crosshair.
+ * - Alt+right-drag (Ctrl+Option-drag on macOS) shows the brush HUD: drag left or
+ *   right for the size, up (softer) or down (harder) for a round tip's hardness —
+ *   or the opacity, by preference and for sampled tips.
  */
 import type { PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_BRUSH, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
 import { DEFAULT_DYNAMICS, StrokeDabber } from '../../core/paint/dynamics';
-import type { BrushOutline, CursorState, PaintStroke, Tool, ToolContext, ToolPointerEvent } from '../types';
+import {
+  effectivePaintCursor,
+  type BrushAdjuster,
+  type BrushOutline,
+  type CursorState,
+  type PaintStroke,
+  type Tool,
+  type ToolContext,
+  type ToolPointerEvent,
+} from '../types';
+import { BRUSH_CURSOR, ERASER_CURSOR } from './cursors';
 
 export class PaintingTool implements Tool {
   readonly id: string;
@@ -26,6 +42,15 @@ export class PaintingTool implements Tool {
   #lastEnd: StrokePoint | null = null;
   /** Build-up: repeats the pointer's last sample while it is held still. */
   #hold: ReturnType<typeof setInterval> | null = null;
+  /** The brush HUD gesture: where it started and the settings then. */
+  #adjust: {
+    x: number;
+    y: number;
+    at: { x: number; y: number };
+    size: number;
+    hardness: number;
+    opacity: number;
+  } | null = null;
 
   constructor(kind: PaintTool) {
     this.kind = kind;
@@ -39,8 +64,15 @@ export class PaintingTool implements Tool {
     Object.assign(this.options, changes);
   }
 
-  cursor(_state: CursorState): string {
-    return 'crosshair';
+  cursor(state: CursorState): string {
+    switch (state.paintCursor ?? 'precise') {
+      case 'standard':
+        return this.kind === 'brush' ? BRUSH_CURSOR : ERASER_CURSOR;
+      case 'precise':
+        return 'crosshair';
+      default:
+        return 'none'; // the overlay draws the tip outline (and a crosshair when it is tiny)
+    }
   }
 
   busy(): boolean {
@@ -82,11 +114,17 @@ export class PaintingTool implements Tool {
     this.#hold = null;
   }
 
-  /** The cursor at the pointer — ahead of it where the browser predicts the next position. */
-  #outline(e: ToolPointerEvent, ctx: ToolContext): BrushOutline {
+  /**
+   * The cursor at the pointer — ahead of it where the browser predicts the next position — or
+   * null when the cursor is the icon or the crosshair (CSS cursors, see `cursor`).
+   */
+  #outline(e: ToolPointerEvent, ctx: ToolContext, painting = false): BrushOutline | null {
+    const prefs = ctx.cursorPreferences;
+    const mode = effectivePaintCursor(prefs.painting, e.capsLock ?? false);
+    if (mode === 'standard' || mode === 'precise') return null;
     const p = ctx.viewport.viewToDoc(e.predicted ?? { x: e.x, y: e.y });
     const o = this.options;
-    return {
+    const base = {
       x: p.x,
       y: p.y,
       size: o.size,
@@ -96,6 +134,67 @@ export class PaintingTool implements Tool {
       flipY: o.flipY,
       tip: o.tip,
     };
+    if (painting && prefs.crosshairWhilePainting) return { ...base, crosshairOnly: true };
+    return {
+      ...base,
+      contour: mode === 'full' ? 'full' : 'normal',
+      hardness: o.hardness,
+      crosshair: prefs.crosshairInTip,
+    };
+  }
+
+  readonly adjustBrush: BrushAdjuster = {
+    begin: (e, ctx) => {
+      if (this.#stroke || !ctx.document) return false;
+      const o = this.options;
+      const at = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
+      this.#adjust = { x: e.x, y: e.y, at, size: o.size, hardness: o.hardness, opacity: o.opacity };
+      ctx.setBrushOutline(null);
+      this.#showHud(ctx);
+      return true;
+    },
+    move: (e, ctx) => {
+      const a = this.#adjust;
+      if (!a) return;
+      // Horizontally the outline's edge follows the pointer; vertically 1 % per CSS pixel.
+      const size = Math.round(a.size + (2 * (e.x - a.x)) / ctx.viewport.zoom);
+      const dy = (e.y - a.y) / ctx.devicePixelRatio / 100;
+      const changes: Partial<BrushSettings> = { size: Math.min(5000, Math.max(1, size)) };
+      const percent = (v: number, lo: number) => Math.round(Math.min(1, Math.max(lo, v)) * 100) / 100;
+      if (this.options.tip === null && ctx.cursorPreferences.hudHardness)
+        changes.hardness = percent(a.hardness + dy, 0);
+      else changes.opacity = percent(a.opacity + dy, 0.01);
+      this.setOptions(changes);
+      ctx.toolOptionsChanged();
+      this.#showHud(ctx);
+    },
+    end: (ctx) => {
+      this.#adjust = null;
+      ctx.setBrushHud(null);
+    },
+  };
+
+  #showHud(ctx: ToolContext): void {
+    const a = this.#adjust;
+    if (!a) return;
+    const o = this.options;
+    ctx.setBrushHud({
+      x: a.at.x,
+      y: a.at.y,
+      size: o.size,
+      hardness: o.hardness,
+      angle: o.angle,
+      roundness: o.roundness,
+      flipX: o.flipX,
+      flipY: o.flipY,
+      tip: o.tip,
+      color: ctx.cursorPreferences.previewColor,
+      lines: [
+        `Diameter: ${o.size} px`,
+        ...(o.tip === null ? [`Hardness: ${Math.round(o.hardness * 100)}%`] : []),
+        `Opacity: ${Math.round(o.opacity * 100)}%`,
+      ],
+    });
   }
 
   onPointerDown(e: ToolPointerEvent, ctx: ToolContext): void {
@@ -116,23 +215,24 @@ export class PaintingTool implements Tool {
     points.push(p);
     session.add(spacer.add(p));
     if (this.options.dynamics?.buildUp) this.#startHold();
-    ctx.setBrushOutline(this.#outline(e, ctx));
+    ctx.setBrushOutline(this.#outline(e, ctx, true));
   }
 
   onPointerMove(e: ToolPointerEvent, ctx: ToolContext): void {
     const stroke = this.#stroke;
-    ctx.setBrushOutline(this.#outline(e, ctx));
+    ctx.setBrushOutline(this.#outline(e, ctx, stroke !== null));
     if (!stroke) return;
     const p = this.#point(e, ctx, stroke.start);
     stroke.points.push(p);
     stroke.session.add(stroke.spacer.add(p));
   }
 
-  onPointerUp(_e: ToolPointerEvent, _ctx: ToolContext): void {
+  onPointerUp(e: ToolPointerEvent, ctx: ToolContext): void {
     const stroke = this.#stroke;
     this.#stroke = null;
     this.#stopHold();
     if (!stroke) return;
+    ctx.setBrushOutline(this.#outline(e, ctx)); // back from the painting cursor
     this.#lastEnd = stroke.points.at(-1) ?? null;
     void stroke.session.end(stroke.points).catch(() => {
       // The session already restored the layer; the host reports problems.

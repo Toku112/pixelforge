@@ -8,6 +8,7 @@ import type { Dab } from '../core/paint/brush';
 import type { StrokeSetup } from '../core/paint/stroke';
 import { BrushLibrary } from './brush-library';
 import { PatternLibrary } from './pattern-library';
+import { Preferences } from './preferences';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
@@ -39,8 +40,11 @@ export interface AppServices {
   traceOutline: OutlineTracer;
   /** The Brush Settings preview strip (RGBA rows, at most 256 × 256). */
   brushPreview: (setup: StrokeSetup, dabs: Dab[], width: number, height: number) => Promise<Uint8Array>;
-  /** The outline of a sampled brush tip (tip pixels), for the brush cursor. */
-  traceTip: (tip: { width: number; height: number; data: Uint8Array }) => Promise<Float32Array[]>;
+  /** The outline of a sampled brush tip (tip pixels) where it paints half / at all, for the brush cursor. */
+  traceTip: (
+    tip: { width: number; height: number; data: Uint8Array },
+    contour?: 'normal' | 'full',
+  ) => Promise<Float32Array[]>;
   /** Live brush/eraser strokes in the pixel worker. */
   strokes: StrokeEngine;
   /** Pixel operations in the worker (also used by the commands). */
@@ -49,6 +53,8 @@ export interface AppServices {
   brushes: BrushLibrary;
   /** Patterns (brush Texture). */
   patterns: PatternLibrary;
+  /** Edit > Preferences. */
+  preferences: Preferences;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -72,11 +78,13 @@ export async function createServices(): Promise<AppServices> {
     workspace,
     renderThumbnail: (source, area, width, height) => pixelWorker.layerThumbnail(source, area, width, height),
     traceOutline: (mask, canvas) => pixelWorker.selectionOutline(mask, canvas),
-    traceTip: (tip) => pixelWorker.tipOutline(tip.width, tip.height, tip.data),
+    traceTip: (tip, contour = 'normal') =>
+      pixelWorker.tipOutline(tip.width, tip.height, tip.data, contour === 'full' ? 1 : 128),
     brushPreview: (setup, dabs, width, height) => pixelWorker.brushPreview(setup, dabs, width, height),
     strokes: createStrokeEngine(pixelWorker),
     pixelOps,
     brushes,
     patterns,
+    preferences: new Preferences(),
   };
 }

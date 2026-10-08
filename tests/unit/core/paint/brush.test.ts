@@ -56,6 +56,12 @@ describe('brush maths', () => {
     expect(b.map((d) => round(d.x))).toEqual(a.map((d) => round(d.x)));
   });
 
+  it('with Spacing off, puts a dab at every sample that moved (the pointer speed spaces them)', () => {
+    const spacer = new DabSpacer({ ...DEFAULT_BRUSH, size: 20, spacingEnabled: false });
+    const dabs = [0, 1, 1, 30, 31].flatMap((x) => spacer.add(pt(x, 0)));
+    expect(dabs.map((d) => d.x)).toEqual([0, 1, 30, 31]);
+  });
+
   it('uses pen pressure for size and opacity when asked', () => {
     const spacer = new DabSpacer({ ...DEFAULT_BRUSH, size: 40, pressureSize: true, pressureOpacity: true });
     const [first] = spacer.add(pt(0, 0, 0.5));

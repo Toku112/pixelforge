@@ -32,6 +32,8 @@ export interface BrushSettings {
   flow: number;
   /** Distance between dabs as a fraction of the diameter (0.01–10). */
   spacing: number;
+  /** Spacing applies; when off, a dab lands at every pointer sample (the pointer's speed spaces them). */
+  spacingEnabled: boolean;
   /** Pen pressure scales the size / the opacity of each dab. */
   pressureSize: boolean;
   pressureOpacity: boolean;
@@ -54,6 +56,7 @@ export const DEFAULT_BRUSH: Readonly<BrushSettings> = Object.freeze({
   opacity: 1,
   flow: 1,
   spacing: 0.25,
+  spacingEnabled: true,
   pressureSize: false,
   pressureOpacity: false,
   angle: 0,
@@ -243,6 +246,15 @@ export class DabSpacer {
       this.#direction = Math.atan2(dy, dx);
       this.#initialDirection ??= this.#direction;
     }
+    if (!this.#settings.spacingEnabled) {
+      // Spacing off: one dab per sample that moved.
+      if (length > 0) {
+        dabs.push(this.#placed(this.#dab(p), p));
+        this.#lastTime = p.time;
+      }
+      this.#buildUp(p, dabs);
+      return dabs;
+    }
     let travelled = 0;
     while (length - travelled >= this.#remaining) {
       travelled += this.#remaining;
@@ -264,17 +276,20 @@ export class DabSpacer {
       this.#lastTime = point.time;
     }
     this.#remaining -= length - travelled;
-    if (this.#interval > 0) {
-      // Build-up: paint keeps coming where the pointer is (at most a second's worth at once).
-      let n = 0;
-      while (p.time - this.#lastTime >= this.#interval && n < 30) {
-        this.#lastTime += this.#interval;
-        dabs.push(this.#placed(this.#dab(p), p));
-        n++;
-      }
-      if (n === 30) this.#lastTime = p.time;
-    }
+    this.#buildUp(p, dabs);
     return dabs;
+  }
+
+  /** Build-up: paint keeps coming where the pointer is (at most a second's worth at once). */
+  #buildUp(p: StrokePoint, dabs: PlacedDab[]): void {
+    if (this.#interval <= 0) return;
+    let n = 0;
+    while (p.time - this.#lastTime >= this.#interval && n < 30) {
+      this.#lastTime += this.#interval;
+      dabs.push(this.#placed(this.#dab(p), p));
+      n++;
+    }
+    if (n === 30) this.#lastTime = p.time;
   }
 
   /** Distance to the dab after `placed`: Spacing × its diameter. */

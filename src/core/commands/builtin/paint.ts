@@ -256,6 +256,7 @@ function parseBrush(v: unknown): BrushSettings {
     opacity: num('opacity', 0, 1),
     flow: num('flow', 0, 1),
     spacing: num('spacing', 0.01, 10),
+    spacingEnabled: b['spacingEnabled'] !== false,
     pressureSize: b['pressureSize'] === true,
     pressureOpacity: b['pressureOpacity'] === true,
     angle: optional('angle', -180, 180, DEFAULT_BRUSH.angle),

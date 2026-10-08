@@ -24,6 +24,7 @@ import {
 } from '../core/commands/builtin/paint';
 import { MAX_TIP_SIDE, stepBrushSize, stepHardness, type BrushMode, type BrushSettings } from '../core/paint/brush';
 import { planFromDocument } from '../core/composite/flatten';
+import { DEFAULT_DYNAMICS } from '../core/paint/dynamics';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
 import type { PaintHost, PaintStroke } from '../tools/types';
@@ -91,6 +92,7 @@ import { encodeDocumentAsPng } from '../io/save-png';
 import { encodeDocumentAsPsd } from '../io/psd';
 import { DEFAULT_JPEG_OPTIONS, type JpegSaveOptions } from '../io/jpeg-options';
 import { DEFAULT_WEBP_OPTIONS, type WebpSaveOptions } from '../io/webp-options';
+import type { PreferenceValues } from './preferences';
 import { encodeDocumentAsJpeg, encodeDocumentAsWebp } from '../io/save-flat';
 
 export interface UiBridge {
@@ -132,6 +134,8 @@ export interface UiBridge {
   webpOptions(request: WebpOptionsRequest): Promise<WebpSaveOptions | null>;
   /** The Brush Name dialog for a new tip; null when cancelled. */
   brushName(tip: { width: number; height: number; data: Uint8Array }, name: string): Promise<string | null>;
+  /** Edit > Preferences; the new values, or null when cancelled. */
+  preferences(values: PreferenceValues): Promise<PreferenceValues | null>;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -930,6 +934,29 @@ export class AppController {
         if (!doc?.selection) return ws.execute({ name: 'deleteLayers', params: {} });
         const color = this.#backgroundSamples();
         return ws.execute({ name: 'clear', params: color ? { color } : {} });
+      },
+    });
+    add({
+      id: 'brush.clearControls',
+      label: 'Clear Brush Controls',
+      enabled: () => this.#paintTool() !== null,
+      run: () => {
+        const tool = this.#paintTool();
+        if (!tool) return;
+        // Every Brush Settings section off; their settings are kept for when they are turned on again.
+        const d = structuredClone(tool.options.dynamics ?? DEFAULT_DYNAMICS);
+        for (const key of ['shape', 'scatter', 'texture', 'dual', 'color', 'transfer', 'pose'] as const)
+          d[key].enabled = false;
+        d.noise = d.wetEdges = d.buildUp = false;
+        this.#setPaintOptions({ dynamics: d });
+      },
+    });
+    add({
+      id: 'edit.preferences',
+      label: 'Preferences…',
+      run: async () => {
+        const values = await this.#ui.preferences(this.services.preferences.values);
+        if (values) await this.services.preferences.set(values);
       },
     });
     add({

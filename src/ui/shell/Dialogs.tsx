@@ -5,6 +5,7 @@ import type { BlendMode } from '../../core/document/layers';
 import { BlendModeOptions } from '../controls/BlendModeOptions';
 import { NumberField } from '../controls/NumberField';
 import { BrushNameDialog } from './BrushNameDialog';
+import { PreferencesDialog } from './PreferencesDialog';
 import { ColorPickerDialog } from './ColorPicker';
 import { FillDialog } from './FillDialog';
 import { Modal } from './Modal';
@@ -185,6 +186,8 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <WebpOptionsDialog dialog={dialog} />;
     case 'brush-name':
       return <BrushNameDialog dialog={dialog} />;
+    case 'preferences':
+      return <PreferencesDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (

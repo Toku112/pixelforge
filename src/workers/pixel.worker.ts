@@ -364,8 +364,11 @@ const conversions = {
     return transfer(out, [out.buffer]);
   },
 
-  /** The outline of a sampled brush tip (where it paints at least half), in tip pixels, for the cursor. */
-  tipOutline(width: number, height: number, data: Uint8Array): Float32Array[] {
+  /**
+   * The outline of a sampled brush tip, in tip pixels, for the cursor: where it paints at least
+   * `threshold` (0–255; 128 = half, the Normal Brush Tip cursor; 1 = at all, Full Size).
+   */
+  tipOutline(width: number, height: number, data: Uint8Array, threshold = 128): Float32Array[] {
     const tiles: { tx: number; ty: number; data: Uint8Array }[] = [];
     for (let ty = 0; ty * TILE_SIZE < height; ty++) {
       for (let tx = 0; tx * TILE_SIZE < width; tx++) {
@@ -373,7 +376,7 @@ const conversions = {
         let any = false;
         for (let y = 0; y < TILE_SIZE && ty * TILE_SIZE + y < height; y++)
           for (let x = 0; x < TILE_SIZE && tx * TILE_SIZE + x < width; x++)
-            if (data[(ty * TILE_SIZE + y) * width + tx * TILE_SIZE + x]! >= 128) {
+            if (data[(ty * TILE_SIZE + y) * width + tx * TILE_SIZE + x]! >= threshold) {
               tile[y * TILE_SIZE + x] = 255;
               any = true;
             }

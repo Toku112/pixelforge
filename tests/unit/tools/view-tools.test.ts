@@ -3,7 +3,12 @@ import { ImageDocument } from '../../../src/core/document/document';
 import { Viewport } from '../../../src/engine/viewport/viewport';
 import { HandTool, viewActions } from '../../../src/tools/hand/hand-tool';
 import { RotateViewTool, resetView } from '../../../src/tools/rotate-view/rotate-view-tool';
-import type { ToolContext, ToolPointerEvent, ViewRect } from '../../../src/tools/types';
+import {
+  DEFAULT_CURSOR_PREFERENCES,
+  type ToolContext,
+  type ToolPointerEvent,
+  type ViewRect,
+} from '../../../src/tools/types';
 import { ZoomTool } from '../../../src/tools/zoom/zoom-tool';
 
 function setup(zoom = 1) {
@@ -25,6 +30,9 @@ function setup(zoom = 1) {
     preview: () => {},
     selectLayers: () => {},
     report: () => {},
+    cursorPreferences: DEFAULT_CURSOR_PREFERENCES,
+    setBrushHud: () => {},
+    toolOptionsChanged: () => {},
   };
   return { viewport, ctx, overlays, changes: () => changes };
 }

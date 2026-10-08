@@ -35,13 +35,16 @@ export function CanvasArea() {
       preview: (descriptor) => void controller.previewDocumentCommand(descriptor),
       selectLayers: (ids) => controller.selectLayers(ids),
       report: (title, message) => void controller.report(title, message),
+      cursorPreferences: () => controller.services.preferences.values.cursors,
+      overscroll: () => controller.services.preferences.values.overscroll,
+      toolOptionsChanged: () => useUi.getState().bumpToolOptions(),
       ants: {
         canvas: antsRef.current!,
         trace: controller.services.traceOutline,
-        tipOutline: async (id) => {
+        tipOutline: async (id, contour) => {
           const tip = controller.services.brushes.get(id);
           if (!tip) return null;
-          return { loops: await controller.services.traceTip(tip), width: tip.width, height: tip.height };
+          return { loops: await controller.services.traceTip(tip, contour), width: tip.width, height: tip.height };
         },
       },
       onViewChange: (state) => {
@@ -59,6 +62,7 @@ export function CanvasArea() {
     const unsubscribe = useUi.subscribe((s, prev) => {
       if (s.activeToolId !== prev.activeToolId) view.toolChanged();
     });
+    const stopPreferences = controller.services.preferences.changes.on(() => view.preferencesChanged());
     const uninstallDrop = installFileDrop(
       hostRef.current!,
       (files) =>
@@ -70,6 +74,7 @@ export function CanvasArea() {
     return () => {
       cancelAnimationFrame(frame);
       unsubscribe();
+      stopPreferences();
       uninstallDrop();
       controller.attachCanvas(null);
       view.dispose();

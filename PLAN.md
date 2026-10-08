@@ -13,9 +13,10 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 3 (Texture, Dual Brush, Noise, Wet Edges, Build-up); items 1–2 (pen input, brush tips,
-  dynamics and an early Brush Settings panel); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 4 (Brush Settings panel completion and the full Brush options bar, HUD, cursor preferences)
+- Last completed: Part E item 4 (Brush Settings panel, Brush options bar, brush HUD, Edit > Preferences with painting
+  cursors); items 1–3 (pen input, tips, dynamics, texture, dual brush, wet edges, build-up); Phase 1 Part D items 1–12
+  and the automated part of item 13
+- Next up: Part E item 5 (stroke smoothing)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -487,12 +488,14 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] Interface (colour theme, highlight colour, border styles per screen mode, UI scaling, text size, language, tooltips, rich tooltips, panel options)
 - [ ] Workspace (auto-collapse icon panels, open docs as tabs, floating window docking, large tabs, narrow options bar)
 - [ ] Tools (show tooltips, gestures, overscroll, animated zoom, zoom with scroll wheel, flick panning, vary round brush hardness, use legacy free transform, show transformation values, double-click layer mask launches Select and Mask, use Shift key for tool switch, snap vector tools to pixel grid)
+  ↳ partial: overscroll and vary round brush hardness (Phase 2).
 - [ ] History & Content Credentials (history log to metadata/text file, edit log items)
 - [ ] File Handling (image previews, file extension case, save in background, auto-save every N minutes, camera raw preferences, maximise PSD compatibility, recent file list length)
 - [ ] Export (quick export format/location/metadata/colour space)
 - [ ] Performance (memory usage budget, history states, cache levels & tile size, GPU settings with WebGL/WebGPU selection, legacy compositing off)
 - [ ] Scratch Disks (web-alt: OPFS quota usage display, clear cache)
 - [ ] Cursors (painting cursors, other cursors, brush preview colour)
+  ↳ partial: painting cursors (with Caps Lock) and brush preview colour; other cursors to come.
 - [ ] Transparency & Gamut (grid size, colours, gamut warning colour/opacity)
 - [ ] Units & Rulers (units, column size, new document preset resolutions, point/pica size)
 - [ ] Guides, Grid & Slices (colours, styles, gridline every, subdivisions)
@@ -639,9 +642,10 @@ engine first, then its controls, then the tools built on it.
   ↳ note: set in the Brush Settings panel (F5), built early with these sections and a live preview stroke; item 4 completes the panel. Spacing follows control-driven size so tapers stay joined (D-036, FORMAT_NOTES §8).
 - [x] Texture, Dual Brush, Noise, Wet Edges, Build-up (airbrush, paint while held still)
   ↳ note: our own built-in patterns (Paper, Rough Paper, Canvas, Grain, Hatching, Dots) until Define Pattern (item 12); mode arithmetic is ours, to be checked against real output (D-037, FORMAT_NOTES §8). Protect Texture moved to item 7: it only matters when switching presets.
-- [ ] Brush Settings panel and the full Brush options bar (size, hardness, mode, opacity and flow with pressure toggles, airbrush, smoothing, angle, symmetry), on-canvas size/hardness HUD (Alt+right-drag / Ctrl+Option-drag), brush cursor preferences
-- [ ] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom
-- [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path
+- [x] Brush Settings panel and the full Brush options bar (size, hardness, mode, opacity and flow with pressure toggles, airbrush, angle), on-canvas size/hardness HUD (Alt+right-drag / Ctrl+Option-drag), brush cursor preferences
+  ↳ note: the Smoothing and Symmetry controls of the options bar moved to items 5 and 6, with the features they set; Edit > Preferences starts with the Tools and Cursors pages (D-038).
+- [ ] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom; the Smoothing field and its options in the options bar and Brush Settings
+- [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path; the Symmetry menu in the options bar
 - [ ] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
 - [ ] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
 - [ ] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)

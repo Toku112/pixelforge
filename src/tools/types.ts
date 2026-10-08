@@ -5,6 +5,7 @@
  */
 import type { PaintTool } from '../core/commands/builtin/paint';
 import type { CommandDescriptor } from '../core/commands/command';
+import type { RGB } from '../core/color/color';
 import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
 import type { DynamicsColors } from '../core/paint/dynamics';
 import type { ImageDocument } from '../core/document/document';
@@ -35,6 +36,64 @@ export interface ToolPointerEvent {
   pointerType?: 'mouse' | 'pen' | 'touch';
   /** Where the pointer is predicted to be next (canvas device px), for drawing the cursor ahead. */
   predicted?: { x: number; y: number };
+  /** Caps Lock is on (painting cursors switch to the precise crosshair). */
+  capsLock?: boolean;
+}
+
+/**
+ * Preferences > Cursors, painting cursors: the tool's icon, a crosshair, the tip's outline where it
+ * paints at least half (Normal Brush Tip) or wherever it paints at all (Full Size Brush Tip).
+ */
+export type PaintCursor = 'standard' | 'precise' | 'normal' | 'full';
+
+export interface CursorPreferences {
+  painting: PaintCursor;
+  /** A crosshair at the centre of the brush outline. */
+  crosshairInTip: boolean;
+  /** Only the crosshair while a stroke is being painted. */
+  crosshairWhilePainting: boolean;
+  /** Dragging the brush HUD vertically changes a round tip's hardness (otherwise the opacity). */
+  hudHardness: boolean;
+  /** Colour of the HUD's brush preview (sRGB 0–1). */
+  previewColor: RGB;
+}
+
+export const DEFAULT_CURSOR_PREFERENCES: CursorPreferences = Object.freeze({
+  painting: 'normal',
+  crosshairInTip: false,
+  crosshairWhilePainting: false,
+  hudHardness: true,
+  previewColor: Object.freeze({ r: 1, g: 0, b: 0 }),
+});
+
+/** The painting cursor in effect: Caps Lock swaps a tip outline (or the icon) for the crosshair, and back. */
+export function effectivePaintCursor(mode: PaintCursor, capsLock: boolean): PaintCursor {
+  if (!capsLock) return mode;
+  return mode === 'precise' ? 'normal' : 'precise';
+}
+
+/** The on-canvas brush HUD: a filled preview of the tip at a document point, and a readout. */
+export interface BrushHud {
+  x: number;
+  y: number;
+  size: number;
+  hardness: number;
+  angle: number;
+  roundness: number;
+  flipX: boolean;
+  flipY: boolean;
+  tip: string | null;
+  color: RGB;
+  /** Readout lines ("Diameter: 30 px"). */
+  lines: string[];
+}
+
+/** Tools whose brush can be sized on the canvas (Alt+right-drag, or Ctrl+Option-drag on macOS). */
+export interface BrushAdjuster {
+  /** Starts the gesture at the pointer; false when there is nothing to adjust. */
+  begin(e: ToolPointerEvent, ctx: ToolContext): boolean;
+  move(e: ToolPointerEvent, ctx: ToolContext): void;
+  end(ctx: ToolContext): void;
 }
 
 export interface ViewRect {
@@ -67,6 +126,14 @@ export interface BrushOutline {
   flipX?: boolean;
   flipY?: boolean;
   tip?: string | null;
+  /** Which outline: where the tip paints at least half (normal, the default) or at all (full). */
+  contour?: 'normal' | 'full';
+  /** The round tip's hardness (for the normal outline). */
+  hardness?: number;
+  /** Also a crosshair at the centre. */
+  crosshair?: boolean;
+  /** Only the crosshair, no outline. */
+  crosshairOnly?: boolean;
 }
 
 /** Free Transform's box (document coordinates): its corners, the 8 handles and the reference point (if shown). */
@@ -120,12 +187,20 @@ export interface ToolContext {
   selectLayers(ids: string[]): void;
   /** Tells the user why something cannot be done. */
   report(title: string, message: string): void;
+  /** Preferences > Cursors (and the HUD's), read when drawing cursors. */
+  readonly cursorPreferences: CursorPreferences;
+  /** Shows the brush HUD, or hides it with null. */
+  setBrushHud(hud: BrushHud | null): void;
+  /** A tool changed its own options (e.g. the brush HUD): refresh what shows them. */
+  toolOptionsChanged(): void;
 }
 
 /** Modifier and drag state that decides a tool's cursor. */
 export interface CursorState {
   altKey: boolean;
   dragging: boolean;
+  /** The painting cursor in effect (preferences and Caps Lock). */
+  paintCursor?: PaintCursor;
 }
 
 export interface Tool {
@@ -152,4 +227,6 @@ export interface Tool {
   activate?(ctx: ToolContext): void;
   /** Another tool was chosen (or the document goes away): hide what the tool shows. */
   deactivate?(ctx: ToolContext): void;
+  /** The brush HUD gesture, for tools with a brush. */
+  readonly adjustBrush?: BrushAdjuster;
 }

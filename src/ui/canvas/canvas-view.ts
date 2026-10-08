@@ -10,7 +10,13 @@ import type { ImageDocument } from '../../core/document/document';
 import { Renderer, type RendererOptions } from '../../engine/gl/renderer';
 import type { ViewportState } from '../../engine/viewport/viewport';
 import type { ToolSet } from '../../tools/registry';
-import type { PaintHost, ToolContext, ViewRect } from '../../tools/types';
+import {
+  DEFAULT_CURSOR_PREFERENCES,
+  type CursorPreferences,
+  type PaintHost,
+  type ToolContext,
+  type ViewRect,
+} from '../../tools/types';
 import { CanvasInput } from './canvas-input';
 import { SelectionOverlay } from './selection-overlay';
 
@@ -31,12 +37,19 @@ export interface CanvasViewOptions {
   preview?(descriptor: CommandDescriptor | null): void;
   selectLayers?(ids: string[]): void;
   report?(title: string, message: string): void;
+  /** Preferences > Cursors (defaults when absent). */
+  cursorPreferences?(): CursorPreferences;
+  /** A tool changed its own options (the brush HUD). */
+  toolOptionsChanged?(): void;
   /** Marching ants: a 2D canvas stacked above the document canvas, and the outline tracer. */
   ants?: {
     canvas: HTMLCanvasElement;
     trace: OutlineTracer;
     /** The outline of a sampled brush tip by id (tip pixels and size), for the brush cursor. */
-    tipOutline?: (id: string) => Promise<{ loops: Float32Array[]; width: number; height: number } | null>;
+    tipOutline?: (
+      id: string,
+      contour: 'normal' | 'full',
+    ) => Promise<{ loops: Float32Array[]; width: number; height: number } | null>;
   };
   renderer?: RendererOptions;
 }
@@ -88,6 +101,11 @@ export class CanvasView {
       preview: (descriptor) => options.preview?.(descriptor),
       selectLayers: (ids) => options.selectLayers?.(ids),
       report: (title, message) => options.report?.(title, message),
+      get cursorPreferences() {
+        return options.cursorPreferences?.() ?? DEFAULT_CURSOR_PREFERENCES;
+      },
+      setBrushHud: (hud) => this.#ants?.setBrushHud(hud),
+      toolOptionsChanged: () => options.toolOptionsChanged?.(),
     };
     canvas.tabIndex = 0; // focusable, so keyboard tools work after clicking the canvas
     this.#input = new CanvasInput({
@@ -162,6 +180,12 @@ export class CanvasView {
     const viewport = this.renderer.viewport;
     viewport.fit(doc.width, doc.height, FIT_MARGIN * this.renderer.devicePixelRatio);
     if (atMost100 && viewport.zoom > 1) viewport.centerDocument(doc.width, doc.height, 1);
+    this.#viewChanged();
+  }
+
+  /** Preferences changed: the cursor and the view limits (Overscroll) follow at once. */
+  preferencesChanged(): void {
+    this.#input.refresh();
     this.#viewChanged();
   }
 

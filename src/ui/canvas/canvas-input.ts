@@ -9,8 +9,11 @@
  *   active tool first when it is in the middle of something (polygonal lasso).
  * - Pressing or releasing Shift, Alt/Option or Space during a drag updates the
  *   tool at once (e.g. a marquee becomes a square), without moving the pointer.
+ * - Alt+right-drag (Ctrl+Option-drag on macOS) sizes the brush of tools that have
+ *   one (the brush HUD). The canvas has no browser context menu.
+ * - Caps Lock switches painting cursors to the precise crosshair.
  */
-import type { Tool, ToolContext, ToolPointerEvent } from '../../tools/types';
+import { effectivePaintCursor, type Tool, type ToolContext, type ToolPointerEvent } from '../../tools/types';
 import type { ToolSet } from '../../tools/registry';
 
 export interface CanvasInputOptions {
@@ -56,6 +59,11 @@ export class CanvasInput {
   #space = false;
   #alt = false;
   #primary = false;
+  #capsLock = false;
+  /** The brush HUD gesture in progress. */
+  #adjusting: { tool: Tool; pointerId: number } | null = null;
+  /** Last hover position (re-sent when Caps Lock changes the cursor). */
+  #lastHover: ToolPointerEvent | null = null;
   /** Last pointer position during a drag (re-sent when modifier keys change). */
   #lastMove: ToolPointerEvent | null = null;
   #activeTool: Tool | null = null;
@@ -70,6 +78,7 @@ export class CanvasInput {
     this.#listen(el, 'pointercancel', this.#onPointerCancel);
     this.#listen(el, 'pointerleave', this.#onPointerLeave);
     this.#listen(el, 'wheel', this.#onWheel, { passive: false });
+    this.#listen(el, 'contextmenu', (e) => e.preventDefault());
     this.#listen(window, 'keydown', this.#onKeyDown);
     this.#listen(window, 'keyup', this.#onKeyUp);
     this.#listen(window, 'blur', this.#onBlur);
@@ -142,6 +151,7 @@ export class CanvasInput {
       // The stylus wheel arrives as tangential pressure (−1–1); its resting position is 0.
       wheel: pen ? Math.min(1, Math.max(0, pe.tangentialPressure)) : 0,
       time: e.timeStamp,
+      capsLock: e.getModifierState?.('CapsLock') ?? false,
       pointerType: pe?.pointerType === 'pen' || pe?.pointerType === 'touch' ? pe.pointerType : 'mouse',
       ...(predicted
         ? { predicted: { x: (predicted.clientX - rect.left) * dpr, y: (predicted.clientY - rect.top) * dpr } }
@@ -149,8 +159,25 @@ export class CanvasInput {
     };
   }
 
+  /** Alt+right-press, or Ctrl+Option-press on macOS, on a tool with a brush. */
+  #startAdjust(e: PointerEvent): boolean {
+    const gesture = isMac ? e.button === 0 && e.ctrlKey && e.altKey : e.button === 2 && e.altKey;
+    const tool = this.currentTool;
+    if (!gesture || !tool.adjustBrush || !this.#o.context.document || this.#dragTool || this.#adjusting) return false;
+    e.preventDefault();
+    if (!tool.adjustBrush.begin(this.#toolEvent(e), this.#o.context)) return false;
+    try {
+      this.#o.element.setPointerCapture(e.pointerId);
+    } catch {
+      // Already gone: the gesture still works without capture.
+    }
+    this.#adjusting = { tool, pointerId: e.pointerId };
+    return true;
+  }
+
   readonly #onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0 || this.#dragTool) return;
+    if (this.#startAdjust(e)) return;
+    if (e.button !== 0 || this.#dragTool || this.#adjusting) return;
     e.preventDefault();
     this.#o.element.focus({ preventScroll: true });
     try {
@@ -166,6 +193,11 @@ export class CanvasInput {
   };
 
   readonly #onPointerMove = (e: PointerEvent) => {
+    if (this.#adjusting) {
+      if (e.pointerId === this.#adjusting.pointerId)
+        this.#adjusting.tool.adjustBrush!.move(this.#toolEvent(e), this.#o.context);
+      return;
+    }
     if (this.#dragTool && e.pointerId === this.#pointerId) {
       // Coalesced events give every intermediate position for smooth drags; the last one
       // carries where the pointer is predicted to go (for drawing the cursor ahead).
@@ -177,13 +209,27 @@ export class CanvasInput {
         this.#dragTool!.onPointerMove?.(this.#lastMove, this.#o.context);
       });
     } else if (!this.#dragTool && this.#o.context.document) {
-      this.currentTool.onPointerHover?.(this.#toolEvent(e, e.getPredictedEvents?.().at(-1)), this.#o.context);
+      this.#lastHover = this.#toolEvent(e, e.getPredictedEvents?.().at(-1));
+      this.currentTool.onPointerHover?.(this.#lastHover, this.#o.context);
       this.#updateCursor(); // the cursor may depend on what is under the pointer (crop handles)
     }
     this.#syncModifiers(e);
   };
 
+  #endAdjust(): void {
+    const adjusting = this.#adjusting;
+    if (!adjusting) return;
+    this.#adjusting = null;
+    if (this.#o.element.hasPointerCapture(adjusting.pointerId))
+      this.#o.element.releasePointerCapture(adjusting.pointerId);
+    adjusting.tool.adjustBrush!.end(this.#o.context);
+  }
+
   readonly #onPointerUp = (e: PointerEvent) => {
+    if (this.#adjusting && e.pointerId === this.#adjusting.pointerId) {
+      this.#endAdjust();
+      return;
+    }
     if (!this.#dragTool || e.pointerId !== this.#pointerId) return;
     const tool = this.#dragTool;
     this.#dragTool = null;
@@ -193,10 +239,14 @@ export class CanvasInput {
     this.#updateCursor();
   };
 
-  readonly #onPointerCancel = () => this.#cancelDrag();
+  readonly #onPointerCancel = () => {
+    this.#endAdjust();
+    this.#cancelDrag();
+  };
 
   readonly #onPointerLeave = () => {
-    if (!this.#dragTool) this.currentTool.onPointerLeave?.(this.#o.context);
+    this.#lastHover = null;
+    if (!this.#dragTool && !this.#adjusting) this.currentTool.onPointerLeave?.(this.#o.context);
   };
 
   readonly #onWheel = (e: WheelEvent) => {
@@ -267,11 +317,23 @@ export class CanvasInput {
 
   readonly #onBlur = () => {
     this.#space = this.#alt = this.#primary = false;
+    this.#endAdjust();
     this.#cancelDrag();
   };
 
   #syncModifiers(e: KeyboardEvent | MouseEvent): void {
     const primary = isMac ? e.metaKey : e.ctrlKey;
+    const caps = e.getModifierState?.('CapsLock') ?? false;
+    if (caps !== this.#capsLock) {
+      this.#capsLock = caps;
+      // The painting cursor changes at once, without moving the pointer.
+      const hover = this.#lastHover;
+      if (hover && !this.#dragTool && !this.#adjusting) {
+        this.#lastHover = { ...hover, capsLock: caps };
+        this.currentTool.onPointerHover?.(this.#lastHover, this.#o.context);
+      }
+      this.#updateCursor();
+    }
     if (e.altKey !== this.#alt || primary !== this.#primary) {
       this.#alt = e.altKey;
       this.#primary = primary;
@@ -292,8 +354,9 @@ export class CanvasInput {
 
   #updateCursor(): void {
     const tool = this.#dragTool ?? this.currentTool;
+    const paintCursor = effectivePaintCursor(this.#o.context.cursorPreferences.painting, this.#capsLock);
     this.#o.element.style.cursor = this.#o.context.document
-      ? tool.cursor({ altKey: this.#alt, dragging: !!this.#dragTool })
+      ? tool.cursor({ altKey: this.#alt, dragging: !!this.#dragTool, paintCursor })
       : 'default';
   }
 }
