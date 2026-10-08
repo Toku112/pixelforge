@@ -13,7 +13,7 @@ import {
 } from '../core/composite/blend';
 import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
-import { colorToSamples, type RGB } from '../core/color/color';
+import { colorToSamples, rgbToHex, type RGB } from '../core/color/color';
 import {
   dynamicsColors,
   paintTarget,
@@ -34,11 +34,13 @@ import { planFromDocument } from '../core/composite/flatten';
 import { DEFAULT_DYNAMICS } from '../core/paint/dynamics';
 import { applyPreset, presetFromBrush, type BrushBundle } from '../core/paint/presets';
 import { BRUSH_FILE_EXTENSION, readBrushFile, writeBrushFile } from '../io/brush-file';
+import { readAco, readAse } from '../io/swatch-files';
 
+import { sampleRect, samplePlan, sampledToRgb, type EyedropperOptions } from '../core/paint/sample';
 import { SYMMETRY_KINDS, defaultSymmetry, hasSegments, type SymmetryKind } from '../core/paint/symmetry';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
-import type { PaintHost, PaintStroke, Tool } from '../tools/types';
+import type { ColorHost, PaintHost, PaintStroke, Tool } from '../tools/types';
 import { PaintSession } from './paint-session';
 import { ColorSwatches } from './colors';
 import {
@@ -171,6 +173,7 @@ const TOOL_COMMANDS: Record<string, string> = {
   'tool.brush': 'brush',
   'tool.eraser': 'eraser',
   'tool.crop': 'crop',
+  'tool.eyedropper': 'eyedropper',
 };
 
 /** Two number keys typed within this time (ms) make one value ("4", "5" → 45 %). */
@@ -191,6 +194,14 @@ export class AppController {
   readonly colors = new ColorSwatches();
   /** Starts brush/eraser strokes on the active document. */
   readonly paintHost: PaintHost = { begin: (tool, brush) => this.#beginStroke(tool, brush) };
+  /** The colours, and sampling them off the active document (Eyedropper, Alt with the Brush). */
+  readonly colorHost: ColorHost = {
+    sample: (x, y, options) => this.#sampleColor(x, y, options),
+    get: (which) => (which === 'foreground' ? this.colors.foreground : this.colors.background),
+    set: (which, color) =>
+      which === 'foreground' ? this.colors.setForeground(color) : this.colors.setBackground(color),
+    eyedropper: this.tools.eyedropper.options,
+  };
   #lastDigit: { digit: number; time: number; shift: boolean } | null = null;
   readonly keyboard: KeyboardService;
   readonly #ui: UiBridge;
@@ -460,6 +471,16 @@ export class AppController {
   }
 
   /** Edit > Free Transform: opens the transform box around the selection or the selected layers. */
+  /** The active document's colour at a document point (the Eyedropper's options); null where nothing is painted. */
+  async #sampleColor(x: number, y: number, options: EyedropperOptions): Promise<RGB | null> {
+    const doc = this.workspace.active?.doc;
+    if (!doc || (doc.mode !== 'rgb' && doc.mode !== 'grayscale')) return null;
+    const rect = sampleRect(x, y, options.sampleSize, doc.canvasRect);
+    if (!rect) return null;
+    const values = await this.services.pixelOps.sampleColor(samplePlan(doc, options.source), rect);
+    return values ? sampledToRgb(values, doc.mode, doc.depth) : null;
+  }
+
   #symmetryHidden = false;
 
   /** Whether the paint symmetry guide is hidden (Hide Symmetry). */
@@ -793,6 +814,83 @@ export class AppController {
       confirmLabel: 'Restore',
     });
     if (ok) await this.services.brushes.restoreDefaults();
+  }
+
+  // -- swatches ---------------------------------------------------------------
+
+  #swatchId: string | null = null;
+
+  /** The swatch clicked last (Delete Swatch acts on it). */
+  get currentSwatchId(): string | null {
+    return this.#swatchId;
+  }
+
+  /** A swatch clicked: the foreground colour (with Ctrl/Cmd, the background). */
+  chooseSwatch(id: string, background = false): void {
+    const swatch = this.services.swatches.find(id);
+    if (!swatch) return;
+    this.#swatchId = id;
+    if (background) this.colors.setBackground(swatch.color);
+    else this.colors.setForeground(swatch.color);
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** New Swatch: the foreground colour under a name. */
+  async newSwatch(group?: string): Promise<void> {
+    const answer = await this.#ui.askName({
+      title: 'Color Swatch Name',
+      name: `Swatch ${rgbToHex(this.colors.foreground)}`,
+    });
+    if (!answer) return;
+    const id = newId();
+    await this.services.swatches.add({ id, name: answer.name, color: { ...this.colors.foreground } }, group);
+    this.#swatchId = id;
+  }
+
+  async newSwatchGroup(): Promise<void> {
+    const answer = await this.#ui.askName({
+      title: 'New Swatch Group',
+      name: `Group ${this.services.swatches.groups().length + 1}`,
+    });
+    if (answer) await this.services.swatches.addGroup(answer.name);
+  }
+
+  async deleteSwatch(id = this.#swatchId): Promise<void> {
+    if (!id || !this.services.swatches.find(id)) return;
+    await this.services.swatches.remove(id);
+    if (this.#swatchId === id) this.#swatchId = null;
+    this.#ui.toolOptionsChanged();
+  }
+
+  async renameSwatch(id = this.#swatchId): Promise<void> {
+    const swatch = id ? this.services.swatches.find(id) : undefined;
+    if (!swatch) return;
+    const answer = await this.#ui.askName({ title: 'Color Swatch Name', name: swatch.name });
+    if (answer) await this.services.swatches.rename(swatch.id, answer.name);
+  }
+
+  /** Import Swatches: .ase and .aco files. */
+  async importSwatches(): Promise<void> {
+    const files = await pickFiles({ 'application/octet-stream': ['.ase', '.aco'] }, 'Swatches');
+    for (const file of files) {
+      const group = file.name.replace(/\.[^.]+$/, '');
+      try {
+        const groups = /\.ase$/i.test(file.name) ? readAse(file.bytes, group) : readAco(file.bytes, group);
+        if (groups.every((g) => g.swatches.length === 0)) throw new Error('It has no colours.');
+        await this.services.swatches.import(groups);
+      } catch (error) {
+        await this.#ui.alert(`Could not import “${file.name}”`, error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  async restoreDefaultSwatches(): Promise<void> {
+    const ok = await this.#ui.confirm({
+      title: 'Restore Default Swatches',
+      message: 'Bring back the default swatches? Your own groups stay.',
+      confirmLabel: 'Restore',
+    });
+    if (ok) await this.services.swatches.restoreDefaults();
   }
 
   // -- tool presets -----------------------------------------------------------
@@ -1742,6 +1840,8 @@ export class AppController {
       ['window.brushSettings', 'brush-settings', 'Brush Settings'],
       ['window.brushes', 'brushes', 'Brushes'],
       ['window.toolPresets', 'tool-presets', 'Tool Presets'],
+      ['window.color', 'color', 'Color'],
+      ['window.swatches', 'swatches', 'Swatches'],
     ] as const) {
       add({ id, label, checked: () => this.#ui.isPanelOpen(panel), run: () => this.#ui.togglePanel(panel) });
     }
@@ -1759,6 +1859,12 @@ export class AppController {
       ['brushes.export', 'Export Brushes…', () => this.exportBrushes(), undefined],
       ['brushes.restore', 'Restore Default Brushes…', () => this.restoreDefaultBrushes(), undefined],
       ['toolPresets.new', 'New Tool Preset…', () => this.newToolPreset(), () => this.canMakeToolPreset()],
+      ['swatches.new', 'New Swatch…', () => this.newSwatch(), undefined],
+      ['swatches.newGroup', 'New Swatch Group…', () => this.newSwatchGroup(), undefined],
+      ['swatches.rename', 'Rename Swatch…', () => this.renameSwatch(), () => this.#swatchId !== null],
+      ['swatches.delete', 'Delete Swatch', () => this.deleteSwatch(), () => this.#swatchId !== null],
+      ['swatches.import', 'Import Swatches…', () => this.importSwatches(), undefined],
+      ['swatches.restore', 'Restore Default Swatches…', () => this.restoreDefaultSwatches(), undefined],
       ['toolPresets.rename', 'Rename Tool Preset…', () => this.renameToolPreset(), hasToolPreset],
       ['toolPresets.delete', 'Delete Tool Preset', () => this.deleteToolPreset(), hasToolPreset],
     ] as const) {

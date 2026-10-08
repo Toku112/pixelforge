@@ -35,6 +35,8 @@ function setup(zoom = 1) {
     toolOptionsChanged: () => {},
     showSymmetry: () => {},
     setSymmetryEdit: () => {},
+    colors: null,
+    setSampleRing: () => {},
   };
   return { viewport, ctx, overlays, changes: () => changes };
 }

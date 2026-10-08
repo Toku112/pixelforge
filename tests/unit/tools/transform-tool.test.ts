@@ -37,6 +37,8 @@ function setup() {
     toolOptionsChanged: () => {},
     showSymmetry: () => {},
     setSymmetryEdit: () => {},
+    colors: null,
+    setSampleRing: () => {},
   };
   const tool = new TransformTool();
   tool.begin(

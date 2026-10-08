@@ -13,11 +13,11 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 8 (dab rendering in WebAssembly); items 1–7 (pen input, tips, dynamics, texture, dual
-  brush, wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors,
-  smoothing, symmetry, Brushes panel, presets, brush files, Tool Presets); Phase 1 Part D items 1–12 and the automated
-  part of item 13
-- Next up: Part E item 9 (Eyedropper tool, Alt-click sampling, Color and Swatches panels)
+- Last completed: Part E item 9 (Eyedropper, Alt-click sampling, Color and Swatches panels); items 1–8 (pen input,
+  tips, dynamics, texture, dual brush, wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences
+  with painting cursors, smoothing, symmetry, Brushes panel, presets, brush files, Tool Presets, WebAssembly dabs);
+  Phase 1 Part D items 1–12 and the automated part of item 13
+- Next up: Part E item 10 (Pencil tool and Eraser modes)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -96,7 +96,8 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Frame tool (rectangle/ellipse frames that hold placed images)
 
 ### Measurement
-- [ ] Eyedropper (I): sample size (point, 3×3 … 101×101 average), sample current/all layers, show sampling ring
+- [x] Eyedropper (I): sample size (point, 3×3 … 101×101 average), sample current/all layers, show sampling ring
+  ↳ note: also "current & below"; the "no adjustments" variants come with adjustment layers (Phase 4).
 - [ ] Color Sampler (up to 10 samplers, readouts in Info panel)
 - [ ] Ruler tool: distance/angle, Straighten Layer button
 - [ ] Note tool
@@ -319,6 +320,7 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
   ↳ partial: pressure, tilt (incl. Safari's altitude/azimuth), twist, wheel and coalesced events reach every stroke; predicted events move the cursor ahead (D-035). Missing: checks on real Windows Ink and iPad hardware.
 - [x] Tool Presets panel (save any tool + options, current tool only filter)
 - [ ] Patterns panel, Gradients panel (groups, import GRD/PAT), Swatches panel (import ASE/ACO), Shapes panel (import CSH), Styles panel (import ASL)
+  ↳ partial: Swatches panel with ASE/ACO import (Phase 2).
 
 ## B10. Layer styles & blending options
 
@@ -658,7 +660,8 @@ engine first, then its controls, then the tools built on it.
   ↳ note: ABR files of format versions 6–10 (2003 on) through ag-psd; bristle and erodible tips are approximated by round tips until such tips exist; the options bar's tool icon is the tool preset picker (D-041, FORMAT_NOTES §9).
 - [x] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
   ↳ note: WebAssembly paints plain strokes (Normal, Behind, Clear, erasing; round and sampled tips; selection, locked transparency) pixel-identically to the TypeScript renderer, ~6× faster single-threaded and across tiles on the thread pool; strokes with blend modes, texture, dual brush, wet edges, noise or varying colour/opacity stay in TypeScript for now. Measured by tests/e2e/perf/paint-perf.spec.ts: 60 fps, paint done 13 ms after release (D-042).
-- [ ] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)
+- [x] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)
+  ↳ note: Color panel sliders RGB, HSB, Grayscale and Lab (CMYK with colour management, Phase 7); CMYK and Lab swatches become sRGB by simple conversion until then (D-043, FORMAT_NOTES §10).
 - [ ] Pencil tool (aliased, Auto Erase) and Eraser modes (Brush/Pencil/Block)
 - [ ] Gradient tool (G), classic mode: linear, radial, angle, reflected, diamond; reverse, dither, transparency; methods perceptual/linear/classic/smooth/stripes; Gradient Editor (colour and opacity stops, midpoints, smoothness, noise gradients); Gradients panel; GRD import
 - [ ] Patterns: Edit > Define Pattern, Patterns panel, PAT import, Pattern contents in Edit > Fill, Pattern Stamp tool

@@ -16,6 +16,7 @@ import type {
   BrushOutline,
   CropBoxOverlay,
   SelectionPreview,
+  SampleRing,
   SymmetryEditOverlay,
   TransformBoxOverlay,
 } from '../../tools/types';
@@ -42,6 +43,7 @@ export class SelectionOverlay {
   #symmetryShown = false;
   #symmetryHidden = false;
   #symmetryEdit: SymmetryEditOverlay | null = null;
+  #ring: SampleRing | null = null;
   readonly #tipOutline: ((id: string, contour: 'normal' | 'full') => Promise<TipOutline | null>) | undefined;
   readonly #tipOutlines = new Map<string, TipOutline | 'pending' | null>();
   #crop: CropBoxOverlay | null = null;
@@ -95,6 +97,12 @@ export class SelectionOverlay {
 
   setSymmetryHidden(hidden: boolean): void {
     this.#symmetryHidden = hidden;
+    this.draw();
+  }
+
+  /** The Eyedropper's sampling ring, or none. */
+  setSampleRing(ring: SampleRing | null): void {
+    this.#ring = ring;
     this.draw();
   }
 
@@ -154,6 +162,7 @@ export class SelectionOverlay {
       this.#drawSymmetry(ctx, doc, doc.symmetry, null);
     if (doc && this.#crop) this.#drawCrop(ctx, doc, this.#crop);
     if (doc && this.#transform) this.#drawTransform(ctx, this.#transform);
+    if (doc && this.#ring) this.#drawRing(ctx, this.#ring);
     if (doc && this.#hud) this.#drawHud(ctx, this.#hud);
     else if (doc && this.#brush) this.#drawBrush(ctx, this.#brush);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -394,6 +403,39 @@ export class SelectionOverlay {
     }
     if (brush.crosshair || brush.crosshairOnly || tiny) this.#drawCrosshair(ctx, centre);
     if (brush.paintAt) this.#drawString(ctx, centre, brush.paintAt, brush.stringRadius);
+  }
+
+  /** The sampling ring round the pointer: the new colour above, the current one below, in a gray rim. */
+  #drawRing(ctx: CanvasRenderingContext2D, ring: SampleRing): void {
+    const dpr = this.#renderer.devicePixelRatio;
+    const p = this.#renderer.viewport.docToView({ x: ring.x, y: ring.y });
+    const css = (c: { r: number; g: number; b: number }) =>
+      `rgb(${Math.round(c.r * 255)} ${Math.round(c.g * 255)} ${Math.round(c.b * 255)})`;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const outer = 58 * dpr;
+    const inner = 34 * dpr;
+    const rim = 7 * dpr;
+    const half = (start: number, color: string) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, outer - rim, start, start + Math.PI);
+      ctx.arc(p.x, p.y, inner, start + Math.PI, start, true);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    };
+    // Gray rim (neutral, so the colours are judged against it).
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, outer, 0, 2 * Math.PI);
+    ctx.arc(p.x, p.y, inner - 1, 0, 2 * Math.PI, true);
+    ctx.fillStyle = 'rgb(128 128 128)';
+    ctx.fill();
+    half(Math.PI, css(ring.now)); // top
+    half(0, css(ring.before)); // bottom
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, outer, 0, 2 * Math.PI);
+    ctx.lineWidth = Math.max(1, Math.round(dpr));
+    ctx.strokeStyle = 'rgb(0 0 0 / 50%)';
+    ctx.stroke();
   }
 
   /** A paint symmetry's guide (and, while it is placed, its centre, turn and size handles). */

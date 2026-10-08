@@ -1,3 +1,4 @@
+import { sampleArea } from '../../../src/core/paint/sample';
 import { CommandCancelledError, type CommandContext, type PixelOps } from '../../../src/core/commands/command';
 import { CommandRegistry } from '../../../src/core/commands/registry';
 import { registerBuiltinCommands } from '../../../src/core/commands/builtin';
@@ -59,6 +60,9 @@ export const referencePixelOps: PixelOps = {
   },
   transformMask(mask, inverse, area, canvas) {
     return Promise.resolve(transformMask(mask, inverse, area, canvas));
+  },
+  sampleColor(plan, rect) {
+    return Promise.resolve(sampleArea(plan, rect));
   },
   brushTipFromImage(plan, rect, mask, canvas) {
     return Promise.resolve(tipFromImage(plan, rect, mask, canvas));

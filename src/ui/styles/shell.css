@@ -1452,3 +1452,117 @@
   padding: 2px 4px 6px;
   border-bottom: 1px solid var(--border-soft);
 }
+
+/* Color and Swatches panels */
+.color-panel,
+.swatches-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.color-panel {
+  gap: 6px;
+  padding: 6px 8px;
+}
+.color-panel-head,
+.color-hex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.color-targets {
+  position: relative;
+  width: 40px;
+  height: 34px;
+}
+.color-target {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.color-target.foreground {
+  left: 0;
+  top: 0;
+  z-index: 1;
+}
+.color-target.background {
+  left: 14px;
+  top: 11px;
+}
+.color-target.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  z-index: 2;
+}
+.color-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.color-channel {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+.color-range {
+  appearance: none;
+  height: 10px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background-color: transparent;
+}
+.color-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 9px;
+  height: 14px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #fff;
+}
+.color-range::-moz-range-thumb {
+  width: 9px;
+  height: 14px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #fff;
+}
+.color-hex input {
+  width: 64px;
+}
+.color-ramp {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--border);
+  cursor: crosshair;
+  touch-action: none;
+}
+.swatch-groups {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 6px;
+}
+.swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px 0 6px 18px;
+}
+.swatch-chip {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 40%);
+  border-radius: 2px;
+}
+.swatch-chip.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

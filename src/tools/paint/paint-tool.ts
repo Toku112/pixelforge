@@ -15,6 +15,8 @@
  * - The cursor follows Preferences > Cursors: the tool's icon, a crosshair, or the
  *   tip's outline (where it paints at least half, or at all); Caps Lock swaps in
  *   the crosshair.
+ * - With the Brush, Alt/Option-click (or drag) picks the foreground colour off the
+ *   image, as the Eyedropper does (with its options).
  * - Alt+right-drag (Ctrl+Option-drag on macOS) shows the brush HUD: drag left or
  *   right for the size, up (softer) or down (harder) for a round tip's hardness —
  *   or the opacity, by preference and for sampled tips.
@@ -39,7 +41,8 @@ import {
   type ToolContext,
   type ToolPointerEvent,
 } from '../types';
-import { BRUSH_CURSOR, ERASER_CURSOR } from './cursors';
+import { BRUSH_CURSOR, ERASER_CURSOR, EYEDROPPER_CURSOR } from './cursors';
+import { ColorSampler } from '../eyedropper/sampler';
 
 export class PaintingTool implements Tool {
   readonly id: string;
@@ -63,6 +66,8 @@ export class PaintingTool implements Tool {
   } | null = null;
   /** End of the last stroke, for Shift-click lines. */
   #lastEnd: StrokePoint | null = null;
+  /** Alt-click with the Brush: picking the foreground colour. */
+  readonly #sampler = new ColorSampler();
   /** While a stroke lasts: Stroke Catch-up and Build-up go on with the pointer at rest. */
   #timer: ReturnType<typeof setInterval> | null = null;
   /** The brush HUD gesture: where it started and the settings then. */
@@ -116,6 +121,7 @@ export class PaintingTool implements Tool {
   }
 
   cursor(state: CursorState): string {
+    if (this.kind === 'brush' && (state.altKey || this.#sampler.active)) return EYEDROPPER_CURSOR;
     switch (state.paintCursor ?? 'precise') {
       case 'standard':
         return this.kind === 'brush' ? BRUSH_CURSOR : ERASER_CURSOR;
@@ -127,7 +133,7 @@ export class PaintingTool implements Tool {
   }
 
   busy(): boolean {
-    return this.#stroke !== null;
+    return this.#stroke !== null || this.#sampler.active;
   }
 
   #point(e: ToolPointerEvent, ctx: ToolContext, start = e.time ?? performance.now()): StrokePoint {
@@ -272,7 +278,13 @@ export class PaintingTool implements Tool {
   }
 
   onPointerDown(e: ToolPointerEvent, ctx: ToolContext): void {
-    if (!ctx.document || !ctx.paint || this.#stroke) return;
+    if (!ctx.document || this.#stroke) return;
+    if (this.kind === 'brush' && e.altKey) {
+      ctx.setBrushOutline(null);
+      this.#sampler.begin(e, ctx, 'foreground');
+      return;
+    }
+    if (!ctx.paint) return;
     const session = ctx.paint.begin(this.kind, this.options);
     if (!session) return;
     const spacer = new StrokeDabber(this.options, session.seed, session.colors, session.symmetry);
@@ -293,12 +305,20 @@ export class PaintingTool implements Tool {
   }
 
   onPointerMove(e: ToolPointerEvent, ctx: ToolContext): void {
+    if (this.#sampler.active) {
+      this.#sampler.move(e, ctx);
+      return;
+    }
     const stroke = this.#stroke;
     if (stroke) this.#feed(stroke.smoother.add(this.#point(e, ctx, stroke.start)));
     ctx.setBrushOutline(this.#outline(e, ctx, stroke !== null));
   }
 
   onPointerUp(e: ToolPointerEvent, ctx: ToolContext): void {
+    if (this.#sampler.active) {
+      this.#sampler.end(e, ctx);
+      return;
+    }
     const stroke = this.#stroke;
     this.#stopTimer();
     if (!stroke) return;
@@ -320,7 +340,8 @@ export class PaintingTool implements Tool {
 
   onPointerHover(e: ToolPointerEvent, ctx: ToolContext): void {
     if (!ctx.document) return;
-    ctx.setBrushOutline(this.#outline(e, ctx));
+    // Alt with the Brush shows the Eyedropper instead of the tip.
+    ctx.setBrushOutline(this.kind === 'brush' && e.altKey ? null : this.#outline(e, ctx));
   }
 
   onPointerLeave(ctx: ToolContext): void {
@@ -337,6 +358,7 @@ export class PaintingTool implements Tool {
   }
 
   cancel(ctx: ToolContext): void {
+    this.#sampler.cancel(ctx);
     const stroke = this.#stroke;
     this.#stroke = null;
     this.#stopTimer();

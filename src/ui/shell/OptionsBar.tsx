@@ -8,6 +8,8 @@ import type { BrushMode } from '../../core/paint/brush';
 import { DEFAULT_DYNAMICS } from '../../core/paint/dynamics';
 import { isPanelOpen } from '../dock/dock-model';
 import { CropTool } from '../../tools/crop/crop-tool';
+import { EyedropperTool } from '../../tools/eyedropper/eyedropper-tool';
+import { SAMPLE_SIZES, type SampleSize, type SampleSource } from '../../core/paint/sample';
 import { BrushPicker } from './BrushPicker';
 import { SmoothingControls } from './SmoothingControls';
 import { SymmetryMenu, SymmetryOptions } from './SymmetryMenu';
@@ -81,6 +83,63 @@ const CROP_RATIOS: [string, string, number, number][] = [
 ];
 
 /** Options of the Crop tool. */
+const SAMPLE_SIZE_LABELS: Record<SampleSize, string> = {
+  1: 'Point Sample',
+  3: '3 by 3 Average',
+  5: '5 by 5 Average',
+  11: '11 by 11 Average',
+  31: '31 by 31 Average',
+  51: '51 by 51 Average',
+  101: '101 by 101 Average',
+};
+
+/** Eyedropper: sample size, which layers, and the sampling ring. */
+function EyedropperOptionsBar({ tool }: { tool: EyedropperTool }) {
+  const bump = useUi((s) => s.bumpToolOptions);
+  useUi((s) => s.toolOptionsVersion);
+  const o = tool.options;
+  const set = (changes: Partial<typeof o>) => {
+    tool.setOptions(changes);
+    bump();
+  };
+  return (
+    <>
+      <label className="option-field">
+        Sample Size:
+        <select
+          className="option-select"
+          aria-label="Sample size"
+          value={o.sampleSize}
+          onChange={(e) => set({ sampleSize: Number(e.target.value) as SampleSize })}
+        >
+          {SAMPLE_SIZES.map((n) => (
+            <option key={n} value={n}>
+              {SAMPLE_SIZE_LABELS[n]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="option-field">
+        Sample:
+        <select
+          className="option-select"
+          aria-label="Sample"
+          value={o.source}
+          onChange={(e) => set({ source: e.target.value as SampleSource })}
+        >
+          <option value="current">Current Layer</option>
+          <option value="current-below">Current &amp; Below</option>
+          <option value="all">All Layers</option>
+        </select>
+      </label>
+      <label className="option-check">
+        <input type="checkbox" checked={o.showRing} onChange={(e) => set({ showRing: e.target.checked })} />
+        Show Sampling Ring
+      </label>
+    </>
+  );
+}
+
 function CropOptions({ tool }: { tool: CropTool }) {
   const controller = useController();
   const bump = useUi((s) => s.bumpToolOptions);
@@ -617,6 +676,7 @@ export function OptionsBar() {
       {tool instanceof PaintingTool && <PaintOptions key={tool.id} tool={tool} />}
       {tool instanceof MoveTool && <MoveOptions tool={tool} />}
       {tool instanceof CropTool && <CropOptions tool={tool} />}
+      {tool instanceof EyedropperTool && <EyedropperOptionsBar tool={tool} />}
       {tool instanceof TransformTool && <TransformOptions tool={tool} />}
       {tool instanceof SymmetryTool && <SymmetryOptions tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}

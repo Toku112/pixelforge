@@ -38,6 +38,7 @@ export function CanvasArea() {
       cursorPreferences: () => controller.services.preferences.values.cursors,
       overscroll: () => controller.services.preferences.values.overscroll,
       toolOptionsChanged: () => useUi.getState().bumpToolOptions(),
+      colors: controller.colorHost,
       ants: {
         canvas: antsRef.current!,
         trace: controller.services.traceOutline,

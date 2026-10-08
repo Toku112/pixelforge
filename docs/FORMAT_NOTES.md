@@ -392,3 +392,16 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
   brightness, contrast, mode, depth, minimum depth, depth jitter, each tip); Dual Brush (its tip, size as a share of
   the main size, spacing, scatter, count, flip, mode); Color Dynamics; Transfer (opacity and flow); Brush Pose; Noise
   and Wet Edges; tool options (opacity, flow, mode, pressure toggles, smoothing) make a preset with tool settings.
+
+## 10. Swatch files
+
+- **ASE** (big-endian): `ASEF`, version 1.0 (two u16), block count (u32); blocks of type (u16) and length (u32): group
+  start `0xC001` (name: u16 length in UTF-16 units including the terminating 0, then UTF-16BE), group end `0xC002`,
+  colour `0x0001` (name as above; model `RGB `, `CMYK`, `LAB ` or `Gray`; float32 values — RGB, CMYK and gray 0–1, Lab
+  as L 0–1 (×100), a and b as they are; then a u16 type: global, spot, normal). Colours outside groups go into a group
+  named after the file.
+- **ACO** (big-endian): version 1 (u16), count (u16), then per colour a colour space (u16) and four u16 values;
+  usually followed by the same list as version 2, each entry also carrying its name (u32 length in UTF-16 units
+  including the terminating 0, then UTF-16BE). Spaces: 0 RGB (0–65535), 1 HSB (hue 0–65535 for 0–360°), 2 CMYK
+  (stored as 65535 − ink), 7 Lab (L 0–10000, a and b signed ×100), 8 Grayscale (0–10000 = amount of black); others
+  (custom inks) are skipped.

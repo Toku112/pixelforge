@@ -33,6 +33,7 @@ import {
 } from '../core/geometry/transform-pixels';
 import type { Dab } from '../core/paint/brush';
 import { tipFromImage } from '../core/paint/define-tip';
+import { sampleArea } from '../core/paint/sample';
 import { TILE_SIZE } from '../core/document/tile';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
@@ -231,6 +232,11 @@ const conversions = {
   brushTipFromImage(plan: FlattenPlan, rect: Rect, mask: MaskData | null, canvas: Rect): Uint8Array {
     const tip = tipFromImage(plan, rect, mask, canvas);
     return transfer(tip, [tip.buffer as ArrayBuffer]);
+  },
+
+  /** See PixelOps.sampleColor. */
+  sampleColor(plan: FlattenPlan, rect: Rect): number[] | null {
+    return sampleArea(plan, rect);
   },
 
   /** See PixelOps.contentBounds. */

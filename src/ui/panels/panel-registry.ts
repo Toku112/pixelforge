@@ -5,6 +5,8 @@ import { LayersPanel } from './layers/LayersPanel';
 import { BrushSettingsPanel } from './BrushSettingsPanel';
 import { BrushesPanel } from './BrushesPanel';
 import { ToolPresetsPanel } from './ToolPresetsPanel';
+import { ColorPanel } from './ColorPanel';
+import { SwatchesPanel } from './SwatchesPanel';
 import { NavigatorPanel } from './NavigatorPanel';
 
 export interface PanelDefinition {
@@ -54,6 +56,22 @@ export const PANELS: Record<string, PanelDefinition> = {
       { label: 'Import Brushes…', command: 'brushes.import' },
       { label: 'Export Brushes…', command: 'brushes.export' },
       { label: 'Restore Default Brushes…', command: 'brushes.restore' },
+    ],
+  },
+  color: { id: 'color', title: 'Color', icon: 'colorPanel', component: ColorPanel, float: { width: 290, height: 300 } },
+  swatches: {
+    id: 'swatches',
+    title: 'Swatches',
+    icon: 'swatches',
+    component: SwatchesPanel,
+    float: { width: 290, height: 360 },
+    menu: [
+      { label: 'New Swatch…', command: 'swatches.new' },
+      { label: 'New Swatch Group…', command: 'swatches.newGroup' },
+      { label: 'Rename Swatch…', command: 'swatches.rename' },
+      { label: 'Delete Swatch', command: 'swatches.delete' },
+      { label: 'Import Swatches…', command: 'swatches.import' },
+      { label: 'Restore Default Swatches…', command: 'swatches.restore' },
     ],
   },
   'tool-presets': {

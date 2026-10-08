@@ -35,6 +35,8 @@ function setup() {
     toolOptionsChanged: () => {},
     showSymmetry: () => {},
     setSymmetryEdit: () => {},
+    colors: null,
+    setSampleRing: () => {},
   };
   const tool = new CropTool();
   tool.activate(ctx);

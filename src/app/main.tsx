@@ -18,8 +18,11 @@ const ui = useUi.getState;
 const home = (id: string): FloatHome | undefined => {
   const size = PANELS[id]?.float;
   if (!size) return undefined;
-  const docks = ui().dock.columns.reduce((sum, c) => sum + (c.collapsed ? 40 : c.width), 0);
-  return { x: Math.max(8, window.innerWidth - docks - size.width - 16), y: 96, ...size };
+  const dock = ui().dock;
+  const docks = dock.columns.reduce((sum, c) => sum + (c.collapsed ? 40 : c.width), 0);
+  // Each further floating window a little down and to the left, so none hides another.
+  const step = 28 * (dock.floating.length % 8);
+  return { x: Math.max(8, window.innerWidth - docks - size.width - 16 - step), y: 96 + step, ...size };
 };
 const bridge: UiBridge = {
   activeToolId: () => ui().activeToolId,

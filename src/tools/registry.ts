@@ -9,6 +9,7 @@ import { PaintingTool } from './paint/paint-tool';
 import { RotateViewTool } from './rotate-view/rotate-view-tool';
 import { TransformTool } from './transform/transform-tool';
 import { SymmetryTool } from './symmetry/symmetry-tool';
+import { EyedropperTool } from './eyedropper/eyedropper-tool';
 import { LassoTool, PolygonalLassoTool } from './selection/lasso-tool';
 import { MarqueeTool, SingleLineMarqueeTool } from './selection/marquee-tool';
 import type { Tool } from './types';
@@ -33,6 +34,7 @@ export function createTools() {
   const lasso = new LassoTool();
   const polygonalLasso = new PolygonalLassoTool();
   const crop = new CropTool();
+  const eyedropper = new EyedropperTool();
   // Not on the toolbar: the app switches to it while Free Transform is open.
   const transform = new TransformTool();
   // Not on the toolbar either: placing a paint symmetry's guide.
@@ -48,6 +50,7 @@ export function createTools() {
     },
     { id: 'lasso-group', tools: [lasso, polygonalLasso] },
     { id: 'crop-group', tools: [crop] },
+    { id: 'eyedropper-group', tools: [eyedropper] },
     { id: 'brush-group', tools: [brush] },
     { id: 'eraser-group', tools: [eraser] },
     { id: 'hand-group', tools: [hand, rotateView] },
@@ -68,6 +71,7 @@ export function createTools() {
     lasso,
     polygonalLasso,
     crop,
+    eyedropper,
     transform,
     symmetry,
     brush,

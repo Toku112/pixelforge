@@ -9,6 +9,7 @@ import type { RGB } from '../core/color/color';
 import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
 import type { DynamicsColors } from '../core/paint/dynamics';
 import type { Symmetry } from '../core/paint/symmetry';
+import type { EyedropperOptions } from '../core/paint/sample';
 import type { ImageDocument } from '../core/document/document';
 import type { SelectionShape } from '../core/selection/mask-ops';
 import type { Viewport } from '../engine/viewport/viewport';
@@ -94,6 +95,24 @@ export interface SymmetryEditOverlay {
   symmetry: Symmetry;
   rotate: { x: number; y: number };
   scale: { x: number; y: number } | null;
+}
+
+/** The foreground and background colours, and sampling them off the canvas (Eyedropper, Alt with the Brush). */
+export interface ColorHost {
+  /** The active document's colour at a document point (Eyedropper options); null where nothing is painted. */
+  sample(x: number, y: number, options: EyedropperOptions): Promise<RGB | null>;
+  get(which: 'foreground' | 'background'): RGB;
+  set(which: 'foreground' | 'background', color: RGB): void;
+  /** The Eyedropper's options (Alt-click with the Brush samples with them too). */
+  readonly eyedropper: EyedropperOptions;
+}
+
+/** The sampling ring: the new colour (top half) over the current one (bottom half), at a document point. */
+export interface SampleRing {
+  x: number;
+  y: number;
+  now: RGB;
+  before: RGB;
 }
 
 /** Tools whose brush can be sized on the canvas (Alt+right-drag, or Ctrl+Option-drag on macOS). */
@@ -211,6 +230,10 @@ export interface ToolContext {
   showSymmetry(show: boolean): void;
   /** Shows a symmetry guide being placed, or hides it with null. */
   setSymmetryEdit(edit: SymmetryEditOverlay | null): void;
+  /** The colours and sampling; null where they are not set up (tests). */
+  readonly colors: ColorHost | null;
+  /** Shows the sampling ring, or hides it with null. */
+  setSampleRing(ring: SampleRing | null): void;
 }
 
 /** Modifier and drag state that decides a tool's cursor. */

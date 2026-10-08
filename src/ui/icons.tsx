@@ -285,11 +285,32 @@ const icons = {
       <circle cx="19" cy="19" r="3" />
     </Svg>
   ),
+  eyedropper: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M14.5 4.5a2.1 2.1 0 0 1 3 0l2 2a2.1 2.1 0 0 1 0 3l-2 2-5-5Z" />
+      <path d="m13 8-8.2 8.2-.8 3.8 3.8-.8L16 11" />
+    </Svg>
+  ),
   symmetry: (p: IconProps) => (
     <Svg {...p}>
       <path d="M12 4v16" strokeDasharray="2 2" />
       <path d="M11 11C9 6.5 6 5 4 5.5c-1.5.5-1 4 1 5.5 1 .7 2.5 1 3.5 1-1.5.5-3 2-2.5 3.5.5 2 3.5 1.5 5-1.5" />
       <path d="M13 11c2-4.5 5-6 7-5.5 1.5.5 1 4-1 5.5-1 .7-2.5 1-3.5 1 1.5.5 3 2 2.5 3.5-.5 2-3.5 1.5-5-1.5" />
+    </Svg>
+  ),
+  colorPanel: (p: IconProps) => (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 3.5v17M3.5 12h17" strokeOpacity="0.5" />
+      <circle cx="15" cy="9" r="2" fill="currentColor" />
+    </Svg>
+  ),
+  swatches: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="4" y="4" width="7" height="7" rx="1" />
+      <rect x="13" y="4" width="7" height="7" rx="1" fill="currentColor" fillOpacity="0.4" />
+      <rect x="4" y="13" width="7" height="7" rx="1" fill="currentColor" fillOpacity="0.7" />
+      <rect x="13" y="13" width="7" height="7" rx="1" />
     </Svg>
   ),
   toolPresets: (p: IconProps) => (

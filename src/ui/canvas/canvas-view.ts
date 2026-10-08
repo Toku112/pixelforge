@@ -12,6 +12,7 @@ import type { ViewportState } from '../../engine/viewport/viewport';
 import type { ToolSet } from '../../tools/registry';
 import {
   DEFAULT_CURSOR_PREFERENCES,
+  type ColorHost,
   type CursorPreferences,
   type PaintHost,
   type ToolContext,
@@ -41,6 +42,8 @@ export interface CanvasViewOptions {
   cursorPreferences?(): CursorPreferences;
   /** A tool changed its own options (the brush HUD). */
   toolOptionsChanged?(): void;
+  /** The colours and sampling them (Eyedropper). */
+  colors?: ColorHost;
   /** Marching ants: a 2D canvas stacked above the document canvas, and the outline tracer. */
   ants?: {
     canvas: HTMLCanvasElement;
@@ -107,6 +110,8 @@ export class CanvasView {
       setBrushHud: (hud) => this.#ants?.setBrushHud(hud),
       showSymmetry: (show) => this.#ants?.setSymmetryShown(show),
       setSymmetryEdit: (edit) => this.#ants?.setSymmetryEdit(edit),
+      colors: options.colors ?? null,
+      setSampleRing: (ring) => this.#ants?.setSampleRing(ring),
       toolOptionsChanged: () => options.toolOptionsChanged?.(),
     };
     canvas.tabIndex = 0; // focusable, so keyboard tools work after clicking the canvas

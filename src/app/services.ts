@@ -10,6 +10,7 @@ import { BrushLibrary } from './brush-library';
 import { PatternLibrary } from './pattern-library';
 import { Preferences } from './preferences';
 import { ToolPresetLibrary } from './tool-presets';
+import { SwatchLibrary } from './swatch-library';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
@@ -58,6 +59,8 @@ export interface AppServices {
   preferences: Preferences;
   /** Tool presets. */
   toolPresets: ToolPresetLibrary;
+  /** The Swatches panel's colours. */
+  swatches: SwatchLibrary;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -90,5 +93,6 @@ export async function createServices(): Promise<AppServices> {
     patterns,
     preferences: new Preferences(),
     toolPresets: new ToolPresetLibrary(),
+    swatches: new SwatchLibrary(),
   };
 }

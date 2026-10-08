@@ -651,3 +651,23 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   needs the same equivalence test.
 - Measured: a 500 px soft 16-bit dab went from ~16 ms (TypeScript) to ~2.5 ms single-threaded; in the app (threaded)
   a dense stroke on a 6000 × 4000 16-bit document keeps 60 fps and finishes 13 ms after the pointer is released.
+
+## D-043 — 2026-10-08 — Eyedropper, Color and Swatches panels
+
+**Decision:**
+
+- Sampling composites exactly what is sampled (all layers; the current layer; the current layer and everything below
+  it, into the group that holds it) for the sample square in the pixel worker, then averages the colours weighted by
+  their alpha. Where nothing is painted the colour stays as it was (the reference app leaves it alone there too). The
+  result becomes sRGB 0–1 (gray as equal channels; 32-bit from linear light).
+- While the pointer is down the colour updates as it moves, one sample at a time (the newest position waits for the
+  previous sample), and the ring shows the new colour over the one it replaces. Escape restores it. With the Brush,
+  Alt/Option-click samples with the Eyedropper's options and paints nothing (the Eraser keeps Alt for later).
+- The Color panel edits the foreground or the background (radio squares), with RGB, HSB, Grayscale or Lab sliders whose
+  tracks show the colours they lead to, a hex field and a ramp (spectrum, grayscale, current colours). HSB keeps the
+  hue the user set while a colour is gray or black, so the sliders do not jump.
+- Swatches are kept in IndexedDB (library value `swatches`); our default groups are ours. .ase and .aco files import
+  as groups; CMYK swatches become sRGB by the simple uncalibrated formula and Lab ones through D65 sRGB until colour
+  management (Phase 7) converts them properly. Click sets the foreground, Ctrl/Cmd-click the background, as in the
+  reference app.
+- Panels opening as floating windows cascade (each a little lower and further left) instead of covering each other.
