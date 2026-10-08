@@ -37,6 +37,9 @@ export interface StrokeSetup {
   mode: BrushMode;
   /** A sampled tip (coverage 0–255), or null for the computed round tip. */
   tip: { width: number; height: number; data: Uint8Array } | null;
+  /** Dabs carry their own colours (Color Dynamics) / opacities (Transfer): keep them per pixel. */
+  varyColor?: boolean;
+  varyOpacity?: boolean;
   /** Transparency of the layer is locked: alpha never changes. */
   lockAlpha: boolean;
   /** The layer's position in the document. */
@@ -52,6 +55,10 @@ interface TileState {
   data: SampleArray;
   original: SampleArray;
   coverage: Float32Array;
+  /** Colour of the paint so far per pixel (varied colours only). */
+  paint: Float32Array | null;
+  /** Highest dab opacity that reached each pixel (varied opacities only). */
+  cap: Float32Array | null;
   /** Selection under the tile: per-pixel values, or uniform 0 / 255. */
   selection: Uint8Array | 0 | 255;
 }
@@ -123,6 +130,7 @@ export class StrokeRenderer {
   readonly #hdr: boolean;
   /** Scratch: the blended paint colour of the pixel being shaded. */
   readonly #blended = [0, 0, 0, 0];
+  readonly #paintScratch = [0, 0, 0, 0];
 
   constructor(setup: StrokeSetup) {
     this.#setup = setup;
@@ -150,6 +158,8 @@ export class StrokeRenderer {
       data,
       original: data.slice(),
       coverage: new Float32Array(TILE_SIZE * TILE_SIZE),
+      paint: s.varyColor ? new Float32Array(TILE_SIZE * TILE_SIZE * s.format.colorChannels) : null,
+      cap: s.varyOpacity ? new Float32Array(TILE_SIZE * TILE_SIZE) : null,
       selection: this.#reader ? this.#reader.layerTile(s.selection!.canvas, s.offsetX, s.offsetY, tx, ty) : 255,
     });
   }
@@ -203,7 +213,19 @@ export class StrokeRenderer {
               if (cov <= 0) continue;
               const p = (ly - ty * TILE_SIZE) * TILE_SIZE + (lx - tx * TILE_SIZE);
               const c = tile.coverage[p]!;
-              tile.coverage[p] = c + (1 - c) * cov * amount;
+              const add = cov * amount;
+              const next = c + (1 - c) * add;
+              if (tile.paint) {
+                // New paint over the paint so far.
+                const cc = s.format.colorChannels;
+                const color = dab.color ?? s.color;
+                for (let k = 0; k < cc; k++) {
+                  const old = tile.paint[p * cc + k]!;
+                  tile.paint[p * cc + k] = next > 0 ? (old * c * (1 - add) + color[k]! * add) / next : color[k]!;
+                }
+              }
+              if (tile.cap) tile.cap[p] = Math.max(tile.cap[p]!, dab.opacity ?? s.opacity);
+              tile.coverage[p] = next;
               this.#shade(tile, p, lx + s.offsetX, ly + s.offsetY);
               any = true;
             }
@@ -219,8 +241,9 @@ export class StrokeRenderer {
   #shade(tile: TileState, p: number, x: number, y: number): void {
     const s = this.#setup;
     const sel = tile.selection === 255 ? 1 : (tile.selection as Uint8Array)[p]! / 255;
-    let e = s.opacity * tile.coverage[p]! * sel;
+    let e = (tile.cap ? tile.cap[p]! : s.opacity) * tile.coverage[p]! * sel;
     const cc = s.format.colorChannels;
+    const color = tile.paint ? this.#paintColor(tile.paint, p, cc) : s.color;
     const max = this.#max;
     const q = this.#q;
     const i = p * this.#spp;
@@ -231,7 +254,7 @@ export class StrokeRenderer {
     if (mode === 'erase' || mode === 'clear') {
       if (keepAlpha) {
         // The eraser paints the background colour where alpha cannot change; Clear does nothing there.
-        if (mode === 'erase') for (let c = 0; c < cc; c++) out[i + c] = q(o[i + c]! + (s.color[c]! - o[i + c]!) * e);
+        if (mode === 'erase') for (let c = 0; c < cc; c++) out[i + c] = q(o[i + c]! + (color[c]! - o[i + c]!) * e);
         return;
       }
       out[i + cc] = q(o[i + cc]! * (1 - e));
@@ -243,23 +266,22 @@ export class StrokeRenderer {
       // Paint under the pixel: the pixel over the paint.
       if (keepAlpha) return;
       const a = ao + e * (1 - ao);
-      for (let c = 0; c < cc; c++)
-        out[i + c] = a > 0 ? q((o[i + c]! * ao + s.color[c]! * e * (1 - ao)) / a) : o[i + c]!;
+      for (let c = 0; c < cc; c++) out[i + c] = a > 0 ? q((o[i + c]! * ao + color[c]! * e * (1 - ao)) / a) : o[i + c]!;
       out[i + cc] = q(a * max);
       return;
     }
     // The paint's colour blended with the pixel (as a layer of paint over it).
     const blended = this.#blended;
     if (mode === 'normal' || mode === 'dissolve') {
-      for (let c = 0; c < cc; c++) blended[c] = s.color[c]!;
+      for (let c = 0; c < cc; c++) blended[c] = color[c]!;
     } else if (isWholeColorMode(mode) && cc === 3) {
       const b = [o[i]! / max, o[i + 1]! / max, o[i + 2]! / max];
-      const src = [s.color[0]! / max, s.color[1]! / max, s.color[2]! / max];
+      const src = [color[0]! / max, color[1]! / max, color[2]! / max];
       const r = blendColor(mode, b, src, this.#hdr);
       for (let c = 0; c < 3; c++) blended[c] = r[c]! * max;
     } else {
       for (let c = 0; c < cc; c++)
-        blended[c] = blendChannel(mode, o[i + c]! / max, s.color[c]! / max, 1, this.#hdr) * max;
+        blended[c] = blendChannel(mode, o[i + c]! / max, color[c]! / max, 1, this.#hdr) * max;
     }
     if (keepAlpha) {
       for (let c = 0; c < cc; c++) out[i + c] = q(o[i + c]! + (blended[c]! - o[i + c]!) * e);
@@ -268,10 +290,17 @@ export class StrokeRenderer {
     // Paint over the pixel: where the pixel is transparent the paint shows as is; elsewhere the blend.
     const a = e + ao * (1 - e);
     for (let c = 0; c < cc; c++) {
-      const v = (1 - ao) * e * s.color[c]! + ao * e * blended[c]! + (1 - e) * ao * o[i + c]!;
+      const v = (1 - ao) * e * color[c]! + ao * e * blended[c]! + (1 - e) * ao * o[i + c]!;
       out[i + c] = a > 0 ? q(v / a) : o[i + c]!;
     }
     out[i + cc] = q(a * max);
+  }
+
+  /** The paint colour at pixel p (scratch array, valid until the next call). */
+  #paintColor(paint: Float32Array, p: number, cc: number): number[] {
+    const out = this.#paintScratch;
+    for (let k = 0; k < cc; k++) out[k] = paint[p * cc + k]!;
+    return out;
   }
 
   /** The current data of tiles by key (for returning edited copies). */

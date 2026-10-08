@@ -505,3 +505,23 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   transparency cannot change). Alt+Shift+letter and Shift+Plus/Minus set the Brush's mode while it is active (Behind
   Alt+Shift+Q, Clear Alt+Shift+R); with the Eraser they do nothing.
 - The brush cursor shows the tip's real outline (traced once per tip in the worker) at its angle and roundness.
+
+## D-036 — 2026-10-08 — Brush dynamics and an early Brush Settings panel
+
+**Decision:**
+
+- Dynamics (Shape, Scattering, Transfer, Color Dynamics, Brush Pose) run after spacing, on the main thread while
+  painting and again when a stroke replays; formulas in FORMAT_NOTES §8. Jitter uses a seeded generator; each stroke
+  records its seed (and, with Color Dynamics, the foreground and background colours), so Actions and undo/redo replay
+  the exact same dabs.
+- Spacing follows the size a control sets (pressure, tilt, wheel, fade) but not random size jitter. The reference
+  app's help does not state this; a pressure taper that breaks into dots at its thin end is not what painters expect,
+  and spacing that jumps with every random size would make jittered strokes look uneven.
+- Opacity Jitter varies each dab below the brush's Opacity (never above it), as the reference app describes Transfer.
+- Color Dynamics are greyed out for the Eraser, which has no colour to vary.
+- The Brush Settings panel (Window > Brush Settings, F5) is built now with the sections that exist so far, because
+  dynamics need a place in the UI; Part E item 4 completes it. It opens as a floating window of its own size when the
+  workspace does not include it (panels may now declare such a size), and its preview stroke is painted by the same
+  engine in the worker.
+- Small fixes found on the way: the app never grows wider than the window (a full options bar runs off the right edge
+  instead of pushing the panels away), and the page cannot be scrolled sideways by focusing a control.

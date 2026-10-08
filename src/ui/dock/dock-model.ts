@@ -44,8 +44,8 @@ export type DropTarget =
   | { kind: 'group'; groupId: string; index: number }
   /** As a new group in a column at `index` (0 = top). */
   | { kind: 'new-group'; columnId: string; index: number }
-  /** As a new floating group. */
-  | { kind: 'float'; x: number; y: number };
+  /** As a new floating group (260 × 320 unless given). */
+  | { kind: 'float'; x: number; y: number; width?: number; height?: number };
 
 export const MIN_COLUMN_WIDTH = 180;
 export const MAX_COLUMN_WIDTH = 600;
@@ -112,8 +112,8 @@ export function movePanel(layout: DockLayout, panel: PanelId, target: DropTarget
       id: newId('float'),
       x: target.x,
       y: target.y,
-      width: 260,
-      height: 320,
+      width: target.width ?? 260,
+      height: target.height ?? 320,
       group: { id: newId('group'), panels: [panel], active: panel, weight: 1 },
     });
   }
@@ -133,10 +133,17 @@ export function closeGroup(layout: DockLayout, groupId: string): DockLayout {
   return prune(next);
 }
 
-/** Shows a panel: activates it if open, otherwise adds it to the first column's first group (or floats it). */
-export function openPanel(layout: DockLayout, panel: PanelId): DockLayout {
+/** Floating window for a panel that opens on its own rather than in the dock. */
+export type FloatHome = { x: number; y: number; width: number; height: number };
+
+/**
+ * Shows a panel: activates it if open, otherwise floats it at `home` when given, else adds it
+ * to the first column's first group (or floats it when there is no column).
+ */
+export function openPanel(layout: DockLayout, panel: PanelId, home?: FloatHome): DockLayout {
   const existing = findPanel(layout, panel);
   if (existing) return setActivePanel(layout, panel);
+  if (home) return movePanel(layout, panel, { kind: 'float', ...home });
   const column = layout.columns[0];
   if (!column) return movePanel(layout, panel, { kind: 'float', x: 120, y: 120 });
   const first = column.groups[0];
@@ -145,9 +152,9 @@ export function openPanel(layout: DockLayout, panel: PanelId): DockLayout {
     : movePanel(layout, panel, { kind: 'new-group', columnId: column.id, index: 0 });
 }
 
-export function togglePanel(layout: DockLayout, panel: PanelId): DockLayout {
+export function togglePanel(layout: DockLayout, panel: PanelId, home?: FloatHome): DockLayout {
   const group = findPanel(layout, panel);
-  return group && group.active === panel ? closePanel(layout, panel) : openPanel(layout, panel);
+  return group && group.active === panel ? closePanel(layout, panel) : openPanel(layout, panel, home);
 }
 
 export function setActivePanel(layout: DockLayout, panel: PanelId): DockLayout {

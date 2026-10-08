@@ -2,6 +2,8 @@
 .app-root {
   display: grid;
   grid-template-rows: 26px 36px minmax(0, 1fr);
+  /* Never wider than the window: a full options bar runs off the right edge instead. */
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   user-select: none;
 }
@@ -94,9 +96,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   padding: 0 10px;
   background: var(--bg-bar);
   border-bottom: 1px solid var(--border);
+}
+.options-bar > * {
+  flex-shrink: 0;
 }
 .options-tool-icon {
   display: inline-flex;
@@ -1100,4 +1106,71 @@
 }
 .brush-tip[aria-selected='true'] {
   border-color: var(--accent);
+}
+
+/* Brush Settings panel */
+.brush-settings {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 6px;
+  padding: 6px;
+  height: 100%;
+  overflow: auto;
+}
+.brush-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.brush-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 2px;
+  border-radius: 3px;
+}
+.brush-section button {
+  flex: 1;
+  text-align: left;
+  padding: 3px 4px;
+  background: none;
+  border: 0;
+}
+.brush-section:not(:has(input)) button {
+  padding-left: 20px;
+}
+.brush-section.active {
+  background: var(--bg-hover, rgb(255 255 255 / 8%));
+}
+.brush-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.brush-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.brush-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.brush-preview-stroke {
+  grid-column: 1 / -1;
+  width: 240px;
+  height: 70px;
+  justify-self: center;
+  background: #fff;
+  border: 1px solid var(--border);
+}
+.panel-empty {
+  padding: 12px;
+  color: var(--text-dim, #999);
 }

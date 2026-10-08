@@ -348,6 +348,22 @@ const conversions = {
     strokes.delete(id);
   },
 
+  /**
+   * The Brush Settings preview: `dabs` painted with `setup` (8-bit RGBA) on a transparent
+   * `width` × `height` strip (at most one tile), returned as RGBA rows.
+   */
+  brushPreview(setup: StrokeSetup, dabs: Dab[], width: number, height: number): Uint8Array {
+    const tile = new Uint8Array(TILE_SIZE * TILE_SIZE * 4);
+    const renderer = new StrokeRenderer({ ...setup, format: { depth: 8, colorChannels: 3, hasAlpha: true } });
+    renderer.addTile(0, 0, tile);
+    renderer.applyDabs(dabs);
+    const w = Math.min(width, TILE_SIZE);
+    const h = Math.min(height, TILE_SIZE);
+    const out = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) out.set(tile.subarray(y * TILE_SIZE * 4, (y * TILE_SIZE + w) * 4), y * w * 4);
+    return transfer(out, [out.buffer]);
+  },
+
   /** The outline of a sampled brush tip (where it paints at least half), in tip pixels, for the cursor. */
   tipOutline(width: number, height: number, data: Uint8Array): Float32Array[] {
     const tiles: { tx: number; ty: number; data: Uint8Array }[] = [];

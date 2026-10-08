@@ -2,7 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../ui/App';
 import { AppProvider } from '../ui/AppContext';
-import { isPanelOpen, openPanel, togglePanel } from '../ui/dock/dock-model';
+import { isPanelOpen, openPanel, togglePanel, type FloatHome } from '../ui/dock/dock-model';
+import { PANELS } from '../ui/panels/panel-registry';
 import { isRemembered, resetDock, useUi } from '../ui/state/ui-store';
 import { AppController, type UiBridge } from './controller';
 import { createServices } from './services';
@@ -13,17 +14,24 @@ const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Missing #root element');
 
 const ui = useUi.getState;
+/** Where a panel with its own floating size opens: just left of the docks, below the bars. */
+const home = (id: string): FloatHome | undefined => {
+  const size = PANELS[id]?.float;
+  if (!size) return undefined;
+  const docks = ui().dock.columns.reduce((sum, c) => sum + (c.collapsed ? 40 : c.width), 0);
+  return { x: Math.max(8, window.innerWidth - docks - size.width - 16), y: 96, ...size };
+};
 const bridge: UiBridge = {
   activeToolId: () => ui().activeToolId,
   setActiveTool: (id, groupId) => ui().setActiveTool(id, groupId),
   isPanelOpen: (id) => isPanelOpen(ui().dock, id),
-  togglePanel: (id) => ui().setDock(togglePanel(ui().dock, id)),
+  togglePanel: (id) => ui().setDock(togglePanel(ui().dock, id, home(id))),
   resetWorkspace: () => resetDock(),
   alert: (title, message) => new Promise((resolve) => ui().pushDialog({ kind: 'alert', title, message, resolve })),
   confirmSave: (documentName) =>
     new Promise((resolve) => ui().pushDialog({ kind: 'confirm-save', documentName, resolve })),
   about: () => new Promise((resolve) => ui().pushDialog({ kind: 'about', resolve })),
-  openPanel: (id) => ui().setDock(openPanel(ui().dock, id)),
+  openPanel: (id) => ui().setDock(openPanel(ui().dock, id, home(id))),
   layerOptions: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'layer-options', ...request, resolve })),
   duplicateLayer: (source, name) =>
     new Promise((resolve) => ui().pushDialog({ kind: 'duplicate-layer', source, name, resolve })),

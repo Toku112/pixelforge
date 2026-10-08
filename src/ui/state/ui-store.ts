@@ -12,7 +12,7 @@ import type { ViewportState } from '../../engine/viewport/viewport';
 import { sanitizeLayout, type DockLayout } from '../dock/dock-model';
 import { essentialsLayout } from '../dock/workspaces';
 
-export const PANEL_IDS = ['history', 'navigator', 'layers'] as const;
+export const PANEL_IDS = ['history', 'navigator', 'layers', 'brush-settings'] as const;
 export type PanelKey = (typeof PANEL_IDS)[number];
 
 /** Name, blend mode and opacity from the New Layer / New Group dialogs. */

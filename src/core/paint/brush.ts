@@ -16,6 +16,7 @@
  *   the hardness by 25 %.
  */
 import type { LayerBlendMode } from '../document/layers';
+import type { BrushDynamics } from './dynamics';
 
 /** How paint combines with the pixels: a blend mode, or Behind / Clear. */
 export type BrushMode = LayerBlendMode | 'behind' | 'clear';
@@ -43,6 +44,8 @@ export interface BrushSettings {
   /** A sampled tip's id, or null for the computed round tip. */
   tip: string | null;
   mode: BrushMode;
+  /** How dabs vary (Brush Settings panel); absent or all off: they do not. */
+  dynamics?: BrushDynamics;
 }
 
 export const DEFAULT_BRUSH: Readonly<BrushSettings> = Object.freeze({
@@ -72,6 +75,20 @@ export interface Dab {
   roundness: number;
   flipX: boolean;
   flipY: boolean;
+  /** This dab's opacity limit (Transfer dynamics; default: the brush Opacity). */
+  opacity?: number;
+  /** This dab's colour samples (Color Dynamics; default: the brush colour). */
+  color?: number[];
+}
+
+/** A dab where the spacer put it, with what dynamics need: the pen there, its number and the stroke direction. */
+export interface PlacedDab {
+  dab: Dab;
+  point: StrokePoint;
+  index: number;
+  /** Radians, screen (y down). */
+  direction: number;
+  initialDirection: number;
 }
 
 /**
@@ -153,12 +170,18 @@ export function dabCoverage(d: number, r: number, h: number): number {
  */
 export class DabSpacer {
   readonly #settings: BrushSettings;
+  readonly #sizeScale: ((placed: PlacedDab) => number) | null;
   #last: StrokePoint | null = null;
   /** Distance to go before the next dab. */
   #remaining = 0;
+  #index = 0;
+  #direction = 0;
+  #initialDirection: number | null = null;
 
-  constructor(settings: BrushSettings) {
+  /** `sizeScale`: how much dynamics will shrink or grow a dab, so the next one is spaced by its real size. */
+  constructor(settings: BrushSettings, sizeScale: ((placed: PlacedDab) => number) | null = null) {
     this.#settings = settings;
+    this.#sizeScale = sizeScale;
   }
 
   #dab(p: StrokePoint): Dab {
@@ -177,16 +200,36 @@ export class DabSpacer {
 
   /** Adds a pointer sample; returns the dabs it produces (the first sample always makes one). */
   add(p: StrokePoint): Dab[] {
+    return this.place(p).map((d) => d.dab);
+  }
+
+  #placed(dab: Dab, point: StrokePoint): PlacedDab {
+    return {
+      dab,
+      point,
+      index: this.#index++,
+      direction: this.#direction,
+      initialDirection: this.#initialDirection ?? this.#direction,
+    };
+  }
+
+  /** Like `add`, with what dynamics need for each dab. */
+  place(p: StrokePoint): PlacedDab[] {
     const last = this.#last;
     this.#last = p;
     if (!last) {
-      this.#remaining = this.#step(this.#dab(p).size);
-      return [this.#dab(p)];
+      const first = this.#placed(this.#dab(p), p);
+      this.#remaining = this.#step(first);
+      return [first];
     }
-    const dabs: Dab[] = [];
+    const dabs: PlacedDab[] = [];
     const dx = p.x - last.x;
     const dy = p.y - last.y;
     const length = Math.hypot(dx, dy);
+    if (length > 0) {
+      this.#direction = Math.atan2(dy, dx);
+      this.#initialDirection ??= this.#direction;
+    }
     let travelled = 0;
     while (length - travelled >= this.#remaining) {
       travelled += this.#remaining;
@@ -202,15 +245,17 @@ export class DabSpacer {
         wheel: mix(last.wheel, p.wheel),
         time: mix(last.time, p.time),
       };
-      const dab = this.#dab(point);
-      dabs.push(dab);
-      this.#remaining = this.#step(dab.size);
+      const placed = this.#placed(this.#dab(point), point);
+      dabs.push(placed);
+      this.#remaining = this.#step(placed);
     }
     this.#remaining -= length - travelled;
     return dabs;
   }
 
-  #step(size: number): number {
+  /** Distance to the dab after `placed`: Spacing × its diameter. */
+  #step(placed: PlacedDab): number {
+    const size = Math.max(1, placed.dab.size * (this.#sizeScale?.(placed) ?? 1));
     return Math.max(0.5, this.#settings.spacing * size);
   }
 }

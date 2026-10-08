@@ -11,7 +11,15 @@ import { NumberField } from '../controls/NumberField';
 import { useUi } from '../state/ui-store';
 
 /** A tip drawn as dark paint on white into a square of `box` CSS pixels (sampled, so large tips stay quick). */
-function TipThumbnail({ tip, box, roundHardness }: { tip: BrushTip | null; box: number; roundHardness?: number }) {
+export function TipThumbnail({
+  tip,
+  box,
+  roundHardness,
+}: {
+  tip: BrushTip | null;
+  box: number;
+  roundHardness?: number;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const el = canvas.current;

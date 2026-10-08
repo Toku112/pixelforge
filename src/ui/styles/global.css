@@ -34,7 +34,8 @@ body,
 #root {
   margin: 0;
   height: 100%;
-  overflow: hidden;
+  /* clip, not hidden: focusing a control must never scroll the whole app sideways. */
+  overflow: clip;
   background: var(--bg-app);
   color: var(--fg);
 }

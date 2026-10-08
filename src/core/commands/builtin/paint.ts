@@ -10,9 +10,10 @@ import type { ImageDocument } from '../../document/document';
 import { effectiveLocks, layerCapabilities, type PixelLayer } from '../../document/layers';
 import type { Tile } from '../../document/tile';
 import { LAYER_BLEND_MODES } from '../../document/layers';
+import { colorToSamples, type RGB } from '../../color/color';
+import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
 import {
   DEFAULT_BRUSH,
-  DabSpacer,
   POINT_FIELDS,
   unpackPoints,
   type BrushMode,
@@ -34,6 +35,10 @@ export interface StrokeParams {
   brush: BrushSettings;
   /** Colour samples: the brush colour, or the background colour the eraser paints where alpha cannot change. */
   color: number[];
+  /** Seeds the dynamics' randomness, so a replay paints the same dabs. */
+  seed: number;
+  /** The foreground and background colours (sRGB 0–1), when Color Dynamics vary between them. */
+  colors?: { foreground: RGB; background: RGB };
 }
 
 export const PAINT_LABELS: Record<PaintTool, string> = { brush: 'Brush Tool', eraser: 'Eraser' };
@@ -60,6 +65,8 @@ export function strokeSetup(
     hardness: params.brush.hardness,
     mode: params.brush.mode,
     tip: tip ? { width: tip.width, height: tip.height, data: tip.data } : null,
+    varyColor: !!params.brush.dynamics?.color.enabled && params.tool === 'brush',
+    varyOpacity: !!params.brush.dynamics?.transfer.enabled,
     lockAlpha: effectiveLocks(layer).transparency,
     offsetX: layer.offsetX,
     offsetY: layer.offsetY,
@@ -96,8 +103,8 @@ class PaintStrokeCommand implements Command {
     const layer = paintTarget(doc);
     if (!layer) throw new CommandUnavailableError('Painting needs an editable pixel layer');
     const tip = resolveTip(this.#params.brush, services.brushTips);
-    const spacer = new DabSpacer(this.#params.brush);
-    const dabs = unpackPoints(this.#params.points, this.#params.stride).flatMap((p) => spacer.add(p));
+    const dabber = new StrokeDabber(this.#params.brush, this.#params.seed, dynamicsColors(doc, this.#params));
+    const dabs = unpackPoints(this.#params.points, this.#params.stride).flatMap((p) => dabber.add(p));
     const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, tip !== null);
     const diff = new LayerTileDiff(layer.id);
     for (const [tx, ty] of coords) diff.captureBefore(doc, tx, ty);
@@ -129,6 +136,15 @@ class PaintStrokeCommand implements Command {
 /** A stroke already painted live, as a history step holding its tile diff. */
 export function preparedStroke(ctx: CommandContext, params: StrokeParams, diff: LayerTileDiff): Command {
   return new PaintStrokeCommand(ctx, params, diff);
+}
+
+/** The colours Color Dynamics vary between, as samples of `doc` (null when the stroke has none). */
+export function dynamicsColors(
+  doc: ImageDocument,
+  params: Pick<StrokeParams, 'colors' | 'tool'>,
+): DynamicsColors | null {
+  if (!params.colors || params.tool !== 'brush') return null;
+  return { ...params.colors, toSamples: (c) => colorToSamples(c, doc.mode, doc.depth) };
 }
 
 /** The brush's sampled tip from the library (null for the round tip). */
@@ -176,7 +192,15 @@ function parseBrush(v: unknown): BrushSettings {
     flipY: b['flipY'] === true,
     tip: tip ?? null,
     mode: mode as BrushMode,
+    ...(b['dynamics'] !== undefined ? { dynamics: parseDynamics(b['dynamics']) } : {}),
   };
+}
+
+function parseRgb(v: unknown, name: string): RGB {
+  const c = v as Partial<RGB> | null;
+  if (!c || ![c.r, c.g, c.b].every((x) => isNum(x) && x >= 0 && x <= 1))
+    throw new Error(`paintStroke: ${name} must be an RGB colour (0–1)`);
+  return { r: c.r!, g: c.g!, b: c.b! };
 }
 
 export const paintStrokeCommand: CommandDefinition = {
@@ -194,6 +218,21 @@ export const paintStrokeCommand: CommandDefinition = {
     const color = p['color'];
     if (!Array.isArray(color) || color.length !== ctx.doc.colorChannels || !color.every(isNum))
       throw new Error('paintStroke: color needs one value per colour channel');
-    return new PaintStrokeCommand(ctx, { tool, points, stride, brush: parseBrush(p['brush']), color });
+    const seed = p['seed'] ?? 0;
+    if (!Number.isInteger(seed)) throw new Error('paintStroke: seed must be a whole number');
+    const raw = p['colors'] as { foreground?: unknown; background?: unknown } | undefined;
+    const colors =
+      raw === undefined
+        ? undefined
+        : { foreground: parseRgb(raw.foreground, 'foreground'), background: parseRgb(raw.background, 'background') };
+    return new PaintStrokeCommand(ctx, {
+      tool,
+      points,
+      stride,
+      brush: parseBrush(p['brush']),
+      color,
+      seed: seed as number,
+      ...(colors ? { colors } : {}),
+    });
   },
 };

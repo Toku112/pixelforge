@@ -14,7 +14,7 @@ import {
 import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
 import { colorToSamples, type RGB } from '../core/color/color';
-import { paintTarget, resolveTip, strokeSetup, type PaintTool } from '../core/commands/builtin/paint';
+import { dynamicsColors, paintTarget, resolveTip, strokeSetup, type PaintTool } from '../core/commands/builtin/paint';
 import {
   MAX_TIP_SIDE,
   stepBrushSize,
@@ -282,9 +282,16 @@ export class AppController {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
       return null;
     }
-    const live = this.services.strokes.begin(strokeSetup(doc, layer, { tool, brush, color }, tip));
-    const stroke = new PaintSession(ws, doc, layer, live, tool, brush, color);
+    // A fresh seed per stroke; the colours only when Color Dynamics vary between them.
+    const seed = Math.floor(Math.random() * 2 ** 31);
+    const varyColor = tool === 'brush' && !!brush.dynamics?.color.enabled;
+    const colors = varyColor ? { foreground: this.colors.foreground, background: this.colors.background } : undefined;
+    const params = { tool, brush, color, seed, ...(colors ? { colors } : {}) };
+    const live = this.services.strokes.begin(strokeSetup(doc, layer, params, tip));
+    const stroke = new PaintSession(ws, doc, layer, live, tool, brush, color, seed, dynamicsColors(doc, params));
     return {
+      seed,
+      colors: stroke.colors,
       add: (dabs) => stroke.add(dabs),
       end: async (points) => {
         try {
@@ -1342,6 +1349,7 @@ export class AppController {
       ['window.panel.history', 'history', 'History'],
       ['window.layers', 'layers', 'Layers'],
       ['window.panel.navigator', 'navigator', 'Navigator'],
+      ['window.brushSettings', 'brush-settings', 'Brush Settings'],
     ] as const) {
       add({ id, label, checked: () => this.#ui.isPanelOpen(panel), run: () => this.#ui.togglePanel(panel) });
     }

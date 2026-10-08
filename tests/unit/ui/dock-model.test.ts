@@ -7,6 +7,7 @@ import {
   movePanel,
   openPanel,
   resizeGroups,
+  setActivePanel,
   sanitizeLayout,
   setColumnWidth,
   toggleColumnCollapsed,
@@ -81,6 +82,20 @@ describe('dock model', () => {
   it('opens a panel floating when there is no column', () => {
     const l = openPanel({ columns: [], floating: [] }, 'history');
     expect(l.floating[0]?.group.panels).toEqual(['history']);
+  });
+
+  it('opens a panel with a home of its own as a floating window of that size; toggling closes it', () => {
+    const home = { x: 300, y: 96, width: 430, height: 480 };
+    let l = togglePanel(twoPanels(), 'brush-settings', home);
+    expect(panelsOf(l)).toEqual([[['navigator'], ['history']]]);
+    expect(l.floating).toMatchObject([{ ...home, group: { panels: ['brush-settings'] } }]);
+    l = togglePanel(l, 'brush-settings', home);
+    expect(l.floating).toEqual([]);
+    // Once docked somewhere, it opens there.
+    l = movePanel(l, 'brush-settings', { kind: 'group', groupId: 'g-history', index: 1 });
+    l = openPanel(setActivePanel(l, 'history'), 'brush-settings', home);
+    expect(l.floating).toEqual([]);
+    expect(findPanel(l, 'brush-settings')?.active).toBe('brush-settings');
   });
 
   it('resizes columns and groups within limits, and collapses to icons', () => {

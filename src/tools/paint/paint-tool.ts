@@ -10,7 +10,8 @@
  * - The brush outline follows the pointer.
  */
 import type { PaintTool } from '../../core/commands/builtin/paint';
-import { DEFAULT_BRUSH, DabSpacer, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
+import { DEFAULT_BRUSH, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
+import { DEFAULT_DYNAMICS, StrokeDabber } from '../../core/paint/dynamics';
 import type { BrushOutline, CursorState, PaintStroke, Tool, ToolContext, ToolPointerEvent } from '../types';
 
 export class PaintingTool implements Tool {
@@ -19,7 +20,7 @@ export class PaintingTool implements Tool {
   readonly key: string;
   readonly kind: PaintTool;
   readonly options: BrushSettings;
-  #stroke: { session: PaintStroke; spacer: DabSpacer; points: StrokePoint[]; start: number } | null = null;
+  #stroke: { session: PaintStroke; spacer: StrokeDabber; points: StrokePoint[]; start: number } | null = null;
   /** End of the last stroke, for Shift-click lines. */
   #lastEnd: StrokePoint | null = null;
 
@@ -28,7 +29,7 @@ export class PaintingTool implements Tool {
     this.id = kind;
     this.name = kind === 'brush' ? 'Brush Tool' : 'Eraser Tool';
     this.key = kind === 'brush' ? 'B' : 'E';
-    this.options = { ...DEFAULT_BRUSH, size: kind === 'brush' ? 30 : 50 };
+    this.options = { ...DEFAULT_BRUSH, size: kind === 'brush' ? 30 : 50, dynamics: structuredClone(DEFAULT_DYNAMICS) };
   }
 
   setOptions(changes: Partial<BrushSettings>): void {
@@ -77,7 +78,7 @@ export class PaintingTool implements Tool {
     if (!ctx.document || !ctx.paint || this.#stroke) return;
     const session = ctx.paint.begin(this.kind, this.options);
     if (!session) return;
-    const spacer = new DabSpacer(this.options);
+    const spacer = new StrokeDabber(this.options, session.seed, session.colors);
     const start = e.time ?? 0;
     const p = this.#point(e, ctx, start);
     const points: StrokePoint[] = [];

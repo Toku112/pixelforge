@@ -6,6 +6,7 @@
 import type { PaintTool } from '../core/commands/builtin/paint';
 import type { CommandDescriptor } from '../core/commands/command';
 import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
+import type { DynamicsColors } from '../core/paint/dynamics';
 import type { ImageDocument } from '../core/document/document';
 import type { SelectionShape } from '../core/selection/mask-ops';
 import type { Viewport } from '../engine/viewport/viewport';
@@ -77,6 +78,10 @@ export interface TransformBoxOverlay {
 
 /** A brush/eraser stroke in progress (see app/paint-session.ts). */
 export interface PaintStroke {
+  /** Seeds the stroke's dynamics (recorded, so a replay paints the same dabs). */
+  readonly seed: number;
+  /** The colours Color Dynamics vary between, or null. */
+  readonly colors: DynamicsColors | null;
   add(dabs: Dab[]): void;
   /** Ends the stroke (one History step); `points` are its pointer samples, for Actions. */
   end(points: StrokePoint[]): Promise<void>;

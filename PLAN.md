@@ -13,8 +13,9 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 1 (pen input and brush tips); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 2 (brush dynamics)
+- Last completed: Part E item 2 (brush dynamics, with an early Brush Settings panel); item 1 (pen input and brush
+  tips); Phase 1 Part D items 1–12 and the automated part of item 13
+- Next up: Part E item 3 (Texture, Dual Brush, Noise, Wet Edges, Build-up, Protect Texture)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -634,7 +635,8 @@ engine first, then its controls, then the tools built on it.
 
 - [x] Pen input and brush tips: Pointer Events pressure, tilt (tiltX/Y, altitude/azimuth), twist and stylus wheel, coalesced and predicted events; computed tips with angle, roundness, flip X/Y; sampled tips from images (Define Brush Preset); brush paint modes (the tool's blend mode in the options bar, and the blend-mode shortcuts setting it while a painting tool is active)
   ↳ note: pen values are recorded with every stroke and drive the dynamics of the next item; predicted events move the cursor only; the brush preset picker replaces the Size/Hardness fields; tips are kept in IndexedDB (D-035, FORMAT_NOTES §8).
-- [ ] Brush dynamics: Shape Dynamics (size/angle/roundness jitter, minimum diameter, tilt scale, flip jitter), Scattering, Transfer (opacity/flow jitter), Color Dynamics (FG/BG, hue/saturation/brightness, purity, per tip), Brush Pose; controls off/fade/pen pressure/pen tilt/stylus wheel/rotation/initial direction/direction; seeded jitter so recorded strokes replay identically
+- [x] Brush dynamics: Shape Dynamics (size/angle/roundness jitter, minimum diameter, tilt scale, flip jitter), Scattering, Transfer (opacity/flow jitter), Color Dynamics (FG/BG, hue/saturation/brightness, purity, per tip), Brush Pose; controls off/fade/pen pressure/pen tilt/stylus wheel/rotation/initial direction/direction; seeded jitter so recorded strokes replay identically
+  ↳ note: set in the Brush Settings panel (F5), built early with these sections and a live preview stroke; item 4 completes the panel. Spacing follows control-driven size so tapers stay joined (D-036, FORMAT_NOTES §8).
 - [ ] Texture, Dual Brush, Noise, Wet Edges, Build-up (airbrush, paint while held still), Protect Texture
 - [ ] Brush Settings panel and the full Brush options bar (size, hardness, mode, opacity and flow with pressure toggles, airbrush, smoothing, angle, symmetry), on-canvas size/hardness HUD (Alt+right-drag / Ctrl+Option-drag), brush cursor preferences
 - [ ] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom

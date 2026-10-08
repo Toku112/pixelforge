@@ -247,4 +247,14 @@ describe('stroke renderer', () => {
     expect(full).toBeGreaterThan(150);
     expect(full).toBeLessThan(250);
   });
+
+  it('keeps the colour and opacity of each dab when they vary', () => {
+    const data = tileOf([0, 0, 0, 0]);
+    const r = new StrokeRenderer(setup({ varyColor: true, varyOpacity: true, opacity: 1 }));
+    r.addTile(0, 0, data);
+    r.applyDabs([dab(20.5, 20.5, 6, { color: [0, 255, 0], opacity: 0.5 })]);
+    expect(px(data, 20, 20)).toEqual([0, 255, 0, 128]); // its own colour, at its own opacity
+    r.applyDabs([dab(20.5, 20.5, 6, { color: [0, 0, 255], opacity: 1 })]);
+    expect(px(data, 20, 20)).toEqual([0, 0, 255, 255]); // later paint covers it; the higher opacity counts
+  });
 });

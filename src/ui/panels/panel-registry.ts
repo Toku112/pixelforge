@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { IconName } from '../icons';
 import { HistoryPanel } from './HistoryPanel';
 import { LayersPanel } from './layers/LayersPanel';
+import { BrushSettingsPanel } from './BrushSettingsPanel';
 import { NavigatorPanel } from './NavigatorPanel';
 
 export interface PanelDefinition {
@@ -11,6 +12,8 @@ export interface PanelDefinition {
   component: ComponentType;
   /** Extra panel-menu entries (app command ids). */
   menu?: { label: string; command: string }[];
+  /** Opens as a floating window of this size (CSS pixels) when it isn't in the workspace. */
+  float?: { width: number; height: number };
 }
 
 export const PANELS: Record<string, PanelDefinition> = {
@@ -25,6 +28,13 @@ export const PANELS: Record<string, PanelDefinition> = {
     ],
   },
   navigator: { id: 'navigator', title: 'Navigator', icon: 'navigator', component: NavigatorPanel },
+  'brush-settings': {
+    id: 'brush-settings',
+    title: 'Brush Settings',
+    icon: 'brush',
+    component: BrushSettingsPanel,
+    float: { width: 430, height: 480 },
+  },
   layers: {
     id: 'layers',
     title: 'Layers',

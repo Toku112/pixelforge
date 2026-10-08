@@ -324,3 +324,21 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
 - **Pen samples** record x, y, pressure, tilt x/y (degrees), twist (degrees), wheel (0–1) and time (ms since the stroke
   began). Pens reported by altitude/azimuth (Safari) are converted: `tiltX = atan(cos az / tan alt)`,
   `tiltY = atan(sin az / tan alt)`.
+- **Dynamics** (Brush Settings sections) change each dab after spacing places it. A control gives c in 0–1: Off 1;
+  Fade `max(0, 1 − n/steps)` for the n-th dab; Pen Pressure p; Pen Tilt `1 − min(90, hypot(tiltX, tiltY))/90`
+  (upright = 1); Stylus Wheel w; Rotation `twist/360`. A jittered value is
+  `max(m, (m + (1 − m)·c) · (1 − j·r))` with jitter j, minimum m and a random r in [0, 1).
+  - Shape: size × that value (Pen Tilt with Tilt Scale t instead grows the tip, `1 + t·lean`); angle adds the stroke
+    direction, initial direction, tilt direction or twist (or scales by fade/pressure/wheel), then ± j·360°;
+    roundness × the jittered value; flip jitter flips half the dabs.
+  - Spacing follows the size the control alone sets (`m + (1 − m)·c`, no random part), so light-pressure and faded
+    ends stay joined; random size jitter does not change the spacing.
+  - Scattering moves a dab across the stroke by up to `amount × size × c` (and along it with Both Axes); Count dabs
+    per placement, varied by Count Jitter.
+  - Transfer: dab opacity = brush Opacity × the jittered value; flow (dab strength) × its jittered value.
+  - Color Dynamics: the foreground leans to the background by `1 − c + j·r`; hue ± j·180°, saturation and
+    brightness ± j, purity adds to saturation; per tip or once per stroke. The stroke keeps each dab's colour and
+    opacity: new paint mixes over the colour so far by its share of the added coverage, and the opacity limit of a
+    pixel is the highest of the dabs that touched it.
+  - Brush Pose replaces the pen's tilt, rotation or pressure before the controls read them.
+  - Random numbers come from mulberry32 seeded per stroke; the seed is recorded, so a replayed stroke is identical.

@@ -4,6 +4,8 @@
  */
 import { registerBuiltinCommands } from '../core/commands/builtin';
 import type { PixelOps } from '../core/commands/command';
+import type { Dab } from '../core/paint/brush';
+import type { StrokeSetup } from '../core/paint/stroke';
 import { BrushLibrary } from './brush-library';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
@@ -34,6 +36,8 @@ export interface AppServices {
   workspace: Workspace;
   renderThumbnail: ThumbnailRenderer;
   traceOutline: OutlineTracer;
+  /** The Brush Settings preview strip (RGBA rows, at most 256 × 256). */
+  brushPreview: (setup: StrokeSetup, dabs: Dab[], width: number, height: number) => Promise<Uint8Array>;
   /** The outline of a sampled brush tip (tip pixels), for the brush cursor. */
   traceTip: (tip: { width: number; height: number; data: Uint8Array }) => Promise<Float32Array[]>;
   /** Live brush/eraser strokes in the pixel worker. */
@@ -61,6 +65,7 @@ export async function createServices(): Promise<AppServices> {
     renderThumbnail: (source, area, width, height) => pixelWorker.layerThumbnail(source, area, width, height),
     traceOutline: (mask, canvas) => pixelWorker.selectionOutline(mask, canvas),
     traceTip: (tip) => pixelWorker.tipOutline(tip.width, tip.height, tip.data),
+    brushPreview: (setup, dabs, width, height) => pixelWorker.brushPreview(setup, dabs, width, height),
     strokes: createStrokeEngine(pixelWorker),
     pixelOps,
     brushes,

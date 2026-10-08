@@ -1,0 +1,450 @@
+/**
+ * Brush dynamics: how each dab of a stroke varies (Brush Settings panel sections
+ * Shape Dynamics, Scattering, Transfer, Color Dynamics and Brush Pose).
+ *
+ * Behaviour (own summary of the reference app):
+ * - Jitter varies a value randomly per dab, never above the set value for size;
+ *   Angle Jitter 100 % turns the tip anywhere in a full circle.
+ * - A Control ties a value to the pen or the stroke: Fade (over a number of dabs),
+ *   Pen Pressure, Pen Tilt, Stylus Wheel, Rotation (barrel), and for the angle also
+ *   Initial Direction and Direction. Minimum Diameter / Minimum Roundness are floors.
+ * - Scattering throws dabs sideways (Both Axes: also along the stroke) by a share of
+ *   the diameter, several per step (Count, Count Jitter).
+ * - Transfer varies each dab's opacity and flow.
+ * - Color Dynamics varies the colour between foreground and background and in hue,
+ *   saturation and brightness, per stroke or per dab; Purity shifts saturation.
+ * - Brush Pose overrides the pen's tilt, rotation or pressure.
+ *
+ * Randomness comes from a generator seeded per stroke, recorded with the stroke, so
+ * replaying it paints exactly the same dabs.
+ */
+import { hsbToRgb, rgbToHsb, type RGB } from '../color/color';
+import { DabSpacer, type BrushSettings, type Dab, type StrokePoint } from './brush';
+
+export type DynamicsControl =
+  'off' | 'fade' | 'pressure' | 'tilt' | 'wheel' | 'rotation' | 'initial-direction' | 'direction';
+
+export interface ControlledJitter {
+  /** 0–1. */
+  jitter: number;
+  control: DynamicsControl;
+  /** Fade length in dabs (Control = Fade). */
+  fadeSteps: number;
+  /** Floor the control (and jitter) never go below, 0–1 (Minimum Diameter / Roundness; unused for the angle). */
+  minimum: number;
+}
+
+export interface BrushDynamics {
+  shape: {
+    enabled: boolean;
+    size: ControlledJitter;
+    /** How much pen tilt can enlarge the tip (Control = Pen Tilt), 0–2. */
+    tiltScale: number;
+    angle: ControlledJitter;
+    roundness: ControlledJitter;
+    flipXJitter: boolean;
+    flipYJitter: boolean;
+  };
+  scatter: {
+    enabled: boolean;
+    /** Share of the diameter, 0–10 (0–1000 %). */
+    amount: number;
+    bothAxes: boolean;
+    control: DynamicsControl;
+    fadeSteps: number;
+    /** Dabs per spacing step, 1–16. */
+    count: number;
+    countJitter: ControlledJitter;
+  };
+  transfer: { enabled: boolean; opacity: ControlledJitter; flow: ControlledJitter };
+  color: {
+    enabled: boolean;
+    /** Vary per dab (otherwise once per stroke). */
+    perTip: boolean;
+    /** Mix towards the background colour. */
+    fgbg: ControlledJitter;
+    /** 0–1 each. */
+    hue: number;
+    saturation: number;
+    brightness: number;
+    /** −1 (gray) … 1 (fully saturated). */
+    purity: number;
+  };
+  pose: {
+    enabled: boolean;
+    overrideTilt: boolean;
+    tiltX: number;
+    tiltY: number;
+    overrideRotation: boolean;
+    rotation: number;
+    overridePressure: boolean;
+    pressure: number;
+  };
+}
+
+const jitter = (control: DynamicsControl = 'off'): ControlledJitter => ({
+  jitter: 0,
+  control,
+  fadeSteps: 25,
+  minimum: 0,
+});
+
+export const DEFAULT_DYNAMICS: BrushDynamics = {
+  shape: {
+    enabled: false,
+    size: jitter(),
+    tiltScale: 0,
+    angle: jitter(),
+    roundness: { ...jitter(), minimum: 0.25 },
+    flipXJitter: false,
+    flipYJitter: false,
+  },
+  scatter: {
+    enabled: false,
+    amount: 0,
+    bothAxes: false,
+    control: 'off',
+    fadeSteps: 25,
+    count: 1,
+    countJitter: jitter(),
+  },
+  transfer: { enabled: false, opacity: jitter(), flow: jitter() },
+  color: { enabled: false, perTip: true, fgbg: jitter(), hue: 0, saturation: 0, brightness: 0, purity: 0 },
+  pose: {
+    enabled: false,
+    overrideTilt: false,
+    tiltX: 0,
+    tiltY: 0,
+    overrideRotation: false,
+    rotation: 0,
+    overridePressure: false,
+    pressure: 1,
+  },
+};
+
+/** True when nothing varies (the plain brush). */
+export function dynamicsOff(d: BrushDynamics | undefined): boolean {
+  return !d || (!d.shape.enabled && !d.scatter.enabled && !d.transfer.enabled && !d.color.enabled && !d.pose.enabled);
+}
+
+/** A small, fast seeded generator (mulberry32): the same seed gives the same numbers. */
+export function seededRandom(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A placed dab before dynamics: where, the pen there, and the stroke's direction (radians, screen). */
+export interface Placement {
+  point: StrokePoint;
+  /** Index of the placement in the stroke (for Fade). */
+  index: number;
+  direction: number;
+  initialDirection: number;
+}
+
+/** The colours a stroke may use (sRGB 0–1) and how to make samples of them. */
+export interface DynamicsColors {
+  foreground: RGB;
+  background: RGB;
+  toSamples: (c: RGB) => number[];
+}
+
+const DEG = 180 / Math.PI;
+
+export class DabDynamics {
+  readonly #d: BrushDynamics;
+  readonly #random: () => number;
+  readonly #colors: DynamicsColors | null;
+  /** The brush's Opacity: Transfer varies each dab's opacity below it. */
+  readonly #opacity: number;
+  /** The stroke's colour when Color Dynamics vary per stroke. */
+  #strokeColor: number[] | null = null;
+
+  constructor(dynamics: BrushDynamics, seed: number, colors: DynamicsColors | null, opacity = 1) {
+    this.#d = dynamics;
+    this.#random = seededRandom(seed);
+    this.#colors = colors;
+    this.#opacity = opacity;
+  }
+
+  /** 0–1 from a control at a placement (1 when off). For Fade, falls from 1 to 0 over `fadeSteps`. */
+  #control(control: DynamicsControl, fadeSteps: number, p: Placement): number {
+    const pt = p.point;
+    switch (control) {
+      case 'off':
+        return 1;
+      case 'fade':
+        return fadeSteps > 0 ? Math.max(0, 1 - p.index / fadeSteps) : 1;
+      case 'pressure':
+        return pt.pressure;
+      case 'tilt':
+        // Upright pen = 1, lying flat = 0.
+        return 1 - Math.min(90, Math.hypot(pt.tiltX, pt.tiltY)) / 90;
+      case 'wheel':
+        return pt.wheel;
+      case 'rotation':
+        return (((pt.twist % 360) + 360) % 360) / 360;
+      default:
+        return 1;
+    }
+  }
+
+  /** A value from a control and jitter: base × lerp(minimum, 1, control) × (1 − jitter × random), at least minimum × base. */
+  #vary(j: ControlledJitter, p: Placement): number {
+    const c = this.#control(j.control, j.fadeSteps, p);
+    const controlled = j.minimum + (1 - j.minimum) * c;
+    return Math.max(j.minimum, controlled * (1 - j.jitter * this.#random()));
+  }
+
+  /**
+   * The share of the base size the size control alone sets at a placement (no random jitter, so
+   * it draws no random numbers): spacing follows it, keeping light-pressure or faded ends joined.
+   */
+  sizeScale(placement: Placement): number {
+    const sh = this.#d.shape;
+    if (!sh.enabled) return 1;
+    const p = this.#posed(placement);
+    if (sh.size.control === 'tilt' && sh.tiltScale > 0)
+      return 1 + (sh.tiltScale * Math.min(90, Math.hypot(p.point.tiltX, p.point.tiltY))) / 90;
+    return sh.size.minimum + (1 - sh.size.minimum) * this.#control(sh.size.control, sh.size.fadeSteps, p);
+  }
+
+  /** The pen at a placement after Brush Pose overrides. */
+  #posed(p: Placement): Placement {
+    const pose = this.#d.pose;
+    if (!pose.enabled) return p;
+    return {
+      ...p,
+      point: {
+        ...p.point,
+        ...(pose.overrideTilt ? { tiltX: pose.tiltX, tiltY: pose.tiltY } : {}),
+        ...(pose.overrideRotation ? { twist: pose.rotation } : {}),
+        ...(pose.overridePressure ? { pressure: pose.pressure } : {}),
+      },
+    };
+  }
+
+  /** The dabs for one placement (`base`: the dab without dynamics). */
+  apply(base: Dab, placement: Placement): Dab[] {
+    const d = this.#d;
+    const p = this.#posed(placement);
+    const s = d.scatter;
+    let count = 1;
+    if (s.enabled) {
+      count = Math.max(1, s.count);
+      if (s.countJitter.jitter > 0 || s.countJitter.control !== 'off')
+        count = Math.max(1, Math.round(count * this.#vary(s.countJitter, p)));
+    }
+    const out: Dab[] = [];
+    for (let n = 0; n < count; n++) out.push(this.#one(base, p));
+    return out;
+  }
+
+  #one(base: Dab, p: Placement): Dab {
+    const d = this.#d;
+    const dab: Dab = { ...base };
+    const sh = d.shape;
+    if (sh.enabled) {
+      let size = base.size * this.#vary(sh.size, p);
+      if (sh.size.control === 'tilt' && sh.tiltScale > 0) {
+        // Tilting the pen enlarges the tip by up to Tilt Scale.
+        const lean = Math.min(90, Math.hypot(p.point.tiltX, p.point.tiltY)) / 90;
+        size = base.size * (1 + sh.tiltScale * lean) * (1 - sh.size.jitter * this.#random());
+      }
+      dab.size = Math.max(1, size);
+      let angle = base.angle;
+      switch (sh.angle.control) {
+        case 'direction':
+          angle += -p.direction * DEG;
+          break;
+        case 'initial-direction':
+          angle += -p.initialDirection * DEG;
+          break;
+        case 'tilt':
+          angle += Math.atan2(-p.point.tiltY, p.point.tiltX) * DEG;
+          break;
+        case 'rotation':
+          angle += p.point.twist;
+          break;
+        case 'fade':
+          angle *= this.#control('fade', sh.angle.fadeSteps, p);
+          break;
+        case 'pressure':
+          angle *= p.point.pressure;
+          break;
+        case 'wheel':
+          angle *= p.point.wheel;
+          break;
+      }
+      angle += sh.angle.jitter * (this.#random() * 2 - 1) * 360;
+      dab.angle = ((((angle + 180) % 360) + 360) % 360) - 180;
+      dab.roundness = Math.max(0.01, Math.min(1, base.roundness * this.#vary(sh.roundness, p)));
+      if (sh.flipXJitter && this.#random() < 0.5) dab.flipX = !dab.flipX;
+      if (sh.flipYJitter && this.#random() < 0.5) dab.flipY = !dab.flipY;
+    }
+    const sc = d.scatter;
+    if (sc.enabled && sc.amount > 0) {
+      const reach = sc.amount * dab.size * this.#control(sc.control, sc.fadeSteps, p);
+      const across = (this.#random() * 2 - 1) * reach;
+      const along = sc.bothAxes ? (this.#random() * 2 - 1) * reach : 0;
+      const cos = Math.cos(p.direction);
+      const sin = Math.sin(p.direction);
+      dab.x += cos * along - sin * across;
+      dab.y += sin * along + cos * across;
+    }
+    const tr = d.transfer;
+    if (tr.enabled) {
+      dab.opacity = (base.opacity ?? this.#opacity) * this.#vary(tr.opacity, p);
+      dab.strength *= this.#vary(tr.flow, p);
+    }
+    if (d.color.enabled && this.#colors) {
+      if (d.color.perTip || !this.#strokeColor) this.#strokeColor = this.#color(p);
+      dab.color = this.#strokeColor;
+    }
+    return dab;
+  }
+
+  /** A varied colour: foreground→background by the FG/BG control and jitter, then hue, saturation, brightness, purity. */
+  #color(p: Placement): number[] {
+    const c = this.#d.color;
+    const { foreground: fg, background: bg, toSamples } = this.#colors!;
+    // The control leans towards the background as it falls (e.g. lighter pressure).
+    const t = Math.min(
+      1,
+      Math.max(0, 1 - this.#control(c.fgbg.control, c.fgbg.fadeSteps, p) + c.fgbg.jitter * this.#random()),
+    );
+    const mixed: RGB = { r: fg.r + (bg.r - fg.r) * t, g: fg.g + (bg.g - fg.g) * t, b: fg.b + (bg.b - fg.b) * t };
+    const hsb = rgbToHsb(mixed);
+    hsb.h = (((hsb.h + c.hue * (this.#random() * 2 - 1) * 180) % 360) + 360) % 360;
+    hsb.s = Math.min(1, Math.max(0, hsb.s + c.saturation * (this.#random() * 2 - 1) + c.purity));
+    hsb.b = Math.min(1, Math.max(0, hsb.b + c.brightness * (this.#random() * 2 - 1)));
+    return toSamples(hsbToRgb(hsb));
+  }
+}
+
+/**
+ * Turns pointer samples into the dabs of a stroke: spacing, then dynamics (if any).
+ * Live painting and replaying a recorded stroke both use it, with the same seed.
+ */
+export class StrokeDabber {
+  readonly #spacer: DabSpacer;
+  readonly #dynamics: DabDynamics | null;
+
+  constructor(brush: BrushSettings, seed: number, colors: DynamicsColors | null) {
+    const dynamics = dynamicsOff(brush.dynamics) ? null : new DabDynamics(brush.dynamics!, seed, colors, brush.opacity);
+    this.#dynamics = dynamics;
+    this.#spacer = new DabSpacer(brush, dynamics && ((placed) => dynamics.sizeScale(placed)));
+  }
+
+  add(p: StrokePoint): Dab[] {
+    const placed = this.#spacer.place(p);
+    const dyn = this.#dynamics;
+    if (!dyn) return placed.map((d) => d.dab);
+    return placed.flatMap((d) => dyn.apply(d.dab, d));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reading recorded settings
+// ---------------------------------------------------------------------------
+
+const CONTROLS: readonly DynamicsControl[] = [
+  'off',
+  'fade',
+  'pressure',
+  'tilt',
+  'wheel',
+  'rotation',
+  'initial-direction',
+  'direction',
+];
+
+type Raw = Record<string, unknown>;
+const obj = (v: unknown): Raw => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Raw) : {});
+
+function num(raw: Raw, key: string, lo: number, hi: number, fallback: number): number {
+  const v = raw[key];
+  if (v === undefined) return fallback;
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi)
+    throw new Error(`brush dynamics: ${key} must be ${lo}–${hi}`);
+  return v;
+}
+
+const bool = (raw: Raw, key: string, fallback: boolean) => (raw[key] === undefined ? fallback : raw[key] === true);
+
+function control(raw: Raw, key: string, fallback: DynamicsControl): DynamicsControl {
+  const v = raw[key] ?? fallback;
+  if (!CONTROLS.includes(v as DynamicsControl)) throw new Error(`brush dynamics: unknown control ${JSON.stringify(v)}`);
+  return v as DynamicsControl;
+}
+
+function controlled(v: unknown, fallback: ControlledJitter): ControlledJitter {
+  const raw = obj(v);
+  return {
+    jitter: num(raw, 'jitter', 0, 1, fallback.jitter),
+    control: control(raw, 'control', fallback.control),
+    fadeSteps: num(raw, 'fadeSteps', 0, 9999, fallback.fadeSteps),
+    minimum: num(raw, 'minimum', 0, 1, fallback.minimum),
+  };
+}
+
+/** Recorded dynamics (possibly partial, from an Action) checked and completed with the defaults. */
+export function parseDynamics(v: unknown): BrushDynamics {
+  const raw = obj(v);
+  const D = DEFAULT_DYNAMICS;
+  const shape = obj(raw['shape']);
+  const scatter = obj(raw['scatter']);
+  const transfer = obj(raw['transfer']);
+  const color = obj(raw['color']);
+  const pose = obj(raw['pose']);
+  return {
+    shape: {
+      enabled: bool(shape, 'enabled', false),
+      size: controlled(shape['size'], D.shape.size),
+      tiltScale: num(shape, 'tiltScale', 0, 2, D.shape.tiltScale),
+      angle: controlled(shape['angle'], D.shape.angle),
+      roundness: controlled(shape['roundness'], D.shape.roundness),
+      flipXJitter: bool(shape, 'flipXJitter', false),
+      flipYJitter: bool(shape, 'flipYJitter', false),
+    },
+    scatter: {
+      enabled: bool(scatter, 'enabled', false),
+      amount: num(scatter, 'amount', 0, 10, D.scatter.amount),
+      bothAxes: bool(scatter, 'bothAxes', false),
+      control: control(scatter, 'control', 'off'),
+      fadeSteps: num(scatter, 'fadeSteps', 0, 9999, D.scatter.fadeSteps),
+      count: num(scatter, 'count', 1, 16, 1),
+      countJitter: controlled(scatter['countJitter'], D.scatter.countJitter),
+    },
+    transfer: {
+      enabled: bool(transfer, 'enabled', false),
+      opacity: controlled(transfer['opacity'], D.transfer.opacity),
+      flow: controlled(transfer['flow'], D.transfer.flow),
+    },
+    color: {
+      enabled: bool(color, 'enabled', false),
+      perTip: bool(color, 'perTip', true),
+      fgbg: controlled(color['fgbg'], D.color.fgbg),
+      hue: num(color, 'hue', 0, 1, 0),
+      saturation: num(color, 'saturation', 0, 1, 0),
+      brightness: num(color, 'brightness', 0, 1, 0),
+      purity: num(color, 'purity', -1, 1, 0),
+    },
+    pose: {
+      enabled: bool(pose, 'enabled', false),
+      overrideTilt: bool(pose, 'overrideTilt', false),
+      tiltX: num(pose, 'tiltX', -90, 90, 0),
+      tiltY: num(pose, 'tiltY', -90, 90, 0),
+      overrideRotation: bool(pose, 'overrideRotation', false),
+      rotation: num(pose, 'rotation', 0, 360, 0),
+      overridePressure: bool(pose, 'overridePressure', false),
+      pressure: num(pose, 'pressure', 0, 1, 1),
+    },
+  };
+}

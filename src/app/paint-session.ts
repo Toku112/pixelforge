@@ -15,6 +15,7 @@ import type { SampleArray } from '../core/document/pixel-format';
 import { tileKey } from '../core/document/tile';
 import { POINT_FIELDS, packPoints, type BrushSettings, type Dab, type StrokePoint } from '../core/paint/brush';
 import { dabTiles } from '../core/paint/stroke';
+import type { DynamicsColors } from '../core/paint/dynamics';
 import type { PaintStroke } from '../tools/types';
 import type { LiveStroke } from '../workers/stroke-client';
 import type { Workspace } from './workspace';
@@ -27,6 +28,8 @@ export class PaintSession implements PaintStroke {
   readonly #tool: PaintTool;
   readonly #brush: BrushSettings;
   readonly #color: number[];
+  readonly seed: number;
+  readonly colors: DynamicsColors | null;
   readonly #diff: LayerTileDiff;
   readonly #touched = new Set<number>();
   readonly #queue: Dab[] = [];
@@ -45,13 +48,17 @@ export class PaintSession implements PaintStroke {
     tool: PaintTool,
     brush: BrushSettings,
     color: number[],
+    seed: number,
+    colors: DynamicsColors | null,
   ) {
+    this.seed = seed;
+    this.colors = colors;
     this.#workspace = workspace;
     this.#doc = doc;
     this.#layer = layer;
     this.#live = live;
     this.#tool = tool;
-    this.#brush = { ...brush };
+    this.#brush = structuredClone(brush); // its own copy: settings changed later do not alter the record
     this.#color = color;
     this.#diff = new LayerTileDiff(layer.id);
     this.#finished = new Promise((resolve) => (this.#finish = resolve));
@@ -121,6 +128,8 @@ export class PaintSession implements PaintStroke {
       stride: POINT_FIELDS.length,
       brush: this.#brush,
       color: this.#color,
+      seed: this.seed,
+      ...(this.colors ? { colors: { foreground: this.colors.foreground, background: this.colors.background } } : {}),
     };
     const diff = this.#diff;
     await this.#workspace.executePrepared(this.#doc, (ctx) => preparedStroke(ctx, params, diff));
