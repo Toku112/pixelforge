@@ -10,6 +10,7 @@ import {
   transformMask,
   transformSelectedPixels,
 } from '../../../src/core/geometry/transform-pixels';
+import { tipFromImage } from '../../../src/core/paint/define-tip';
 import { fillTiles } from '../../../src/core/paint/fill';
 import { movePixels } from '../../../src/core/paint/move-pixels';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
@@ -58,6 +59,9 @@ export const referencePixelOps: PixelOps = {
   },
   transformMask(mask, inverse, area, canvas) {
     return Promise.resolve(transformMask(mask, inverse, area, canvas));
+  },
+  brushTipFromImage(plan, rect, mask, canvas) {
+    return Promise.resolve(tipFromImage(plan, rect, mask, canvas));
   },
   maskBounds(mask, canvas) {
     return Promise.resolve(maskBounds(mask, canvas));

@@ -10,7 +10,9 @@ import type { ImageDocument } from '../../core/document/document';
 import { shapePoints } from '../../core/selection/mask-ops';
 import type { Selection } from '../../core/selection/selection';
 import type { Renderer } from '../../engine/gl/renderer';
-import type { CropBoxOverlay, SelectionPreview, TransformBoxOverlay } from '../../tools/types';
+import type { BrushOutline, CropBoxOverlay, SelectionPreview, TransformBoxOverlay } from '../../tools/types';
+
+type TipOutline = { loops: Float32Array[]; width: number; height: number };
 
 /** Dash length, CSS pixels. */
 const DASH = 4;
@@ -26,17 +28,25 @@ export class SelectionOverlay {
   #doc: ImageDocument | null = null;
   #stopDoc: (() => void) | null = null;
   #preview: SelectionPreview | null = null;
-  #brush: { x: number; y: number; size: number } | null = null;
+  #brush: BrushOutline | null = null;
+  readonly #tipOutline: ((id: string) => Promise<TipOutline | null>) | undefined;
+  readonly #tipOutlines = new Map<string, TipOutline | 'pending' | null>();
   #crop: CropBoxOverlay | null = null;
   #transform: TransformBoxOverlay | null = null;
   #phase = 0;
   #timer: ReturnType<typeof setInterval> | null = null;
   readonly #still: boolean;
 
-  constructor(canvas: HTMLCanvasElement, renderer: Renderer, trace: OutlineTracer) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    renderer: Renderer,
+    trace: OutlineTracer,
+    tipOutline?: (id: string) => Promise<TipOutline | null>,
+  ) {
     this.#canvas = canvas;
     this.#renderer = renderer;
     this.#trace = trace;
+    this.#tipOutline = tipOutline;
     this.#still = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     // Redraw with every rendered frame, so the ants follow panning, zooming and rotation.
     this.#stopFrames = renderer.onFrame(() => this.draw());
@@ -59,8 +69,8 @@ export class SelectionOverlay {
     this.draw();
   }
 
-  /** The brush outline at a document point (diameter in document px), or none. */
-  setBrushOutline(outline: { x: number; y: number; size: number } | null): void {
+  /** The brush outline at a document point (diameter in document px, tip pose), or none. */
+  setBrushOutline(outline: BrushOutline | null): void {
     this.#brush = outline;
     this.draw();
   }
@@ -241,14 +251,58 @@ export class SelectionOverlay {
     }
   }
 
-  #drawBrush(ctx: CanvasRenderingContext2D, brush: { x: number; y: number; size: number }): void {
+  /** A sampled tip's outline (traced once, in the worker), or null while it is being traced. */
+  #outlineOfTip(id: string): TipOutline | null {
+    const cached = this.#tipOutlines.get(id);
+    if (cached !== undefined) return cached === 'pending' ? null : cached;
+    this.#tipOutlines.set(id, 'pending');
+    void this.#tipOutline?.(id).then(
+      (outline) => {
+        this.#tipOutlines.set(id, outline);
+        this.draw();
+      },
+      () => this.#tipOutlines.set(id, null),
+    );
+    return null;
+  }
+
+  #drawBrush(ctx: CanvasRenderingContext2D, brush: BrushOutline): void {
     const v = this.#renderer.viewport;
-    const c = v.docToView(brush);
     const r = (brush.size / 2) * v.zoom;
     if (r < 2) return; // tiny brushes: the crosshair cursor is enough
     const dpr = this.#renderer.devicePixelRatio;
+    const a = ((brush.angle ?? 0) * Math.PI) / 180;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const roundness = brush.roundness ?? 1;
+    // Tip frame (u, v) → document: undo the flips, squash by roundness, turn counter-clockwise.
+    const toDoc = (u: number, w: number) => {
+      const fu = brush.flipX ? -u : u;
+      const fv = (brush.flipY ? -w : w) * roundness;
+      return v.docToView({ x: brush.x + c * fu + s * fv, y: brush.y - s * fu + c * fv });
+    };
     ctx.beginPath();
-    ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+    const tip = brush.tip ? this.#outlineOfTip(brush.tip) : null;
+    if (tip && tip.loops.length > 0) {
+      const scale = brush.size / Math.max(tip.width, tip.height);
+      for (const loop of tip.loops) {
+        for (let i = 0; i < loop.length; i += 2) {
+          const p = toDoc((loop[i]! - tip.width / 2) * scale, (loop[i + 1]! - tip.height / 2) * scale);
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+      }
+    } else {
+      // The round tip: an ellipse (a polygon fine enough to look smooth).
+      const steps = Math.min(128, Math.max(24, Math.round(r)));
+      for (let i = 0; i <= steps; i++) {
+        const t = (i / steps) * 2 * Math.PI;
+        const p = toDoc((Math.cos(t) * brush.size) / 2, (Math.sin(t) * brush.size) / 2);
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+    }
     ctx.lineWidth = Math.max(1, Math.round(dpr)) * 2;
     ctx.strokeStyle = 'rgb(255 255 255 / 70%)';
     ctx.stroke();

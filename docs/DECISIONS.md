@@ -485,3 +485,23 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   Firefox); Safari offers lossless only. Approved by the owner on 2026-10-07 ("Use the browser's encoder"); a compiled
   libwebp can replace it when Phase 7 brings the C toolchain.
 - Both option dialogs show the estimated file size, encoded in the worker a moment after each change.
+
+## D-035 — 2026-10-08 — Pen input, brush tips and brush modes
+
+**Decision:**
+
+- Pointer input carries pressure, tilt, twist (barrel rotation), stylus wheel (tangential pressure, 0–1) and time
+  into every stroke sample; strokes record them (`paintStroke` points with stride 8; the older x, y, pressure form
+  still replays). Safari's altitude/azimuth are converted to tilt. Coalesced events are used for every position; when
+  a browser gives none (synthetic events) the event itself counts. Predicted events move only the brush cursor ahead
+  of the pointer: painting predicted dabs would need taking them back when the real positions arrive.
+- Tips: the computed tip gains Angle, Roundness and Flip X/Y; sampled tips come from Edit > Define Brush Preset.
+  The reference app's help does not say which layer it samples; we take the visible image (what you see), which also
+  matches its "white and transparent paint nothing" rule. Tips larger than 2500 px on a side are refused; an empty
+  selection says why. Tips live in a brush library kept in IndexedDB; strokes refer to them by id (a recorded stroke
+  whose tip was deleted reports it instead of painting with another tip).
+- The options bar follows the reference app: a brush preset picker (size, hardness, angle, roundness, flips, tips)
+  replaces the separate Size and Hardness fields; the Brush has a Mode menu with Behind and Clear (greyed out where
+  transparency cannot change). Alt+Shift+letter and Shift+Plus/Minus set the Brush's mode while it is active (Behind
+  Alt+Shift+Q, Clear Alt+Shift+R); with the Eraser they do nothing.
+- The brush cursor shows the tip's real outline (traced once per tip in the worker) at its angle and roundness.

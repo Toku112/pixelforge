@@ -1,15 +1,24 @@
 /**
- * Round brush maths: the dab profile, placing dabs along a stroke, and the size and
+ * Brush maths: tips and dab profiles, placing dabs along a stroke, and the size and
  * hardness steps of the [ ] { } keys.
  *
  * Behaviour (own summary of the reference app):
- * - A stroke is a series of round dabs, `spacing` × diameter apart along the path.
- * - Hardness is the share of the radius that is fully solid; the rest fades out
- *   smoothly to the edge. At 100 % the edge is a single anti-aliased pixel.
+ * - A stroke is a series of dabs, `spacing` × diameter apart along the path.
+ * - The computed tip is round, or elliptical with Roundness below 100 %, turned by
+ *   Angle (counter-clockwise on screen) and optionally flipped. Hardness is the share
+ *   of the radius that is fully solid; the rest fades out smoothly to the edge.
+ * - A sampled tip is a grayscale picture (dark = paint) defined from the image; its
+ *   size is the longer side; Hardness does not apply.
  * - Pen pressure can scale the size and/or the opacity of each dab (options bar).
+ * - Mode blends the paint into the pixels like a layer blend mode; Behind paints only
+ *   where the layer is transparent, Clear makes pixels transparent.
  * - [ and ] change the size in steps that grow with the size; Shift+[ / ] change
  *   the hardness by 25 %.
  */
+import type { LayerBlendMode } from '../document/layers';
+
+/** How paint combines with the pixels: a blend mode, or Behind / Clear. */
+export type BrushMode = LayerBlendMode | 'behind' | 'clear';
 
 export interface BrushSettings {
   /** Diameter, px (1–5000). */
@@ -25,6 +34,15 @@ export interface BrushSettings {
   /** Pen pressure scales the size / the opacity of each dab. */
   pressureSize: boolean;
   pressureOpacity: boolean;
+  /** Tip angle, degrees (−180–180), counter-clockwise. */
+  angle: number;
+  /** Height of the tip as a share of its width (0.01–1). */
+  roundness: number;
+  flipX: boolean;
+  flipY: boolean;
+  /** A sampled tip's id, or null for the computed round tip. */
+  tip: string | null;
+  mode: BrushMode;
 }
 
 export const DEFAULT_BRUSH: Readonly<BrushSettings> = Object.freeze({
@@ -35,22 +53,84 @@ export const DEFAULT_BRUSH: Readonly<BrushSettings> = Object.freeze({
   spacing: 0.25,
   pressureSize: false,
   pressureOpacity: false,
+  angle: 0,
+  roundness: 1,
+  flipX: false,
+  flipY: false,
+  tip: null,
+  mode: 'normal',
 });
 
-/** One dab: centre (document px), diameter (px) and strength (0–1, multiplies flow). */
+/** One dab: centre (document px), diameter (px), strength (0–1, multiplies flow) and tip pose. */
 export interface Dab {
   x: number;
   y: number;
   size: number;
   strength: number;
+  /** Degrees, counter-clockwise. */
+  angle: number;
+  roundness: number;
+  flipX: boolean;
+  flipY: boolean;
 }
 
-/** A pointer sample of a stroke (document px; pressure 0–1, 1 for a mouse). */
+/**
+ * A pointer sample of a stroke: document position; pressure 0–1 (1 for a mouse);
+ * pen tilt in degrees (−90–90 along x and y, 0 upright); twist (barrel rotation,
+ * 0–359°); stylus wheel 0–1; time in ms since the stroke began.
+ */
 export interface StrokePoint {
   x: number;
   y: number;
   pressure: number;
+  tiltX: number;
+  tiltY: number;
+  twist: number;
+  wheel: number;
+  time: number;
 }
+
+/** A mouse-like sample (no tilt, full pressure) at (x, y). */
+export function strokePoint(x: number, y: number, pressure = 1, time = 0): StrokePoint {
+  return { x, y, pressure, tiltX: 0, tiltY: 0, twist: 0, wheel: 0, time };
+}
+
+/** Values recorded per sample in stroke descriptors, in this order. */
+export const POINT_FIELDS = ['x', 'y', 'pressure', 'tiltX', 'tiltY', 'twist', 'wheel', 'time'] as const;
+
+/** Flattens samples for a descriptor (stride POINT_FIELDS.length). */
+export function packPoints(points: readonly StrokePoint[]): number[] {
+  return points.flatMap((p) => POINT_FIELDS.map((f) => p[f]));
+}
+
+/** Reads samples from a descriptor; `stride` 3 is the older x, y, pressure form. */
+export function unpackPoints(values: readonly number[], stride: number): StrokePoint[] {
+  const out: StrokePoint[] = [];
+  for (let i = 0; i + stride <= values.length; i += stride) {
+    const p = strokePoint(values[i]!, values[i + 1]!, values[i + 2]);
+    if (stride >= POINT_FIELDS.length) {
+      p.tiltX = values[i + 3]!;
+      p.tiltY = values[i + 4]!;
+      p.twist = values[i + 5]!;
+      p.wheel = values[i + 6]!;
+      p.time = values[i + 7]!;
+    }
+    out.push(p);
+  }
+  return out;
+}
+
+/** A sampled brush tip: coverage 0–255 (255 = full paint), `width` × `height`. */
+export interface BrushTip {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  data: Uint8Array;
+}
+
+/** Largest side of a sampled tip, px. */
+export const MAX_TIP_SIDE = 2500;
 
 /**
  * Coverage (0–1) of a dab at distance `d` from its centre, for radius `r` and
@@ -88,6 +168,10 @@ export class DabSpacer {
       y: p.y,
       size: Math.max(1, s.pressureSize ? s.size * p.pressure : s.size),
       strength: s.pressureOpacity ? p.pressure : 1,
+      angle: s.angle,
+      roundness: s.roundness,
+      flipX: s.flipX,
+      flipY: s.flipY,
     };
   }
 
@@ -107,10 +191,16 @@ export class DabSpacer {
     while (length - travelled >= this.#remaining) {
       travelled += this.#remaining;
       const t = travelled / length;
-      const point = {
+      const mix = (a: number, b: number) => a + (b - a) * t;
+      const point: StrokePoint = {
         x: last.x + dx * t,
         y: last.y + dy * t,
-        pressure: last.pressure + (p.pressure - last.pressure) * t,
+        pressure: mix(last.pressure, p.pressure),
+        tiltX: mix(last.tiltX, p.tiltX),
+        tiltY: mix(last.tiltY, p.tiltY),
+        twist: mix(last.twist, p.twist),
+        wheel: mix(last.wheel, p.wheel),
+        time: mix(last.time, p.time),
       };
       const dab = this.#dab(point);
       dabs.push(dab);
@@ -139,9 +229,24 @@ export function stepHardness(hardness: number, direction: 1 | -1): number {
   return Math.min(4, Math.max(0, q + direction)) / 4;
 }
 
-/** The pixel area a dab touches (document px, whole pixels). */
-export function dabBounds(d: Dab): { x: number; y: number; w: number; h: number } {
-  const r = d.size / 2 + 1;
+/**
+ * Where a dab's pixel offset (dx, dy from the centre, document px) lies in the tip's
+ * own frame: angle undone (counter-clockwise on screen, y down), flips applied.
+ */
+export function toTipFrame(d: Dab, dx: number, dy: number): [number, number] {
+  const a = (d.angle * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  let u = dx * c - dy * s;
+  let v = dx * s + dy * c;
+  if (d.flipX) u = -u;
+  if (d.flipY) v = -v;
+  return [u, v];
+}
+
+/** The pixel area a dab touches (document px, whole pixels); sampled tips may reach their half-diagonal. */
+export function dabBounds(d: Dab, sampled = false): { x: number; y: number; w: number; h: number } {
+  const r = (d.size / 2) * (sampled ? Math.SQRT2 : 1) + 1;
   const x0 = Math.floor(d.x - r);
   const y0 = Math.floor(d.y - r);
   return { x: x0, y: y0, w: Math.ceil(d.x + r) - x0, h: Math.ceil(d.y + r) - y0 };

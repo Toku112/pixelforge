@@ -34,6 +34,21 @@ function isEditable(target: EventTarget | null): boolean {
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
+/**
+ * Pen tilt in degrees along x and y. Browsers that describe the pen by altitude and
+ * azimuth (Safari) leave tiltX/Y at 0; then they are derived (Pointer Events 3).
+ */
+function penTilt(e: PointerEvent): [number, number] {
+  const ext = e as PointerEvent & { altitudeAngle?: number; azimuthAngle?: number };
+  if (e.tiltX !== 0 || e.tiltY !== 0 || ext.altitudeAngle === undefined || ext.azimuthAngle === undefined)
+    return [e.tiltX, e.tiltY];
+  const alt = ext.altitudeAngle;
+  if (alt >= Math.PI / 2 - 1e-6) return [0, 0]; // upright
+  const deg = 180 / Math.PI;
+  const t = Math.tan(alt);
+  return [Math.atan(Math.cos(ext.azimuthAngle) / t) * deg, Math.atan(Math.sin(ext.azimuthAngle) / t) * deg];
+}
+
 export class CanvasInput {
   readonly #o: CanvasInputOptions;
   #dragTool: Tool | null = null;
@@ -107,9 +122,12 @@ export class CanvasInput {
     this.#cleanup.push(() => target.removeEventListener(type, fn, options));
   }
 
-  #toolEvent(e: MouseEvent): ToolPointerEvent {
+  #toolEvent(e: MouseEvent, predicted?: PointerEvent): ToolPointerEvent {
     const rect = this.#o.element.getBoundingClientRect();
     const dpr = this.#o.devicePixelRatio();
+    const pe = 'pointerType' in e ? (e as PointerEvent) : null;
+    const pen = pe?.pointerType === 'pen';
+    const [tiltX, tiltY] = pen ? penTilt(pe) : [0, 0];
     return {
       x: (e.clientX - rect.left) * dpr,
       y: (e.clientY - rect.top) * dpr,
@@ -117,7 +135,17 @@ export class CanvasInput {
       altKey: e.altKey,
       primaryKey: isMac ? e.metaKey : e.ctrlKey,
       spaceKey: this.#space,
-      pressure: 'pointerType' in e && (e as PointerEvent).pointerType === 'pen' ? (e as PointerEvent).pressure : 1,
+      pressure: pen ? pe.pressure : 1,
+      tiltX,
+      tiltY,
+      twist: pen ? pe.twist : 0,
+      // The stylus wheel arrives as tangential pressure (−1–1); its resting position is 0.
+      wheel: pen ? Math.min(1, Math.max(0, pe.tangentialPressure)) : 0,
+      time: e.timeStamp,
+      pointerType: pe?.pointerType === 'pen' || pe?.pointerType === 'touch' ? pe.pointerType : 'mouse',
+      ...(predicted
+        ? { predicted: { x: (predicted.clientX - rect.left) * dpr, y: (predicted.clientY - rect.top) * dpr } }
+        : {}),
     };
   }
 
@@ -125,7 +153,11 @@ export class CanvasInput {
     if (e.button !== 0 || this.#dragTool) return;
     e.preventDefault();
     this.#o.element.focus({ preventScroll: true });
-    this.#o.element.setPointerCapture(e.pointerId);
+    try {
+      this.#o.element.setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer is already gone (e.g. a pen lifted at once): the drag still works without capture.
+    }
     this.#pointerId = e.pointerId;
     this.#dragTool = this.currentTool;
     this.#o.onGestureStart?.();
@@ -135,13 +167,17 @@ export class CanvasInput {
 
   readonly #onPointerMove = (e: PointerEvent) => {
     if (this.#dragTool && e.pointerId === this.#pointerId) {
-      // Coalesced events give every intermediate position for smooth drags.
-      for (const ev of e.getCoalescedEvents?.() ?? [e]) {
-        this.#lastMove = this.#toolEvent(ev);
-        this.#dragTool.onPointerMove?.(this.#lastMove, this.#o.context);
-      }
+      // Coalesced events give every intermediate position for smooth drags; the last one
+      // carries where the pointer is predicted to go (for drawing the cursor ahead).
+      const coalesced = e.getCoalescedEvents?.() ?? [];
+      const events = coalesced.length > 0 ? coalesced : [e];
+      const predicted = e.getPredictedEvents?.().at(-1);
+      events.forEach((ev, i) => {
+        this.#lastMove = this.#toolEvent(ev, i === events.length - 1 ? predicted : undefined);
+        this.#dragTool!.onPointerMove?.(this.#lastMove, this.#o.context);
+      });
     } else if (!this.#dragTool && this.#o.context.document) {
-      this.currentTool.onPointerHover?.(this.#toolEvent(e), this.#o.context);
+      this.currentTool.onPointerHover?.(this.#toolEvent(e, e.getPredictedEvents?.().at(-1)), this.#o.context);
       this.#updateCursor(); // the cursor may depend on what is under the pointer (crop handles)
     }
     this.#syncModifiers(e);

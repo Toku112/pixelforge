@@ -32,6 +32,8 @@ import {
   type TransformPixelsSetup,
 } from '../core/geometry/transform-pixels';
 import type { Dab } from '../core/paint/brush';
+import { tipFromImage } from '../core/paint/define-tip';
+import { TILE_SIZE } from '../core/document/tile';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
 import { StrokeRenderer, type StrokeSetup } from '../core/paint/stroke';
@@ -217,6 +219,12 @@ const conversions = {
     );
   },
 
+  /** See PixelOps.brushTipFromImage. */
+  brushTipFromImage(plan: FlattenPlan, rect: Rect, mask: MaskData | null, canvas: Rect): Uint8Array {
+    const tip = tipFromImage(plan, rect, mask, canvas);
+    return transfer(tip, [tip.buffer as ArrayBuffer]);
+  },
+
   /** See PixelOps.contentBounds. */
   contentBounds(source: LayerSource): Rect | null {
     return contentBounds(source);
@@ -338,6 +346,29 @@ const conversions = {
 
   strokeEnd(id: number): void {
     strokes.delete(id);
+  },
+
+  /** The outline of a sampled brush tip (where it paints at least half), in tip pixels, for the cursor. */
+  tipOutline(width: number, height: number, data: Uint8Array): Float32Array[] {
+    const tiles: { tx: number; ty: number; data: Uint8Array }[] = [];
+    for (let ty = 0; ty * TILE_SIZE < height; ty++) {
+      for (let tx = 0; tx * TILE_SIZE < width; tx++) {
+        const tile = new Uint8Array(TILE_SIZE * TILE_SIZE);
+        let any = false;
+        for (let y = 0; y < TILE_SIZE && ty * TILE_SIZE + y < height; y++)
+          for (let x = 0; x < TILE_SIZE && tx * TILE_SIZE + x < width; x++)
+            if (data[(ty * TILE_SIZE + y) * width + tx * TILE_SIZE + x]! >= 128) {
+              tile[y * TILE_SIZE + x] = 255;
+              any = true;
+            }
+        if (any) tiles.push({ tx, ty, data: tile });
+      }
+    }
+    const loops = selectionOutline({ tiles, fill: 0, offsetX: 0, offsetY: 0 }, { x: 0, y: 0, w: width, h: height });
+    return transfer(
+      loops,
+      loops.map((l) => l.buffer as ArrayBuffer),
+    );
   },
 
   /** Marching-ants outline of a selection (see core/selection/outline.ts). */

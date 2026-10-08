@@ -3,7 +3,10 @@ import type { SelectionMode } from '../../core/selection/mask-ops';
 import { resetView, setViewRotation } from '../../tools/rotate-view/rotate-view-tool';
 import { useEffect, useReducer } from 'react';
 import type { ResampleMethod } from '../../core/geometry/layer-geometry';
+import { BLEND_MODE_LABELS, brushModeMenu } from '../../core/composite/blend';
+import type { BrushMode } from '../../core/paint/brush';
 import { CropTool } from '../../tools/crop/crop-tool';
+import { BrushPicker } from './BrushPicker';
 import { TransformTool } from '../../tools/transform/transform-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
 import { MoveTool } from '../../tools/move/move-tool';
@@ -342,6 +345,7 @@ function TransformOptions({ tool }: { tool: TransformTool }) {
 
 /** Options of the Brush and Eraser. */
 function PaintOptions({ tool }: { tool: PaintingTool }) {
+  const controller = useController();
   const bump = useUi((s) => s.bumpToolOptions);
   useUi((s) => s.toolOptionsVersion);
   const o = tool.options;
@@ -350,26 +354,30 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
     bump();
   };
   const percent = (v: number) => Math.round(v * 100);
+  const doc = controller.workspace.active?.doc;
+  const layer = doc?.activeLayer;
+  // Behind and Clear need transparency that may change (not the Background or locked transparency).
+  const alphaEditable = layer?.kind === 'pixel' && layer.buffer.format.hasAlpha && !layer.locks.transparency;
   return (
     <>
-      <NumberField
-        label="Size:"
-        value={o.size}
-        min={1}
-        max={5000}
-        suffix=" px"
-        width={58}
-        onChange={(size) => set({ size })}
-      />
-      <NumberField
-        label="Hardness:"
-        value={percent(o.hardness)}
-        min={0}
-        max={100}
-        suffix="%"
-        width={46}
-        onChange={(v) => set({ hardness: v / 100 })}
-      />
+      <BrushPicker tool={tool} />
+      {tool.kind === 'brush' && (
+        <label className="option-field">
+          Mode:
+          <select
+            className="option-select"
+            aria-label="Brush mode"
+            value={o.mode}
+            onChange={(e) => set({ mode: e.target.value as BrushMode })}
+          >
+            {brushModeMenu(doc?.mode ?? 'rgb', doc?.depth ?? 8).map((m) => (
+              <option key={m} value={m} disabled={(m === 'behind' || m === 'clear') && !alphaEditable}>
+                {m === 'behind' ? 'Behind' : m === 'clear' ? 'Clear' : BLEND_MODE_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <span className="options-divider" />
       <NumberField
         label="Opacity:"

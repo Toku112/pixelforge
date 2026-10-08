@@ -6,6 +6,7 @@
  */
 import type { CompositeTile } from '../composite/composite-tiles';
 import type { LayerSource, LayerTile } from '../geometry/layer-geometry';
+import type { BrushTip } from '../paint/brush';
 import type { Mat3 } from '../geometry/transform';
 import type { TransformPixelsSetup } from '../geometry/transform-pixels';
 import type { LayerGeometry } from './builtin/geometry';
@@ -84,6 +85,8 @@ export interface PixelOps {
     antiAlias: boolean,
     canvas: Rect,
   ): Promise<MaskData | null>;
+  /** Edit > Define Brush Preset: tip coverage (0–255) of `rect` of the visible image (see core/paint/define-tip.ts). */
+  brushTipFromImage(plan: FlattenPlan, rect: Rect, mask: MaskData | null, canvas: Rect): Promise<Uint8Array>;
   /** The exact bounds of the selected pixels within the canvas (Image > Crop); null when none are. */
   maskBounds(mask: MaskData, canvas: Rect): Promise<Rect | null>;
   /** Select > Inverse; null when nothing is left selected. */
@@ -169,8 +172,15 @@ export class CommandCancelledError extends Error {
   }
 }
 
+/** Sampled brush tips by id (the app's brush library). */
+export interface BrushTipSource {
+  get(id: string): BrushTip | undefined;
+}
+
 export interface CommandServices {
   pixelOps: PixelOps;
+  /** Where strokes find their sampled tips (absent: only the computed round tip). */
+  brushTips?: BrushTipSource;
 }
 
 export interface CommandContext {

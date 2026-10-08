@@ -2,23 +2,28 @@
  * Renders brush and eraser strokes into layer tiles (runs in the pixel worker).
  *
  * Every touched tile keeps a copy of its pixels from before the stroke and a
- * coverage buffer. Each dab adds `flow × strength × profile` to the coverage
+ * coverage buffer. Each dab adds `flow × strength × tip` to the coverage
  * (building up: c ← c + (1 − c)·a), and the pixel is recomputed from its original
  * value with the stroke's coverage limited by Opacity and the selection — so one
  * stroke never exceeds Opacity however often it crosses itself, as in the
  * reference app.
  *
- * - Brush: paints the colour over the pixel (with locked transparency, or on a
- *   layer without alpha, only the colour changes).
+ * - Brush: paints the colour into the pixel with the brush Mode (a blend mode,
+ *   computed like a layer of paint over the pixel; Behind paints under existing
+ *   pixels; Clear erases). With locked transparency, or on a layer without alpha,
+ *   only the colour changes.
  * - Eraser: lowers alpha; on a layer without alpha or with locked transparency it
  *   paints the background colour instead.
+ * - Tips: the computed round/elliptical tip, or a sampled tip read bilinearly from
+ *   a pyramid of halved copies (so small dabs of a large tip stay smooth).
  */
+import { blendChannel, blendColor, dissolveNoise, isWholeColorMode } from '../composite/blend';
 import type { Rect } from '../document/geometry';
 import { maxSampleValue, samplesPerPixel, type PixelFormat, type SampleArray } from '../document/pixel-format';
 import { TILE_SIZE, tileIndex, tileKey } from '../document/tile';
 import { MaskReader } from '../selection/mask-ops';
 import type { MaskData } from '../selection/selection';
-import { dabBounds, dabCoverage, type Dab } from './brush';
+import { dabBounds, dabCoverage, type BrushMode, type Dab } from './brush';
 
 export interface StrokeSetup {
   format: PixelFormat;
@@ -28,6 +33,10 @@ export interface StrokeSetup {
   opacity: number;
   flow: number;
   hardness: number;
+  /** How paint combines with the pixels (brush only). */
+  mode: BrushMode;
+  /** A sampled tip (coverage 0–255), or null for the computed round tip. */
+  tip: { width: number; height: number; data: Uint8Array } | null;
   /** Transparency of the layer is locked: alpha never changes. */
   lockAlpha: boolean;
   /** The layer's position in the document. */
@@ -47,18 +56,83 @@ interface TileState {
   selection: Uint8Array | 0 | 255;
 }
 
+/** A sampled tip as a pyramid: level 0 is the tip (0–1), each next level half the size. */
+interface TipPyramid {
+  levels: { w: number; h: number; data: Float32Array }[];
+  /** The tip's longer side at level 0. */
+  side: number;
+}
+
+function buildPyramid(tip: { width: number; height: number; data: Uint8Array }): TipPyramid {
+  const first = new Float32Array(tip.width * tip.height);
+  for (let i = 0; i < first.length; i++) first[i] = tip.data[i]! / 255;
+  const levels = [{ w: tip.width, h: tip.height, data: first }];
+  for (;;) {
+    const prev = levels.at(-1)!;
+    if (prev.w <= 2 && prev.h <= 2) break;
+    const w = Math.max(1, Math.ceil(prev.w / 2));
+    const h = Math.max(1, Math.ceil(prev.h / 2));
+    const data = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        let n = 0;
+        for (let dy = 0; dy < 2; dy++)
+          for (let dx = 0; dx < 2; dx++) {
+            const sx = x * 2 + dx;
+            const sy = y * 2 + dy;
+            if (sx < prev.w && sy < prev.h) {
+              sum += prev.data[sy * prev.w + sx]!;
+              n++;
+            }
+          }
+        data[y * w + x] = sum / n;
+      }
+    }
+    levels.push({ w, h, data });
+  }
+  return { levels, side: Math.max(tip.width, tip.height) };
+}
+
+/** Bilinear sample of a pyramid level at (u, v) in level pixels (centres at +0.5); 0 outside. */
+function sampleLevel(level: { w: number; h: number; data: Float32Array }, u: number, v: number): number {
+  const x = u - 0.5;
+  const y = v - 0.5;
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const fx = x - x0;
+  const fy = y - y0;
+  const at = (i: number, j: number) =>
+    i < 0 || j < 0 || i >= level.w || j >= level.h ? 0 : level.data[j * level.w + i]!;
+  return (
+    at(x0, y0) * (1 - fx) * (1 - fy) +
+    at(x0 + 1, y0) * fx * (1 - fy) +
+    at(x0, y0 + 1) * (1 - fx) * fy +
+    at(x0 + 1, y0 + 1) * fx * fy
+  );
+}
+
 export class StrokeRenderer {
   readonly #setup: StrokeSetup;
   readonly #tiles = new Map<number, TileState>();
   readonly #reader: MaskReader | null;
   readonly #spp: number;
   readonly #max: number;
+  readonly #tip: TipPyramid | null;
+  readonly #q: (v: number) => number;
+  readonly #hdr: boolean;
+  /** Scratch: the blended paint colour of the pixel being shaded. */
+  readonly #blended = [0, 0, 0, 0];
 
   constructor(setup: StrokeSetup) {
     this.#setup = setup;
     this.#spp = samplesPerPixel(setup.format);
     this.#max = maxSampleValue(setup.format.depth);
     this.#reader = setup.selection ? new MaskReader(setup.selection.mask) : null;
+    this.#tip = setup.tip ? buildPyramid(setup.tip) : null;
+    const max = this.#max;
+    this.#hdr = setup.format.depth === 32;
+    this.#q = this.#hdr ? (v) => v : (v) => Math.round(Math.min(max, Math.max(0, v)));
   }
 
   hasTile(tx: number, ty: number): boolean {
@@ -80,17 +154,39 @@ export class StrokeRenderer {
     });
   }
 
+  /** The tip's coverage (0–1) at offset (dx, dy) from a dab's centre (document px). */
+  #coverage(dab: Dab, cos: number, sin: number, level: number, scale: number, dx: number, dy: number): number {
+    let u = dx * cos - dy * sin;
+    let v = dx * sin + dy * cos;
+    if (dab.flipX) u = -u;
+    if (dab.flipY) v = -v;
+    v /= dab.roundness;
+    const tip = this.#tip;
+    if (!tip) return dabCoverage(Math.hypot(u, v), dab.size / 2, this.#setup.hardness);
+    // Document px → tip px at level 0, then at the chosen level.
+    const lv = tip.levels[level]!;
+    const f = 2 ** level;
+    const t0 = tip.levels[0]!;
+    return sampleLevel(lv, (u / scale + t0.w / 2) / f, (v / scale + t0.h / 2) / f);
+  }
+
   /** Paints dabs (document coordinates). Returns the keys of the tiles that changed. */
   applyDabs(dabs: readonly Dab[]): Set<number> {
     const changed = new Set<number>();
     const s = this.#setup;
+    const tip = this.#tip;
     for (const dab of dabs) {
-      const b = dabBounds(dab);
+      const b = dabBounds(dab, tip !== null);
       // In layer coordinates.
       const lx0 = b.x - s.offsetX;
       const ly0 = b.y - s.offsetY;
-      const r = dab.size / 2;
       const amount = Math.min(1, s.flow * dab.strength);
+      const a = (dab.angle * Math.PI) / 180;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      // Sampled tips: document px per tip px, and the pyramid level that is about one tip px per document px.
+      const scale = tip ? dab.size / tip.side : 1;
+      const level = tip ? Math.min(tip.levels.length - 1, Math.max(0, Math.floor(Math.log2(1 / scale)))) : 0;
       for (let ty = tileIndex(ly0); ty <= tileIndex(ly0 + b.h - 1); ty++) {
         for (let tx = tileIndex(lx0); tx <= tileIndex(lx0 + b.w - 1); tx++) {
           const tile = this.#tiles.get(tileKey(tx, ty));
@@ -103,12 +199,12 @@ export class StrokeRenderer {
           for (let ly = y0; ly < y1; ly++) {
             const dy = ly + s.offsetY + 0.5 - dab.y;
             for (let lx = x0; lx < x1; lx++) {
-              const cov = dabCoverage(Math.hypot(lx + s.offsetX + 0.5 - dab.x, dy), r, s.hardness);
+              const cov = this.#coverage(dab, cos, sin, level, scale, lx + s.offsetX + 0.5 - dab.x, dy);
               if (cov <= 0) continue;
               const p = (ly - ty * TILE_SIZE) * TILE_SIZE + (lx - tx * TILE_SIZE);
               const c = tile.coverage[p]!;
               tile.coverage[p] = c + (1 - c) * cov * amount;
-              this.#shade(tile, p);
+              this.#shade(tile, p, lx + s.offsetX, ly + s.offsetY);
               any = true;
             }
           }
@@ -119,34 +215,61 @@ export class StrokeRenderer {
     return changed;
   }
 
-  /** Recomputes one pixel from its original value and the stroke's coverage. */
-  #shade(tile: TileState, p: number): void {
+  /** Recomputes one pixel (document position x, y) from its original value and the stroke's coverage. */
+  #shade(tile: TileState, p: number, x: number, y: number): void {
     const s = this.#setup;
     const sel = tile.selection === 255 ? 1 : (tile.selection as Uint8Array)[p]! / 255;
-    const e = s.opacity * tile.coverage[p]! * sel;
+    let e = s.opacity * tile.coverage[p]! * sel;
     const cc = s.format.colorChannels;
-    const spp = this.#spp;
     const max = this.#max;
-    const i = p * spp;
+    const q = this.#q;
+    const i = p * this.#spp;
     const o = tile.original;
     const out = tile.data;
-    const q = s.format.depth === 32 ? (v: number) => v : (v: number) => Math.round(Math.min(max, Math.max(0, v)));
-    const hasAlpha = s.format.hasAlpha;
-    const keepAlpha = !hasAlpha || s.lockAlpha;
-    if (s.erase && !keepAlpha) {
+    const keepAlpha = !s.format.hasAlpha || s.lockAlpha;
+    const mode = s.erase ? 'erase' : s.mode;
+    if (mode === 'erase' || mode === 'clear') {
+      if (keepAlpha) {
+        // The eraser paints the background colour where alpha cannot change; Clear does nothing there.
+        if (mode === 'erase') for (let c = 0; c < cc; c++) out[i + c] = q(o[i + c]! + (s.color[c]! - o[i + c]!) * e);
+        return;
+      }
       out[i + cc] = q(o[i + cc]! * (1 - e));
       return;
     }
-    if (keepAlpha) {
-      // Only the colour changes (Background, locked transparency, or the eraser painting the background colour).
-      for (let c = 0; c < cc; c++) out[i + c] = q(o[i + c]! + (s.color[c]! - o[i + c]!) * e);
+    if (mode === 'dissolve') e = dissolveNoise(x, y) < e ? 1 : 0;
+    const ao = keepAlpha ? 1 : o[i + cc]! / max;
+    if (mode === 'behind') {
+      // Paint under the pixel: the pixel over the paint.
+      if (keepAlpha) return;
+      const a = ao + e * (1 - ao);
+      for (let c = 0; c < cc; c++)
+        out[i + c] = a > 0 ? q((o[i + c]! * ao + s.color[c]! * e * (1 - ao)) / a) : o[i + c]!;
+      out[i + cc] = q(a * max);
       return;
     }
-    // Paint over the pixel ("over" with straight alpha).
-    const ao = o[i + cc]! / max;
+    // The paint's colour blended with the pixel (as a layer of paint over it).
+    const blended = this.#blended;
+    if (mode === 'normal' || mode === 'dissolve') {
+      for (let c = 0; c < cc; c++) blended[c] = s.color[c]!;
+    } else if (isWholeColorMode(mode) && cc === 3) {
+      const b = [o[i]! / max, o[i + 1]! / max, o[i + 2]! / max];
+      const src = [s.color[0]! / max, s.color[1]! / max, s.color[2]! / max];
+      const r = blendColor(mode, b, src, this.#hdr);
+      for (let c = 0; c < 3; c++) blended[c] = r[c]! * max;
+    } else {
+      for (let c = 0; c < cc; c++)
+        blended[c] = blendChannel(mode, o[i + c]! / max, s.color[c]! / max, 1, this.#hdr) * max;
+    }
+    if (keepAlpha) {
+      for (let c = 0; c < cc; c++) out[i + c] = q(o[i + c]! + (blended[c]! - o[i + c]!) * e);
+      return;
+    }
+    // Paint over the pixel: where the pixel is transparent the paint shows as is; elsewhere the blend.
     const a = e + ao * (1 - e);
     for (let c = 0; c < cc; c++) {
-      out[i + c] = a > 0 ? q((s.color[c]! * e + o[i + c]! * ao * (1 - e)) / a) : o[i + c]!;
+      const v = (1 - ao) * e * s.color[c]! + ao * e * blended[c]! + (1 - e) * ao * o[i + c]!;
+      out[i + c] = a > 0 ? q(v / a) : o[i + c]!;
     }
     out[i + cc] = q(a * max);
   }
@@ -159,10 +282,10 @@ export class StrokeRenderer {
 }
 
 /** Layer tiles (layer tile coordinates) the dabs touch. */
-export function dabTiles(dabs: readonly Dab[], offsetX: number, offsetY: number): [number, number][] {
+export function dabTiles(dabs: readonly Dab[], offsetX: number, offsetY: number, sampled = false): [number, number][] {
   const out = new Map<number, [number, number]>();
   for (const dab of dabs) {
-    const b = dabBounds(dab);
+    const b = dabBounds(dab, sampled);
     const x0 = b.x - offsetX;
     const y0 = b.y - offsetY;
     for (let ty = tileIndex(y0); ty <= tileIndex(y0 + b.h - 1); ty++)

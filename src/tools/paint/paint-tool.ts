@@ -11,7 +11,7 @@
  */
 import type { PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_BRUSH, DabSpacer, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
-import type { CursorState, PaintStroke, Tool, ToolContext, ToolPointerEvent } from '../types';
+import type { BrushOutline, CursorState, PaintStroke, Tool, ToolContext, ToolPointerEvent } from '../types';
 
 export class PaintingTool implements Tool {
   readonly id: string;
@@ -19,7 +19,7 @@ export class PaintingTool implements Tool {
   readonly key: string;
   readonly kind: PaintTool;
   readonly options: BrushSettings;
-  #stroke: { session: PaintStroke; spacer: DabSpacer; points: StrokePoint[] } | null = null;
+  #stroke: { session: PaintStroke; spacer: DabSpacer; points: StrokePoint[]; start: number } | null = null;
   /** End of the last stroke, for Shift-click lines. */
   #lastEnd: StrokePoint | null = null;
 
@@ -43,9 +43,34 @@ export class PaintingTool implements Tool {
     return this.#stroke !== null;
   }
 
-  #point(e: ToolPointerEvent, ctx: ToolContext): StrokePoint {
+  #point(e: ToolPointerEvent, ctx: ToolContext, start = e.time ?? 0): StrokePoint {
     const p = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
-    return { x: p.x, y: p.y, pressure: e.pressure };
+    return {
+      x: p.x,
+      y: p.y,
+      pressure: e.pressure,
+      tiltX: e.tiltX ?? 0,
+      tiltY: e.tiltY ?? 0,
+      twist: e.twist ?? 0,
+      wheel: e.wheel ?? 0,
+      time: Math.max(0, (e.time ?? 0) - start),
+    };
+  }
+
+  /** The cursor at the pointer — ahead of it where the browser predicts the next position. */
+  #outline(e: ToolPointerEvent, ctx: ToolContext): BrushOutline {
+    const p = ctx.viewport.viewToDoc(e.predicted ?? { x: e.x, y: e.y });
+    const o = this.options;
+    return {
+      x: p.x,
+      y: p.y,
+      size: o.size,
+      angle: o.angle,
+      roundness: o.roundness,
+      flipX: o.flipX,
+      flipY: o.flipY,
+      tip: o.tip,
+    };
   }
 
   onPointerDown(e: ToolPointerEvent, ctx: ToolContext): void {
@@ -53,24 +78,26 @@ export class PaintingTool implements Tool {
     const session = ctx.paint.begin(this.kind, this.options);
     if (!session) return;
     const spacer = new DabSpacer(this.options);
-    const p = this.#point(e, ctx);
+    const start = e.time ?? 0;
+    const p = this.#point(e, ctx, start);
     const points: StrokePoint[] = [];
-    this.#stroke = { session, spacer, points };
+    this.#stroke = { session, spacer, points, start };
     if (e.shiftKey && this.#lastEnd) {
       // A straight line from where the last stroke ended.
-      points.push(this.#lastEnd);
-      session.add(spacer.add(this.#lastEnd));
+      const from = { ...this.#lastEnd, time: 0 };
+      points.push(from);
+      session.add(spacer.add(from));
     }
     points.push(p);
     session.add(spacer.add(p));
-    ctx.setBrushOutline({ x: p.x, y: p.y, size: this.options.size });
+    ctx.setBrushOutline(this.#outline(e, ctx));
   }
 
   onPointerMove(e: ToolPointerEvent, ctx: ToolContext): void {
     const stroke = this.#stroke;
-    const p = this.#point(e, ctx);
-    ctx.setBrushOutline({ x: p.x, y: p.y, size: this.options.size });
+    ctx.setBrushOutline(this.#outline(e, ctx));
     if (!stroke) return;
+    const p = this.#point(e, ctx, stroke.start);
     stroke.points.push(p);
     stroke.session.add(stroke.spacer.add(p));
   }
@@ -87,8 +114,7 @@ export class PaintingTool implements Tool {
 
   onPointerHover(e: ToolPointerEvent, ctx: ToolContext): void {
     if (!ctx.document) return;
-    const p = this.#point(e, ctx);
-    ctx.setBrushOutline({ x: p.x, y: p.y, size: this.options.size });
+    ctx.setBrushOutline(this.#outline(e, ctx));
   }
 
   onPointerLeave(ctx: ToolContext): void {

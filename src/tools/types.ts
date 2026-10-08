@@ -22,6 +22,18 @@ export interface ToolPointerEvent {
   spaceKey: boolean;
   /** Pen pressure 0–1 (1 for a mouse or touch). */
   pressure: number;
+  /** Pen tilt along x and y, degrees (−90–90; 0 upright or no pen). */
+  tiltX?: number;
+  tiltY?: number;
+  /** Pen barrel rotation, degrees (0–359). */
+  twist?: number;
+  /** Stylus wheel (airbrush finger wheel), 0–1. */
+  wheel?: number;
+  /** Event time, ms (for timing within a stroke). */
+  time?: number;
+  pointerType?: 'mouse' | 'pen' | 'touch';
+  /** Where the pointer is predicted to be next (canvas device px), for drawing the cursor ahead. */
+  predicted?: { x: number; y: number };
 }
 
 export interface ViewRect {
@@ -42,6 +54,18 @@ export type SelectionPreview =
 export interface CropBoxOverlay {
   rect: { x: number; y: number; w: number; h: number } | null;
   thirds: boolean;
+}
+
+/** The brush cursor: centre and size (document px) and the tip's pose; `tip` names a sampled tip. */
+export interface BrushOutline {
+  x: number;
+  y: number;
+  size: number;
+  angle?: number;
+  roundness?: number;
+  flipX?: boolean;
+  flipY?: boolean;
+  tip?: string | null;
 }
 
 /** Free Transform's box (document coordinates): its corners, the 8 handles and the reference point (if shown). */
@@ -83,8 +107,8 @@ export interface ToolContext {
   setCropBox(box: CropBoxOverlay | null): void;
   /** Shows Free Transform's box, or hides it with null. */
   setTransformBox(box: TransformBoxOverlay | null): void;
-  /** Shows the brush outline at a document point (diameter in document px), or hides it. */
-  setBrushOutline(outline: { x: number; y: number; size: number } | null): void;
+  /** Shows the brush outline at a document point (diameter in document px, tip pose), or hides it. */
+  setBrushOutline(outline: BrushOutline | null): void;
   /** Shows a command's result live without recording it (null cancels); `execute` then records it. */
   preview(descriptor: CommandDescriptor | null): void;
   /** Selects layers of the document (e.g. the Move tool's Auto-Select). */

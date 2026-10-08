@@ -4,12 +4,26 @@
  * `UiBridge` (dialogs, panels, tool state) and attaches the canvas.
  */
 import { APP_NAME } from './brand';
-import { BLEND_MODE_LABELS, availableBlendModes, blendModeMenu, cycleBlendMode } from '../core/composite/blend';
+import {
+  BLEND_MODE_LABELS,
+  availableBlendModes,
+  blendModeMenu,
+  brushModeMenu,
+  cycleBlendMode,
+} from '../core/composite/blend';
 import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
 import { colorToSamples, type RGB } from '../core/color/color';
-import { paintTarget, strokeSetup, type PaintTool } from '../core/commands/builtin/paint';
-import { stepBrushSize, stepHardness, type BrushSettings } from '../core/paint/brush';
+import { paintTarget, resolveTip, strokeSetup, type PaintTool } from '../core/commands/builtin/paint';
+import {
+  MAX_TIP_SIDE,
+  stepBrushSize,
+  stepHardness,
+  type BrushMode,
+  type BrushSettings,
+  type BrushTip,
+} from '../core/paint/brush';
+import { planFromDocument } from '../core/composite/flatten';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
 import type { PaintHost, PaintStroke } from '../tools/types';
@@ -116,6 +130,8 @@ export interface UiBridge {
   jpegOptions(request: JpegOptionsRequest): Promise<JpegSaveOptions | null>;
   /** The WebP Options dialog; null when cancelled. */
   webpOptions(request: WebpOptionsRequest): Promise<WebpSaveOptions | null>;
+  /** The Brush Name dialog for a new tip; null when cancelled. */
+  brushName(tip: { width: number; height: number; data: Uint8Array }, name: string): Promise<string | null>;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -259,7 +275,14 @@ export class AppController {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
       return null;
     }
-    const live = this.services.strokes.begin(strokeSetup(doc, layer, { tool, points: [], brush, color }));
+    let tip: BrushTip | null;
+    try {
+      tip = resolveTip(brush, this.services.brushes);
+    } catch (error) {
+      void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
+      return null;
+    }
+    const live = this.services.strokes.begin(strokeSetup(doc, layer, { tool, brush, color }, tip));
     const stroke = new PaintSession(ws, doc, layer, live, tool, brush, color);
     return {
       add: (dabs) => stroke.add(dabs),
@@ -458,6 +481,42 @@ export class AppController {
       }),
     );
     return pictures;
+  }
+
+  /**
+   * Edit > Define Brush Preset: the selected area of the visible image (or the whole
+   * canvas) becomes a sampled tip in the brush library and the Brush tool's tip.
+   */
+  async defineBrushPreset(): Promise<void> {
+    const ws = this.workspace;
+    const doc = ws.active?.doc;
+    if (!doc) return;
+    const title = 'Could not define the brush';
+    const { pixelOps, brushes } = this.services;
+    const rect = doc.selection ? await pixelOps.maskBounds(doc.selection.data, doc.canvasRect) : doc.canvasRect;
+    if (!rect) return this.#ui.alert(title, 'Nothing is selected.');
+    if (rect.w > MAX_TIP_SIDE || rect.h > MAX_TIP_SIDE)
+      return this.#ui.alert(title, `A brush tip can be at most ${MAX_TIP_SIDE} × ${MAX_TIP_SIDE} pixels.`);
+    const data = await pixelOps.brushTipFromImage(
+      planFromDocument(doc),
+      rect,
+      doc.selection?.data ?? null,
+      doc.canvasRect,
+    );
+    if (!data.some((v) => v > 0))
+      return this.#ui.alert(
+        title,
+        'The selected area is empty: only dark pixels paint (white and transparent do not).',
+      );
+    const tip = { width: rect.w, height: rect.h, data };
+    await brushes.ready;
+    const name = await this.#ui.brushName(tip, `Sampled Brush ${brushes.list().length + 1}`);
+    if (!name) return;
+    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `tip-${Date.now()}`;
+    await brushes.add({ id, name, ...tip });
+    // The new tip becomes the Brush tool's, at its own size (as the reference app selects the new preset).
+    this.tools.brush.setOptions({ tip: id, size: Math.max(rect.w, rect.h), spacing: 0.25 });
+    this.#ui.toolOptionsChanged();
   }
 
   /** Fills with a colour (Alt/Ctrl+Backspace and the dialog). */
@@ -867,6 +926,12 @@ export class AppController {
       },
     });
     add({
+      id: 'edit.defineBrush',
+      label: 'Define Brush Preset…',
+      enabled: () => !toolBusy() && ws.active !== null,
+      run: () => this.defineBrushPreset(),
+    });
+    add({
       id: 'edit.freeTransform',
       label: 'Free Transform',
       enabled: () => !toolBusy() && ws.active !== null && ws.canExecute('freeTransform'),
@@ -1168,9 +1233,15 @@ export class AppController {
       },
     });
 
-    // Blend modes (Alt+Shift+letter, Shift+Plus/Minus) for the selected layers. With the
-    // Brush/Eraser active they are the tool's mode in the reference app; until brush modes
-    // exist (Phase 2) they do nothing then, rather than change the layer by surprise.
+    // Blend modes (Alt+Shift+letter, Shift+Plus/Minus): with the Brush active they set its
+    // Mode (as in the reference app); otherwise the selected layers' blend mode. The
+    // Eraser has no mode, so they do nothing with it rather than change the layer.
+    const brushTool = () => (this.#paintTool()?.kind === 'brush' ? this.#paintTool() : null);
+    const brushModes = (): readonly BrushMode[] => {
+      const d = doc();
+      return d ? brushModeMenu(d.mode, d.depth) : [];
+    };
+    const setBrushMode = (mode: BrushMode) => this.#setPaintOptions({ mode });
     const blendTargets = (): LayerNode[] => {
       const d = doc();
       if (!d) return [];
@@ -1192,8 +1263,14 @@ export class AppController {
       add({
         id,
         label,
-        enabled: () => this.#paintTool() === null && blendTargets().length > 0,
+        enabled: () => (this.#paintTool() ? !!brushTool() && !!doc() : blendTargets().length > 0),
         run: () => {
+          const brush = brushTool();
+          if (brush) {
+            const menu = brushModes();
+            const i = Math.max(0, menu.indexOf(brush.options.mode));
+            return setBrushMode(menu[(i + step + menu.length) % menu.length]!);
+          }
           const d = doc();
           const targets = blendTargets();
           if (!d || targets.length === 0) return;
@@ -1209,15 +1286,17 @@ export class AppController {
         label: BLEND_MODE_LABELS[mode],
         enabled: () => {
           const d = doc();
-          return (
-            !!d &&
-            this.#paintTool() === null &&
-            availableBlendModes(d.mode, d.depth).includes(mode) &&
-            blendTargets().length > 0
-          );
+          if (!d || !availableBlendModes(d.mode, d.depth).includes(mode)) return false;
+          return this.#paintTool() ? !!brushTool() : blendTargets().length > 0;
         },
-        run: () => setBlendMode(mode),
+        run: () => (brushTool() ? setBrushMode(mode) : setBlendMode(mode)),
       });
+    }
+    for (const [mode, label] of [
+      ['behind', 'Behind'],
+      ['clear', 'Clear'],
+    ] as const) {
+      add({ id: `blend.set.${mode}`, label, enabled: () => !!brushTool() && !!doc(), run: () => setBrushMode(mode) });
     }
 
     // View

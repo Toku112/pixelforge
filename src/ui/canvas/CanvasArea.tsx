@@ -35,7 +35,15 @@ export function CanvasArea() {
       preview: (descriptor) => void controller.previewDocumentCommand(descriptor),
       selectLayers: (ids) => controller.selectLayers(ids),
       report: (title, message) => void controller.report(title, message),
-      ants: { canvas: antsRef.current!, trace: controller.services.traceOutline },
+      ants: {
+        canvas: antsRef.current!,
+        trace: controller.services.traceOutline,
+        tipOutline: async (id) => {
+          const tip = controller.services.brushes.get(id);
+          if (!tip) return null;
+          return { loops: await controller.services.traceTip(tip), width: tip.width, height: tip.height };
+        },
+      },
       onViewChange: (state) => {
         // Publish view changes to panels and the status bar at most once per frame.
         if (frame) return;

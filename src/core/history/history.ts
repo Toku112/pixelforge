@@ -11,7 +11,7 @@
  * snapshot: jumping to it restores the captured state, after first saving the
  * current state as an anchor so the remaining entries can still be revisited.
  */
-import type { Command } from '../commands/command';
+import type { Command, CommandDescriptor } from '../commands/command';
 import { Emitter } from '../document/events';
 import type { ImageDocument } from '../document/document';
 import { alwaysResident, type TileResidency } from '../document/tile';
@@ -108,6 +108,11 @@ export class History {
       snapshot: i === 0,
       status: i < this.#current ? 'past' : i === this.#current ? 'current' : 'future',
     }));
+  }
+
+  /** What a history step recorded (its command's descriptor), for Actions and diagnostics; null for snapshots. */
+  descriptorOf(entryId: number): CommandDescriptor | null {
+    return this.#entries.find((e) => e.id === entryId)?.command?.descriptor ?? null;
   }
 
   /** Memory held for undo/redo by the commands in the history, in bytes. */

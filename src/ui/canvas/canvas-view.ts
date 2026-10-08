@@ -32,7 +32,12 @@ export interface CanvasViewOptions {
   selectLayers?(ids: string[]): void;
   report?(title: string, message: string): void;
   /** Marching ants: a 2D canvas stacked above the document canvas, and the outline tracer. */
-  ants?: { canvas: HTMLCanvasElement; trace: OutlineTracer };
+  ants?: {
+    canvas: HTMLCanvasElement;
+    trace: OutlineTracer;
+    /** The outline of a sampled brush tip by id (tip pixels and size), for the brush cursor. */
+    tipOutline?: (id: string) => Promise<{ loops: Float32Array[]; width: number; height: number } | null>;
+  };
   renderer?: RendererOptions;
 }
 
@@ -59,7 +64,9 @@ export class CanvasView {
     this.#options = options;
     this.renderer = new Renderer(canvas, options.renderer);
     const renderer = this.renderer;
-    this.#ants = options.ants ? new SelectionOverlay(options.ants.canvas, renderer, options.ants.trace) : null;
+    this.#ants = options.ants
+      ? new SelectionOverlay(options.ants.canvas, renderer, options.ants.trace, options.ants.tipOutline)
+      : null;
     this.context = {
       get viewport() {
         return renderer.viewport;

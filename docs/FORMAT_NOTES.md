@@ -301,3 +301,26 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
 - Lossless: our Rust encoder (image-webp), exact, alpha kept, ICC profile embedded.
 - Lossy (quality 0–100): the browser's encoder through an OffscreenCanvas in the codec worker; the ICC profile is then
   added by rewriting the file into the extended format (VP8X + ICCP chunks). Safari cannot encode WebP: lossless only.
+
+## 8. Brushes
+
+- **Tip frame.** A dab's pixel offset (dx, dy) from its centre (document px, y down) maps into the tip's frame by
+  undoing the angle (counter-clockwise on screen): `u = dx·cos a − dy·sin a`, `v = dx·sin a + dy·cos a`; flips negate u
+  or v; roundness divides v. The computed tip then reads the round profile at `hypot(u, v)` against radius `size/2`
+  (hardness: solid core `h·r`, smoothstep rim, at least one pixel wide).
+- **Sampled tips** store coverage 0–255. The tip's longer side spans `size` document pixels; the tip is read
+  bilinearly from a pyramid of halved copies, using the level nearest one tip pixel per document pixel, so small
+  dabs of large tips do not alias. Defining a tip (Edit > Define Brush Preset) takes the visible image under the
+  selection: coverage = (1 − gray) × alpha × selection, gray = 0.299 R + 0.587 G + 0.114 B.
+- **Coverage and opacity.** Each dab adds `flow × strength × tip` to the stroke's coverage c (`c ← c + (1 − c)·a`);
+  the pixel is recomputed from its value before the stroke with `e = opacity × c × selection`, so a stroke never
+  exceeds Opacity.
+- **Brush modes.** With paint colour S and the pixel's colour B and alpha αb: the blend result `F = blend(B, S)`
+  (the layer blend formulas, FORMAT_NOTES §3), then `α = e + αb(1 − e)` and
+  `C = ((1 − αb)·e·S + αb·e·F + (1 − e)·αb·B) / α` — transparent pixels take the paint as is, as with a layer of paint.
+  Where alpha cannot change (Background, locked transparency) `C = B + (F − B)·e`. Dissolve paints a pixel fully when
+  its fixed noise value is below e (the same noise as the Dissolve blend mode). Behind: the pixel over the paint
+  (`α = αb + e(1 − αb)`); Clear: `α = αb(1 − e)`; neither changes layers without editable transparency.
+- **Pen samples** record x, y, pressure, tilt x/y (degrees), twist (degrees), wheel (0–1) and time (ms since the stroke
+  began). Pens reported by altitude/azimuth (Safari) are converted: `tiltX = atan(cos az / tan alt)`,
+  `tiltY = atan(sin az / tan alt)`.

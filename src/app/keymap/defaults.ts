@@ -188,6 +188,8 @@ const KEYS: DefaultBinding[] = [
 const BLEND_MODES: [string, string][] = [
   ['normal', 'N'],
   ['dissolve', 'I'],
+  ['behind', 'Q'],
+  ['clear', 'R'],
   ['darken', 'K'],
   ['multiply', 'M'],
   ['color-burn', 'B'],

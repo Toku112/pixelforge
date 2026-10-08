@@ -57,7 +57,14 @@ export type DialogRequest =
   | ({ kind: 'canvas-size'; resolve: (result: CanvasSizeResult | null) => void } & CanvasSizeRequest)
   | ({ kind: 'save-as'; resolve: (result: SaveAsResult | null) => void } & SaveAsRequest)
   | ({ kind: 'jpeg-options'; resolve: (result: JpegSaveOptions | null) => void } & JpegOptionsRequest)
-  | ({ kind: 'webp-options'; resolve: (result: WebpSaveOptions | null) => void } & WebpOptionsRequest);
+  | ({ kind: 'webp-options'; resolve: (result: WebpSaveOptions | null) => void } & WebpOptionsRequest)
+  | {
+      kind: 'brush-name';
+      /** The new tip (coverage 0–255). */
+      tip: { width: number; height: number; data: Uint8Array };
+      name: string;
+      resolve: (name: string | null) => void;
+    };
 
 export interface WebpOptionsRequest {
   options: WebpSaveOptions;

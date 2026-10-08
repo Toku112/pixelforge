@@ -1032,3 +1032,72 @@
   display: flex;
   margin: 4px 0;
 }
+.brush-name-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.brush-preview {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 104px;
+}
+.brush-preview canvas {
+  max-width: 96px;
+  max-height: 96px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.option-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.brush-picker {
+  position: relative;
+}
+.brush-picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 2px;
+}
+.tip-thumb {
+  display: block;
+  background: #fff;
+  border-radius: 2px;
+}
+.brush-picker-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  width: 300px;
+  padding: 10px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+.brush-picker-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+.brush-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 160px;
+  overflow: auto;
+  margin-bottom: 6px;
+}
+.brush-tip {
+  padding: 1px;
+  border: 1px solid transparent;
+}
+.brush-tip[aria-selected='true'] {
+  border-color: var(--accent);
+}

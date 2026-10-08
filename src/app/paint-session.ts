@@ -13,7 +13,7 @@ import type { ImageDocument } from '../core/document/document';
 import type { PixelLayer } from '../core/document/layers';
 import type { SampleArray } from '../core/document/pixel-format';
 import { tileKey } from '../core/document/tile';
-import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
+import { POINT_FIELDS, packPoints, type BrushSettings, type Dab, type StrokePoint } from '../core/paint/brush';
 import { dabTiles } from '../core/paint/stroke';
 import type { PaintStroke } from '../tools/types';
 import type { LiveStroke } from '../workers/stroke-client';
@@ -68,7 +68,7 @@ export class PaintSession implements PaintStroke {
     if (this.#flight || this.#queue.length === 0 || this.#failed) return;
     const dabs = this.#queue.splice(0);
     const layer = this.#layer;
-    const coords = dabTiles(dabs, layer.offsetX, layer.offsetY);
+    const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, this.#brush.tip !== null);
     const fresh: { tx: number; ty: number; data: SampleArray }[] = [];
     for (const [tx, ty] of coords) {
       const key = tileKey(tx, ty);
@@ -117,7 +117,8 @@ export class PaintSession implements PaintStroke {
     if (this.#touched.size === 0) return;
     const params = {
       tool: this.#tool,
-      points: points.flatMap((p) => [p.x, p.y, p.pressure]),
+      points: packPoints(points),
+      stride: POINT_FIELDS.length,
       brush: this.#brush,
       color: this.#color,
     };

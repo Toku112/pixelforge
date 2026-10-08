@@ -261,6 +261,13 @@ export function availableBlendModes(mode: string, depth: number): readonly Layer
   return modes;
 }
 
+/** The Mode menu of painting tools: Behind and Clear follow Dissolve, as in the reference app. */
+export function brushModeMenu(mode: string, depth: number): readonly (LayerBlendMode | 'behind' | 'clear')[] {
+  const modes = availableBlendModes(mode, depth);
+  const at = Math.max(modes.indexOf('dissolve'), modes.indexOf('normal')) + 1;
+  return [...modes.slice(0, at), 'behind', 'clear', ...modes.slice(at)];
+}
+
 /** The blend-mode menu for a layer: groups add Pass Through at the top. */
 export function blendModeMenu(kind: 'pixel' | 'group', mode: string, depth: number): readonly BlendMode[] {
   const modes = availableBlendModes(mode, depth);

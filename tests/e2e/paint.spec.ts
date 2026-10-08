@@ -35,6 +35,16 @@ test.afterEach(({ page }) => {
 
 const history = (page: Page) => page.getByRole('listbox', { name: 'History states' }).getByRole('option');
 
+/** Sets the brush size in the brush preset picker (the options bar shows it on the picker button). */
+async function setSize(page: Page, px: number) {
+  await page.getByRole('button', { name: 'Brush preset picker' }).click();
+  const size = page.getByRole('group', { name: 'Brush settings' }).getByRole('textbox', { name: 'Size' });
+  await size.fill(String(px));
+  await size.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('group', { name: 'Brush settings' })).toBeHidden();
+}
+
 async function at(page: Page, x: number, y: number) {
   const box = (await page.getByLabel('Document canvas').boundingBox())!;
   const p = await page.evaluate(
@@ -85,9 +95,7 @@ test('brush paints the foreground colour as one undoable step', async ({ page })
   await setForeground(page, 'FF0000');
   await page.keyboard.press('b');
   await expect(page.locator('.toolbar [data-tool="brush"]')).toHaveAttribute('aria-pressed', 'true');
-  const size = page.getByRole('textbox', { name: 'Size:' });
-  await size.fill('6');
-  await size.press('Enter');
+  await setSize(page, 6);
   const before = await pixel(page, 30, 20);
   await page.getByLabel('Document canvas').focus();
   await stroke(page, [
@@ -130,15 +138,14 @@ test('[ ] change the size, Shift-click draws a straight line, selection limits p
   await page.keyboard.press('ControlOrMeta+Alt+Shift+N');
   await page.keyboard.press('b');
   await page.getByLabel('Document canvas').focus();
-  const size = page.getByRole('textbox', { name: 'Size:' });
-  await expect(size).toHaveValue('30 px');
+  const picker = page.getByRole('button', { name: 'Brush preset picker' });
+  await expect(picker).toHaveText('30');
   await page.keyboard.press(']');
-  await expect(size).toHaveValue('35 px');
+  await expect(picker).toHaveText('35');
   await page.keyboard.press('[');
   await page.keyboard.press('[');
-  await expect(size).toHaveValue('25 px');
-  await size.fill('4');
-  await size.press('Enter');
+  await expect(picker).toHaveText('25');
+  await setSize(page, 4);
   await page.getByLabel('Document canvas').focus();
 
   // Click, then Shift-click: a straight line between them.
@@ -171,9 +178,7 @@ test('[ ] change the size, Shift-click draws a straight line, selection limits p
 test('eraser erases to transparency on layers and to the background colour on the Background', async ({ page }) => {
   await page.keyboard.press('e');
   await expect(page.locator('.toolbar [data-tool="eraser"]')).toHaveAttribute('aria-pressed', 'true');
-  const size = page.getByRole('textbox', { name: 'Size:' });
-  await size.fill('6');
-  await size.press('Enter');
+  await setSize(page, 6);
   await page.getByLabel('Document canvas').focus();
   await stroke(page, [
     [10, 20],

@@ -40,6 +40,9 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
     invertSelection(current, canvas) {
       return worker.invertSelection(current, canvas);
     },
+    brushTipFromImage(plan, rect, mask, canvas) {
+      return worker.brushTipFromImage(plan, rect, mask, canvas);
+    },
     maskBounds(mask, canvas) {
       return worker.maskBounds(mask, canvas);
     },

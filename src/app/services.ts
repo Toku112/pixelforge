@@ -4,6 +4,7 @@
  */
 import { registerBuiltinCommands } from '../core/commands/builtin';
 import type { PixelOps } from '../core/commands/command';
+import { BrushLibrary } from './brush-library';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
@@ -33,10 +34,14 @@ export interface AppServices {
   workspace: Workspace;
   renderThumbnail: ThumbnailRenderer;
   traceOutline: OutlineTracer;
+  /** The outline of a sampled brush tip (tip pixels), for the brush cursor. */
+  traceTip: (tip: { width: number; height: number; data: Uint8Array }) => Promise<Float32Array[]>;
   /** Live brush/eraser strokes in the pixel worker. */
   strokes: StrokeEngine;
   /** Pixel operations in the worker (also used by the commands). */
   pixelOps: PixelOps;
+  /** The user's sampled brush tips. */
+  brushes: BrushLibrary;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -47,14 +52,17 @@ export async function createServices(): Promise<AppServices> {
   registerBuiltinCommands(registry);
   const pixelWorker = createPixelWorker();
   const pixelOps = createWorkerPixelOps(pixelWorker);
-  const workspace = new Workspace({ registry, services: { pixelOps }, residency: tileStore });
+  const brushes = new BrushLibrary();
+  const workspace = new Workspace({ registry, services: { pixelOps, brushTips: brushes }, residency: tileStore });
   return {
     tileStore,
     codec: createCodecWorker(),
     workspace,
     renderThumbnail: (source, area, width, height) => pixelWorker.layerThumbnail(source, area, width, height),
     traceOutline: (mask, canvas) => pixelWorker.selectionOutline(mask, canvas),
+    traceTip: (tip) => pixelWorker.tipOutline(tip.width, tip.height, tip.data),
     strokes: createStrokeEngine(pixelWorker),
     pixelOps,
+    brushes,
   };
 }
