@@ -13,11 +13,11 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 7 (Brushes panel, brush presets and our default library, .pfbrush and .abr files, Tool
-  Presets); items 1–6 (pen input, tips, dynamics, texture, dual brush, wet edges, build-up, Brush Settings panel,
-  options bar, brush HUD, Preferences with painting cursors, smoothing, symmetry); Phase 1 Part D items 1–12 and the
-  automated part of item 13
-- Next up: Part E item 8 (brush engine speed: dab rendering in WebAssembly)
+- Last completed: Part E item 8 (dab rendering in WebAssembly); items 1–7 (pen input, tips, dynamics, texture, dual
+  brush, wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors,
+  smoothing, symmetry, Brushes panel, presets, brush files, Tool Presets); Phase 1 Part D items 1–12 and the automated
+  part of item 13
+- Next up: Part E item 9 (Eyedropper tool, Alt-click sampling, Color and Swatches panels)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -656,7 +656,8 @@ engine first, then its controls, then the tools built on it.
   ↳ note: the guide is moved, turned and sized on the canvas; editing its points and storing it in PSD files come with paths (Phase 5) (D-040, FORMAT_NOTES §8).
 - [x] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
   ↳ note: ABR files of format versions 6–10 (2003 on) through ag-psd; bristle and erodible tips are approximated by round tips until such tips exist; the options bar's tool icon is the tool preset picker (D-041, FORMAT_NOTES §9).
-- [ ] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
+- [x] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
+  ↳ note: WebAssembly paints plain strokes (Normal, Behind, Clear, erasing; round and sampled tips; selection, locked transparency) pixel-identically to the TypeScript renderer, ~6× faster single-threaded and across tiles on the thread pool; strokes with blend modes, texture, dual brush, wet edges, noise or varying colour/opacity stay in TypeScript for now. Measured by tests/e2e/perf/paint-perf.spec.ts: 60 fps, paint done 13 ms after release (D-042).
 - [ ] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)
 - [ ] Pencil tool (aliased, Auto Erase) and Eraser modes (Brush/Pencil/Block)
 - [ ] Gradient tool (G), classic mode: linear, radial, angle, reflected, diamond; reverse, dither, transparency; methods perceptual/linear/classic/smooth/stripes; Gradient Editor (colour and opacity stops, midpoints, smoothness, noise gradients); Gradients panel; GRD import

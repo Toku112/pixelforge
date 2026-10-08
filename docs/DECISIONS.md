@@ -632,3 +632,22 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   choosing one switches to its tool. Tools without settings (Hand, Zoom's view actions) have none. The options bar's
   tool icon opens the active tool's presets, as in the reference app.
 - Deleting a preset keeps its tip in the library: recorded strokes (Actions) may still need it.
+
+## D-042 — 2026-10-08 — Dab rendering in WebAssembly
+
+**Decision:**
+
+- The pixel-ops crate gains `BrushStroke`: a stroke's tiles before the stroke and its coverage live in WebAssembly
+  memory for the whole stroke; each batch of dabs is painted there and only the changed tiles are copied into the
+  layer's arrays (one copy, from a view of the module's memory). With the threaded build the tiles a dab touches are
+  painted in parallel on the rayon pool.
+- It follows the TypeScript renderer step by step (f64 arithmetic, coverage stored as f32, rounding as JavaScript's
+  `Math.round`, i.e. `floor(v + 0.5)` — also a single WebAssembly instruction where Rust's `round` is a library call),
+  so both paint identical pixels; a unit test compares them across bit depths, modes, layouts, selections, offsets and
+  sampled tips, and fails on any difference. Live strokes, recorded strokes (Actions) and replays use the same path.
+- It covers the plain stroke (Normal, Behind, Clear and erasing; round and sampled tips; Opacity, Flow, selection,
+  locked transparency) — the big soft brush the target names. Strokes with blend modes, texture, dual brush, wet
+  edges, noise or colours/opacities that vary per dab keep the TypeScript renderer for now; moving those later only
+  needs the same equivalence test.
+- Measured: a 500 px soft 16-bit dab went from ~16 ms (TypeScript) to ~2.5 ms single-threaded; in the app (threaded)
+  a dense stroke on a 6000 × 4000 16-bit document keeps 60 fps and finishes 13 ms after the pointer is released.

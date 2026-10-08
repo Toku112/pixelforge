@@ -438,6 +438,24 @@ export class StrokeRenderer {
   }
 }
 
+/**
+ * Whether a stroke stays within what the WebAssembly painter covers (pixel-ops `BrushStroke`):
+ * Normal, Behind, Clear or erasing, without texture, dual brush, wet edges, noise, or colours
+ * and opacities that vary per dab. Others are painted by this renderer.
+ */
+export function wasmCanPaint(setup: StrokeSetup): boolean {
+  return (
+    (setup.erase || setup.mode === 'normal' || setup.mode === 'behind' || setup.mode === 'clear') &&
+    !setup.varyColor &&
+    !setup.varyOpacity &&
+    !setup.texture &&
+    !setup.dual &&
+    !setup.noise &&
+    !setup.wetEdges &&
+    setup.format.colorChannels <= 56
+  );
+}
+
 /** Layer tiles (layer tile coordinates) the dabs touch (`sampled` / `dualSampled`: the tips are images). */
 export function dabTiles(
   dabs: readonly Dab[],

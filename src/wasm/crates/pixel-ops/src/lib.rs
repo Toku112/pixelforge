@@ -5,6 +5,8 @@
 //! work in place and split the buffer into pixel-aligned chunks; with the `threads`
 //! feature the chunks are processed in parallel on a rayon pool backed by Web Workers.
 
+pub mod stroke;
+
 use core::fmt;
 use core::ops::Not;
 use wasm_bindgen::prelude::*;

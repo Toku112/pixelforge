@@ -36,7 +36,8 @@ import { tipFromImage } from '../core/paint/define-tip';
 import { TILE_SIZE } from '../core/document/tile';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
-import { StrokeRenderer, type StrokeSetup } from '../core/paint/stroke';
+import { StrokeRenderer, wasmCanPaint, type StrokeSetup } from '../core/paint/stroke';
+import { WasmStrokeRenderer, type StrokePainter } from './wasm-stroke';
 import { selectionOutline } from '../core/selection/outline';
 import type { MaskData } from '../core/selection/selection';
 import type { FlattenPlan } from '../core/composite/flatten';
@@ -57,16 +58,16 @@ export interface PixelWorkerInfo {
   crossOriginIsolated: boolean;
 }
 
-async function load(): Promise<{ ops: Ops; variant: 'mt' | 'st' }> {
+async function load(): Promise<{ ops: Ops; variant: 'mt' | 'st'; memory: WebAssembly.Memory }> {
   if (self.crossOriginIsolated && self.name !== 'pixel-single-thread') {
     const mt = await import('../wasm/pkg/pixel-ops-mt/pixel_ops.js');
-    await mt.default();
+    const exports = await mt.default();
     await mt.initThreadPool(Math.max(1, navigator.hardwareConcurrency || 1));
-    return { ops: mt, variant: 'mt' };
+    return { ops: mt, variant: 'mt', memory: exports.memory };
   }
   const st = await import('../wasm/pkg/pixel-ops-st/pixel_ops.js');
-  await st.default();
-  return { ops: st, variant: 'st' };
+  const exports = await st.default();
+  return { ops: st, variant: 'st', memory: exports.memory };
 }
 
 const ready = load();
@@ -138,7 +139,14 @@ function returnUnshared(tiles: SampleArray[]): (SampleArray | null)[] {
 }
 
 /** Live strokes being painted, by id. */
-const strokes = new Map<number, StrokeRenderer>();
+const strokes = new Map<number, StrokePainter>();
+
+/** The WebAssembly painter where it covers the stroke, otherwise the TypeScript renderer. */
+async function strokePainter(setup: StrokeSetup): Promise<StrokePainter> {
+  if (!wasmCanPaint(setup)) return new StrokeRenderer(setup);
+  const { ops, memory } = await ready;
+  return new WasmStrokeRenderer(ops.BrushStroke, setup, memory);
+}
 
 function transferMask(mask: MaskData | null): MaskData | null {
   if (!mask) return null;
@@ -307,21 +315,25 @@ const conversions = {
   },
 
   /** See PixelOps.paintStroke (a whole recorded stroke at once); same return convention as invertTiles. */
-  paintStroke(
+  async paintStroke(
     setup: StrokeSetup,
     tiles: SampleArray[],
     coords: [number, number][],
     dabs: Dab[],
-  ): (SampleArray | null)[] {
-    const renderer = new StrokeRenderer(setup);
-    tiles.forEach((data, i) => renderer.addTile(coords[i]![0], coords[i]![1], data));
-    renderer.applyDabs(dabs);
+  ): Promise<(SampleArray | null)[]> {
+    const renderer = await strokePainter(setup);
+    try {
+      tiles.forEach((data, i) => renderer.addTile(coords[i]![0], coords[i]![1], data));
+      renderer.applyDabs(dabs);
+    } finally {
+      renderer.dispose?.();
+    }
     return returnUnshared(tiles);
   },
 
   /** Starts a live stroke (the Brush or Eraser being dragged). */
-  strokeBegin(id: number, setup: StrokeSetup): void {
-    strokes.set(id, new StrokeRenderer(setup));
+  async strokeBegin(id: number, setup: StrokeSetup): Promise<void> {
+    strokes.set(id, await strokePainter(setup));
   },
 
   /**
@@ -345,6 +357,7 @@ const conversions = {
   },
 
   strokeEnd(id: number): void {
+    strokes.get(id)?.dispose?.();
     strokes.delete(id);
   },
 
