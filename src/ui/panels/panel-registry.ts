@@ -7,6 +7,7 @@ import { BrushesPanel } from './BrushesPanel';
 import { ToolPresetsPanel } from './ToolPresetsPanel';
 import { ColorPanel } from './ColorPanel';
 import { SwatchesPanel } from './SwatchesPanel';
+import { GradientsPanel } from './GradientsPanel';
 import { NavigatorPanel } from './NavigatorPanel';
 
 export interface PanelDefinition {
@@ -72,6 +73,22 @@ export const PANELS: Record<string, PanelDefinition> = {
       { label: 'Delete Swatch', command: 'swatches.delete' },
       { label: 'Import Swatches…', command: 'swatches.import' },
       { label: 'Restore Default Swatches…', command: 'swatches.restore' },
+    ],
+  },
+  gradients: {
+    id: 'gradients',
+    title: 'Gradients',
+    icon: 'gradient',
+    component: GradientsPanel,
+    float: { width: 290, height: 360 },
+    menu: [
+      { label: 'New Gradient…', command: 'gradients.new' },
+      { label: 'New Gradient Group…', command: 'gradients.newGroup' },
+      { label: 'Rename Gradient…', command: 'gradients.rename' },
+      { label: 'Delete Gradient', command: 'gradients.delete' },
+      { label: 'Import Gradients…', command: 'gradients.import' },
+      { label: 'Export Selected Gradients…', command: 'gradients.export' },
+      { label: 'Restore Default Gradients…', command: 'gradients.restore' },
     ],
   },
   'tool-presets': {

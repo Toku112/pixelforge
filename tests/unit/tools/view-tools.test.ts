@@ -37,6 +37,7 @@ function setup(zoom = 1) {
     setSymmetryEdit: () => {},
     colors: null,
     setSampleRing: () => {},
+    setGradientLine: () => {},
   };
   return { viewport, ctx, overlays, changes: () => changes };
 }

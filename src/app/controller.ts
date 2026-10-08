@@ -35,6 +35,8 @@ import { DEFAULT_DYNAMICS } from '../core/paint/dynamics';
 import { applyPreset, presetFromBrush, type BrushBundle } from '../core/paint/presets';
 import { BRUSH_FILE_EXTENSION, readBrushFile, writeBrushFile } from '../io/brush-file';
 import { readAco, readAse } from '../io/swatch-files';
+import { readGrd, writeGrd } from '../io/grd';
+import { cloneGradient, type Gradient, type GradientMethod } from '../core/paint/gradient';
 
 import { sampleRect, samplePlan, sampledToRgb, type EyedropperOptions } from '../core/paint/sample';
 import { SYMMETRY_KINDS, defaultSymmetry, hasSegments, type SymmetryKind } from '../core/paint/symmetry';
@@ -154,8 +156,15 @@ export interface UiBridge {
   symmetrySegments(kind: 'radial' | 'mandala', segments: number): Promise<number | null>;
   /** A name (and an optional checkbox), or null when cancelled. */
   askName(request: NameRequest): Promise<{ name: string; option: boolean } | null>;
-  /** Export Brushes: the groups to export ('' for presets outside any group), or null. */
-  exportBrushes(request: { groups: string[]; selected: string[] }): Promise<string[] | null>;
+  /** Export Brushes / Gradients: the groups to export ('' for presets outside any group), or null. */
+  /** The Gradient Editor; the edited gradient, or null when cancelled. */
+  editGradient(request: { gradient: Gradient; method: GradientMethod }): Promise<Gradient | null>;
+  exportGroups(request: {
+    title: string;
+    ungroupedLabel: string;
+    groups: string[];
+    selected: string[];
+  }): Promise<string[] | null>;
 }
 
 /** A new unique id (presets, tips). */
@@ -183,6 +192,7 @@ const GROUP_COMMANDS: Record<string, string> = {
   'tool.marquee': 'marquee-group',
   'tool.lasso': 'lasso-group',
   'tool.brush': 'brush-group',
+  'tool.gradient': 'gradient-group',
 };
 
 export class AppController {
@@ -386,8 +396,8 @@ export class AppController {
   }
 
   /**
-   * Number keys: opacity (Shift: flow) of the Brush/Eraser, or of the selected layers
-   * (Shift: fill) with other tools. 1 = 10 % … 0 = 100 %; two digits typed quickly
+   * Number keys: opacity (Shift: flow) of the Brush/Eraser, the Gradient tool's opacity,
+   * or the opacity of the selected layers (Shift: fill) with other tools. 1 = 10 % … 0 = 100 %; two digits typed quickly
    * give a precise value ("4", "5" → 45 %; "0", "5" → 5 %).
    */
   #numberKey(digit: number, shift: boolean): void {
@@ -402,7 +412,10 @@ export class AppController {
     }
     const value = percent / 100;
     if (this.#paintTool()) this.#setPaintOptions(shift ? { flow: value } : { opacity: value });
-    else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });
+    else if (!shift && this.#ui.activeToolId() === 'gradient') {
+      this.tools.gradient.setOptions({ opacity: value });
+      this.#ui.toolOptionsChanged();
+    } else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });
   }
 
   /** Edit > Fill: asks how to fill, then fills the selection (or canvas) of the active layer. */
@@ -798,7 +811,9 @@ export class AppController {
     const groups = brushes.groups();
     const ungrouped = brushes.presets().some((p) => p.group === null);
     const current = this.currentPresetId ? brushes.preset(this.currentPresetId)?.group : undefined;
-    const chosen = await this.#ui.exportBrushes({
+    const chosen = await this.#ui.exportGroups({
+      title: 'Export Brushes',
+      ungroupedLabel: 'Brushes outside groups',
       groups: [...groups, ...(ungrouped ? [''] : [])],
       selected: current !== undefined ? [current ?? ''] : groups.slice(0, 1),
     });
@@ -909,6 +924,133 @@ export class AppController {
       confirmLabel: 'Restore',
     });
     if (ok) await this.services.swatches.restoreDefaults();
+  }
+
+  // -- gradients --------------------------------------------------------------
+
+  /** The preset the Gradient tool's gradient came from (highlighted in the Gradients panel), if any. */
+  get currentGradientId(): string | null {
+    const id = this.tools.gradient.options.presetId;
+    return id && this.services.gradients.find(id) ? id : null;
+  }
+
+  /** A gradient preset clicked: the Gradient tool uses it. */
+  chooseGradient(id: string): void {
+    const entry = this.services.gradients.find(id);
+    if (!entry) return;
+    this.tools.gradient.setOptions({ gradient: cloneGradient(entry.gradient), presetId: id });
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** The Gradient Editor on the Gradient tool's gradient; OK makes the edited one the tool's. */
+  async editGradient(): Promise<void> {
+    const tool = this.tools.gradient;
+    const before = JSON.stringify(tool.options.gradient);
+    const edited = await this.#ui.editGradient({
+      gradient: cloneGradient(tool.options.gradient),
+      method: tool.options.method,
+    });
+    if (!edited) return;
+    const unchanged = JSON.stringify(edited) === before;
+    tool.setOptions({ gradient: edited, presetId: unchanged ? tool.options.presetId : null });
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** Adds a gradient to the presets (the Gradient Editor's New button); returns its id. */
+  async addGradientPreset(gradient: Gradient, group?: string): Promise<string> {
+    const id = newId();
+    const current = this.currentGradientId;
+    await this.services.gradients.add(
+      { id, gradient },
+      group ?? (current ? this.services.gradients.groupOf(current) : undefined),
+    );
+    return id;
+  }
+
+  /** New Gradient: the Gradient tool's gradient as a preset under a name. */
+  async newGradient(): Promise<void> {
+    const tool = this.tools.gradient;
+    const answer = await this.#ui.askName({ title: 'Gradient Name', name: tool.options.gradient.name });
+    if (!answer) return;
+    const gradient = { ...cloneGradient(tool.options.gradient), name: answer.name };
+    const id = await this.addGradientPreset(gradient);
+    tool.setOptions({ gradient, presetId: id });
+    this.#ui.toolOptionsChanged();
+  }
+
+  async newGradientGroup(): Promise<void> {
+    const answer = await this.#ui.askName({
+      title: 'New Gradient Group',
+      name: `Group ${this.services.gradients.groups().length + 1}`,
+    });
+    if (answer) await this.services.gradients.addGroup(answer.name);
+  }
+
+  async renameGradient(id = this.currentGradientId): Promise<void> {
+    const entry = id ? this.services.gradients.find(id) : undefined;
+    if (!entry) return;
+    const answer = await this.#ui.askName({ title: 'Gradient Name', name: entry.gradient.name });
+    if (!answer) return;
+    await this.services.gradients.rename(entry.id, answer.name);
+    const tool = this.tools.gradient;
+    if (tool.options.presetId === entry.id)
+      tool.setOptions({ gradient: { ...tool.options.gradient, name: answer.name } });
+    this.#ui.toolOptionsChanged();
+  }
+
+  async deleteGradient(id = this.currentGradientId): Promise<void> {
+    if (!id || !this.services.gradients.find(id)) return;
+    await this.services.gradients.remove(id);
+    if (this.tools.gradient.options.presetId === id) this.tools.gradient.setOptions({ presetId: null });
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** Import Gradients: .grd files, one group each. */
+  async importGradients(): Promise<void> {
+    const files = await pickFiles({ 'application/octet-stream': ['.grd'] }, 'Gradients');
+    for (const file of files) {
+      try {
+        const { gradients, notes } = readGrd(file.bytes);
+        await this.services.gradients.import([
+          {
+            name: file.name.replace(/\.[^.]+$/, ''),
+            gradients: gradients.map((gradient) => ({ id: newId(), gradient })),
+          },
+        ]);
+        if (notes.length > 0) await this.#ui.alert(`Imported “${file.name}”`, notes.join(' '));
+      } catch (error) {
+        await this.#ui.alert(`Could not import “${file.name}”`, error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  /** Export Selected Gradients: chosen groups into a .grd file. */
+  async exportGradients(): Promise<void> {
+    const library = this.services.gradients;
+    const current = this.currentGradientId;
+    const groups = library.groups().map((g) => g.name);
+    const chosen = await this.#ui.exportGroups({
+      title: 'Export Gradients',
+      ungroupedLabel: 'Gradients outside groups',
+      groups,
+      selected: current ? [library.groupOf(current) ?? ''] : groups.slice(0, 1),
+    });
+    if (!chosen || chosen.length === 0) return;
+    const gradients = library
+      .groups()
+      .filter((g) => chosen.includes(g.name))
+      .flatMap((g) => g.gradients.map((e) => e.gradient));
+    const name = chosen.length === 1 && chosen[0] ? chosen[0] : 'Gradients';
+    await saveFileAs(writeGrd(gradients), `${name}.grd`, 'application/octet-stream', '.grd', 'Gradients');
+  }
+
+  async restoreDefaultGradients(): Promise<void> {
+    const ok = await this.#ui.confirm({
+      title: 'Restore Default Gradients',
+      message: 'Bring back the default gradients? Your own groups stay.',
+      confirmLabel: 'Restore',
+    });
+    if (ok) await this.services.gradients.restoreDefaults();
   }
 
   // -- tool presets -----------------------------------------------------------
@@ -1860,12 +2002,14 @@ export class AppController {
       ['window.toolPresets', 'tool-presets', 'Tool Presets'],
       ['window.color', 'color', 'Color'],
       ['window.swatches', 'swatches', 'Swatches'],
+      ['window.gradients', 'gradients', 'Gradients'],
     ] as const) {
       add({ id, label, checked: () => this.#ui.isPanelOpen(panel), run: () => this.#ui.togglePanel(panel) });
     }
     // Brushes and Tool Presets panels (their menus and buttons).
     const hasPreset = () => this.currentPresetId !== null;
     const hasToolPreset = () => this.#toolPresetId !== null;
+    const hasGradient = () => this.currentGradientId !== null;
     for (const [id, label, run, enabled] of [
       ['brushes.newPreset', 'New Brush Preset…', () => this.newBrushPreset(), undefined],
       ['brushes.newGroup', 'New Brush Group…', () => this.newBrushGroup(), undefined],
@@ -1883,6 +2027,13 @@ export class AppController {
       ['swatches.delete', 'Delete Swatch', () => this.deleteSwatch(), () => this.#swatchId !== null],
       ['swatches.import', 'Import Swatches…', () => this.importSwatches(), undefined],
       ['swatches.restore', 'Restore Default Swatches…', () => this.restoreDefaultSwatches(), undefined],
+      ['gradients.new', 'New Gradient…', () => this.newGradient(), undefined],
+      ['gradients.newGroup', 'New Gradient Group…', () => this.newGradientGroup(), undefined],
+      ['gradients.rename', 'Rename Gradient…', () => this.renameGradient(), hasGradient],
+      ['gradients.delete', 'Delete Gradient', () => this.deleteGradient(), hasGradient],
+      ['gradients.import', 'Import Gradients…', () => this.importGradients(), undefined],
+      ['gradients.export', 'Export Selected Gradients…', () => this.exportGradients(), hasGradient],
+      ['gradients.restore', 'Restore Default Gradients…', () => this.restoreDefaultGradients(), undefined],
       ['toolPresets.rename', 'Rename Tool Preset…', () => this.renameToolPreset(), hasToolPreset],
       ['toolPresets.delete', 'Delete Tool Preset', () => this.deleteToolPreset(), hasToolPreset],
     ] as const) {

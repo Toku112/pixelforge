@@ -54,8 +54,9 @@ const bridge: UiBridge = {
   brushName: (tip, name) => new Promise((resolve) => ui().pushDialog({ kind: 'brush-name', tip, name, resolve })),
   preferences: (values) => new Promise((resolve) => ui().pushDialog({ kind: 'preferences', values, resolve })),
   askName: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'name', ...request, resolve })),
-  exportBrushes: (request) =>
-    new Promise((resolve) => ui().pushDialog({ kind: 'export-brushes', ...request, resolve })),
+  editGradient: (request) =>
+    new Promise((resolve) => ui().pushDialog({ kind: 'gradient-editor', ...request, resolve })),
+  exportGroups: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'export-groups', ...request, resolve })),
   symmetrySegments: (symmetry, segments) =>
     new Promise((resolve) => ui().pushDialog({ kind: 'symmetry-segments', symmetry, segments, resolve })),
   pickColor: (title, color) =>

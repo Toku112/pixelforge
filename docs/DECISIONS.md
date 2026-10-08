@@ -686,3 +686,38 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   current zoom; the stroke records it in image pixels, so a replay erases the same square at any zoom. Block has no
   other options, as in the reference app.
 - The Brush and Pencil share B (Shift+B switches), as in the reference app's toolbar group.
+
+## D-045 — 2026-10-08 — Gradient tool, Gradient Editor and gradient files
+
+**Decision:**
+
+- The Gradient tool is the classic mode: a drag paints the gradient into the active pixel layer (through the
+  selection), one History step "Gradient". The live gradient that makes a gradient fill layer comes with fill layers
+  (Phase 3, PLAN Part B), which it needs.
+- How colours mix is our own approximation of the reference app's methods (the exact curves are not published):
+  Perceptual mixes in Oklab, Linear in linear light, Classic the stored sRGB values; Smooth eases in and out of every
+  stop; Stripes makes a hard step at each midpoint. Smoothness blends straight lines with a Catmull-Rom spline through
+  the stops (the ends counting as repeated), kept from overshooting past the two stops it joins; at 100 % a two-stop
+  gradient follows 0.5u + 1.5u² − u³. Midpoints bend the position between two stops by a power curve that passes half
+  way at the midpoint. Opacity stops mix as plain numbers with the same curve. Real reference output, once the owner
+  provides it, will tell how close this is; FORMAT_NOTES §11 has the formulas.
+- Noise gradients keep the reference app's settings (roughness, colour model with per-channel ranges, Restrict
+  Colors, Add Transparency, a seed) but their random colours are ours: 2–64 random points per channel, joined straight
+  (rough) or eased (smooth). Restrict Colors caps saturation at 80 %.
+- The angle gradient sweeps counter-clockwise on screen from the drag direction; the diamond's corner is the end point.
+- The method is an option of the tool (as in the reference app's options bar), not part of the gradient; the
+  foreground and background stops are given their colours when the drag ends, and the command records the gradient
+  with those colours, so a replay paints the same.
+- Dither adds per-pixel noise of ±½ level (8- and 16-bit; none in 32-bit) from a hash of the pixel position, so
+  replays are identical.
+- The fill blends with Edit > Fill's formulas (now shared, `blendSourceTiles`), plus Behind and Clear; it runs in the
+  pixel worker in chunks of 32 tiles, reporting progress and stopping on Esc. A 6000 × 4000 16-bit linear gradient
+  takes about 0.7 s in TypeScript; moving it to WebAssembly is possible later if needed.
+- Gradient presets live in IndexedDB (library value `gradients`) in groups; our default gradients are ours. The Gradient
+  Editor works on a copy: OK makes it the tool's gradient (no longer marked as a preset when changed), New adds it to
+  the presets. Stops: click beside the bar to add (with the gradient's colour/opacity there), drag to move, Alt-drag to
+  copy, drag away to remove (two always stay), double-click or Enter to pick a colour, arrows to nudge.
+- .grd files (version 5) are read and written by our own action-descriptor reader/writer (`src/io/descriptor.ts`),
+  which later features (styles, actions, tool presets, PSD descriptors) will reuse. Version 3 files (before 2000) are
+  refused with a clear message. Colours other than RGB become sRGB as with swatch files; colour-book colours, whose
+  values the file does not hold, become gray with a note.

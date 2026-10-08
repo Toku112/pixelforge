@@ -405,3 +405,50 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
   including the terminating 0, then UTF-16BE). Spaces: 0 RGB (0–65535), 1 HSB (hue 0–65535 for 0–360°), 2 CMYK
   (stored as 65535 − ink), 7 Lab (L 0–10000, a and b signed ×100), 8 Grayscale (0–10000 = amount of black); others
   (custom inks) are skipped.
+
+## 11. Gradients
+
+**Evaluation** (`src/core/paint/gradient.ts`, D-045). A gradient is evaluated into a table of 4096 RGBA entries
+(sRGB 0–1), then into the document's channel values (`gradientSamples`: RGB as is; Grayscale 0.299 R + 0.587 G +
+0.114 B; 32-bit converted to linear light).
+
+- Between stops a and b (sorted by location), with u = (t − a.location) / (b.location − a.location):
+  u′ = u^(ln 0.5 / ln m), m = a's midpoint clamped to 0.05–0.95.
+- Colours are mixed in a space chosen by the method: Perceptual and Smooth in Oklab (from linear sRGB, Björn
+  Ottosson's matrices), Linear in linear light, Classic in sRGB values; Stripes takes a for u′ < 0.5, else b.
+- Smooth: v = a + (b − a) · (3u′² − 2u′³).
+- Perceptual, Linear, Classic: straight v₀ = a + (b − a) u′; spline v₁ = Hermite(u′; a, b, mₐ·span, m_b·span) with
+  slopes per unit of location m_i = (v_{i+1} − v_{i−1}) / (loc_{i+1} − loc_{i−1}) inside, and half the end segment's
+  slope at the ends; v₁ is clamped to [min(a, b), max(a, b)]; result v₀ + (v₁ − v₀) · smoothness.
+- Opacity stops: the same, on the opacity values directly. Without Transparency, opacity is 1.
+- Noise: per channel (and alpha) 2 + round(roughness · 62) random values from the seeded generator within
+  [min, max]; linear between them, eased (3f² − 2f³) when roughness < 0.5. Models: RGB as is; HSB (h · 360°);
+  Lab (L · 100, a and b · 255 − 128). Restrict Colors: saturation ≤ 0.8.
+
+**Geometry**, from start S to end E (document coordinates, sampled at pixel centres), d = E − S, L = |d|, p = P − S:
+linear t = p·d / L²; reflected |p·d| / L²; radial |p| / L; diamond (|p·d| + |p × d|) / L²; angle
+atan2(p × d, p·d) / 2π wrapped to 0–1 (counter-clockwise on screen, y down). t is clamped to 0–1, then flipped by
+Reverse. Between table entries the colour is interpolated linearly. Dither adds (h(x, y) − 0.5) / max to each channel,
+h being a 32-bit integer hash of the pixel position.
+
+**Action descriptors** (`src/io/descriptor.ts`, big-endian): Unicode string = u32 count of UTF-16 units (usually
+with a trailing 0) + UTF-16BE; ID = u32 length, then that many ASCII bytes, or 0 then a four-character code.
+Descriptor = name (Unicode), class ID, u32 item count, items of key ID + four-character type + value. Types: `Objc`
+/ `GlbO` descriptor, `VlLs` list (u32 count, then type + value each), `doub` float64, `UntF` units (`#Prc`, `#Ang`,
+`#Pxl`, …) + float64, `UnFl` units + u32 count + float64s, `TEXT` Unicode, `enum` type ID + value ID, `long` int32,
+`comp` int64, `bool` u8, `type` / `GlbC` Unicode name + class ID, `alis` / `tdta` / `Pth ` u32 length + bytes,
+`obj ` reference (u32 count of parts: `prop`, `Clss`, `Enmr`, `rele`, `Idnt`, `indx`, `name`).
+
+**.grd files** (version 5): `8BGR`, u16 version 5, u32 16 (descriptor version), then a descriptor whose `GrdL` list
+holds one object per gradient, the gradient (class `Grdn`) under the key `Grad`:
+
+- `Nm  ` name (names starting `$$$/` are localisation keys; the text after `=` is shown), `GrdF` enum `GrdF`:
+  `CstS` (solid) or `ClNs` (noise).
+- Solid: `Intr` smoothness (0–4096), `Clrs` list of `Clrt` objects (`Clr ` colour object, `Type` enum `Clry`:
+  `UsrS` user colour, `FrgC` foreground, `BckC` background; `Lctn` long 0–4096; `Mdpn` long 0–100), `Trns` list of
+  `TrnS` objects (`Opct` `UntF #Prc` 0–100, `Lctn`, `Mdpn`).
+- Colour objects: `RGBC` (`Rd  `, `Grn `, `Bl  ` 0–255, or `redFloat`… 0–1), `HSBC` (`H   ` `UntF #Ang`, `Strt`,
+  `Brgh` 0–100), `CMYC` (`Cyn `, `Mgnt`, `Ylw `, `Blck` 0–100), `LbCl` (`Lmnc` 0–100, `A   `, `B   `), `Grsc`
+  (`Gry ` 0–100, amount of black); colour-book colours (`BkCl`) hold no values.
+- Noise: `ShTr` add transparency, `VctC` restrict colours, `ClrS` enum `ClrS` (`RGBC`, `HSBl`, `LbCl`), `RndS` seed,
+  `Smth` roughness (0–4096), `Mnm ` / `Mxm ` lists of four longs 0–100 (the fourth unused).

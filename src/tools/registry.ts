@@ -10,6 +10,7 @@ import { RotateViewTool } from './rotate-view/rotate-view-tool';
 import { TransformTool } from './transform/transform-tool';
 import { SymmetryTool } from './symmetry/symmetry-tool';
 import { EyedropperTool } from './eyedropper/eyedropper-tool';
+import { GradientTool } from './gradient/gradient-tool';
 import { LassoTool, PolygonalLassoTool } from './selection/lasso-tool';
 import { MarqueeTool, SingleLineMarqueeTool } from './selection/marquee-tool';
 import type { Tool } from './types';
@@ -42,6 +43,7 @@ export function createTools() {
   const brush = new PaintingTool('brush');
   const pencil = new PaintingTool('pencil');
   const eraser = new PaintingTool('eraser');
+  const gradient = new GradientTool();
   const groups: ToolGroup[] = [
     { id: 'move-group', tools: [move] },
     {
@@ -54,6 +56,7 @@ export function createTools() {
     { id: 'eyedropper-group', tools: [eyedropper] },
     { id: 'brush-group', tools: [brush, pencil] },
     { id: 'eraser-group', tools: [eraser] },
+    { id: 'gradient-group', tools: [gradient] },
     { id: 'hand-group', tools: [hand, rotateView] },
     { id: 'zoom-group', tools: [zoom] },
   ];
@@ -78,6 +81,7 @@ export function createTools() {
     brush,
     pencil,
     eraser,
+    gradient,
     groups,
     byId,
   };

@@ -2,6 +2,7 @@ import type { CommandRegistry } from '../registry';
 import { clearCommand } from './clear';
 import { fillCommand } from './fill';
 import { geometryCommands } from './geometry';
+import { gradientCommand } from './gradient';
 import { freeTransformCommand } from './transform';
 import { invertCommand } from './invert';
 import { layerCommands } from './layers';
@@ -18,6 +19,7 @@ export function registerBuiltinCommands(registry: CommandRegistry): void {
   registry.register(invertCommand);
   registry.register(clearCommand);
   registry.register(fillCommand);
+  registry.register(gradientCommand);
   registry.register(paintStrokeCommand);
   registry.register(setLayerPropsCommand);
   registry.register(translateLayersCommand);

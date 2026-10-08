@@ -291,6 +291,55 @@ const icons = {
       <path d="M14 6l4 4M5 15l4 4" />
     </Svg>
   ),
+  gradient: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="1.5" />
+      <path d="M7 6v12" strokeOpacity="0.95" />
+      <path d="M10.5 6v12" strokeOpacity="0.7" />
+      <path d="M14 6v12" strokeOpacity="0.45" />
+      <path d="M17.5 6v12" strokeOpacity="0.2" />
+    </Svg>
+  ),
+  gradientLinear: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1" />
+      <rect x="4" y="4" width="4" height="16" fill="currentColor" fillOpacity="0.9" stroke="none" />
+      <rect x="8" y="4" width="4" height="16" fill="currentColor" fillOpacity="0.6" stroke="none" />
+      <rect x="12" y="4" width="4" height="16" fill="currentColor" fillOpacity="0.3" stroke="none" />
+    </Svg>
+  ),
+  gradientRadial: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1" />
+      <circle cx="12" cy="12" r="7" fill="currentColor" fillOpacity="0.25" stroke="none" />
+      <circle cx="12" cy="12" r="4.5" fill="currentColor" fillOpacity="0.45" stroke="none" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" fillOpacity="0.9" stroke="none" />
+    </Svg>
+  ),
+  gradientAngle: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1" />
+      <path d="M12 12 20 12 20 4 12 4Z" fill="currentColor" fillOpacity="0.2" stroke="none" />
+      <path d="M12 12 12 4 4 4 4 12Z" fill="currentColor" fillOpacity="0.4" stroke="none" />
+      <path d="M12 12 4 12 4 20 12 20Z" fill="currentColor" fillOpacity="0.65" stroke="none" />
+      <path d="M12 12 12 20 20 20 20 12Z" fill="currentColor" fillOpacity="0.9" stroke="none" />
+    </Svg>
+  ),
+  gradientReflected: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1" />
+      <rect x="10" y="4" width="4" height="16" fill="currentColor" fillOpacity="0.9" stroke="none" />
+      <rect x="6.5" y="4" width="3.5" height="16" fill="currentColor" fillOpacity="0.5" stroke="none" />
+      <rect x="14" y="4" width="3.5" height="16" fill="currentColor" fillOpacity="0.5" stroke="none" />
+    </Svg>
+  ),
+  gradientDiamond: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1" />
+      <path d="M12 4.5 19.5 12 12 19.5 4.5 12Z" fill="currentColor" fillOpacity="0.25" stroke="none" />
+      <path d="M12 8 16 12 12 16 8 12Z" fill="currentColor" fillOpacity="0.85" stroke="none" />
+    </Svg>
+  ),
   eyedropper: (p: IconProps) => (
     <Svg {...p}>
       <path d="M14.5 4.5a2.1 2.1 0 0 1 3 0l2 2a2.1 2.1 0 0 1 0 3l-2 2-5-5Z" />

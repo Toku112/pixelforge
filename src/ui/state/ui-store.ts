@@ -5,6 +5,7 @@
 import type { PreferenceValues } from '../../app/preferences';
 import { create } from 'zustand';
 import type { RGB } from '../../core/color/color';
+import type { Gradient, GradientMethod } from '../../core/paint/gradient';
 import type { BlendMode, LayerBlendMode } from '../../core/document/layers';
 import type { ResampleMethod } from '../../core/geometry/layer-geometry';
 import type { JpegSaveOptions } from '../../io/jpeg-options';
@@ -22,6 +23,7 @@ export const PANEL_IDS = [
   'tool-presets',
   'color',
   'swatches',
+  'gradients',
 ] as const;
 export type PanelKey = (typeof PANEL_IDS)[number];
 
@@ -84,7 +86,21 @@ export type DialogRequest =
     }
   | { kind: 'preferences'; values: PreferenceValues; resolve: (values: PreferenceValues | null) => void }
   | ({ kind: 'name'; resolve: (answer: { name: string; option: boolean } | null) => void } & NameRequest)
-  | { kind: 'export-brushes'; groups: string[]; selected: string[]; resolve: (groups: string[] | null) => void }
+  | {
+      kind: 'gradient-editor';
+      gradient: Gradient;
+      method: GradientMethod;
+      resolve: (gradient: Gradient | null) => void;
+    }
+  | {
+      kind: 'export-groups';
+      title: string;
+      /** Label for the '' group (presets outside any group). */
+      ungroupedLabel: string;
+      groups: string[];
+      selected: string[];
+      resolve: (groups: string[] | null) => void;
+    }
   | {
       kind: 'symmetry-segments';
       symmetry: 'radial' | 'mandala';

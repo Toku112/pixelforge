@@ -62,7 +62,7 @@ class Reader {
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-const cmykToRgb = (c: number, m: number, y: number, k: number): RGB => ({
+export const cmykToRgb = (c: number, m: number, y: number, k: number): RGB => ({
   r: clamp01((1 - c) * (1 - k)),
   g: clamp01((1 - m) * (1 - k)),
   b: clamp01((1 - y) * (1 - k)),

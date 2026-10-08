@@ -13,6 +13,7 @@ import {
 } from '../../../src/core/geometry/transform-pixels';
 import { tipFromImage } from '../../../src/core/paint/define-tip';
 import { fillTiles } from '../../../src/core/paint/fill';
+import { gradientTiles } from '../../../src/core/paint/gradient-fill';
 import { movePixels } from '../../../src/core/paint/move-pixels';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
 import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
@@ -83,6 +84,10 @@ export const referencePixelOps: PixelOps = {
   },
   fill(tiles, format, through, spec, hdr) {
     fillTiles(tiles, format, through, spec, hdr);
+    return Promise.resolve();
+  },
+  gradient(tiles, format, through, spec, hdr) {
+    gradientTiles(tiles, format, through, spec, hdr);
     return Promise.resolve();
   },
   paintStroke(setup, tiles, coords, dabs) {

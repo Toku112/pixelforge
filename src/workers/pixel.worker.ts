@@ -36,6 +36,7 @@ import { tipFromImage } from '../core/paint/define-tip';
 import { sampleArea } from '../core/paint/sample';
 import { TILE_SIZE } from '../core/document/tile';
 import { fillTiles, type FillSpec } from '../core/paint/fill';
+import { gradientTiles, type GradientFillSpec } from '../core/paint/gradient-fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
 import { StrokeRenderer, wasmCanPaint, type StrokeSetup } from '../core/paint/stroke';
 import { WasmStrokeRenderer, type StrokePainter } from './wasm-stroke';
@@ -317,6 +318,18 @@ const conversions = {
     hdr: boolean,
   ): (SampleArray | null)[] {
     fillTiles(tiles, format, through, spec, hdr);
+    return returnUnshared(tiles);
+  },
+
+  /** See PixelOps.gradient; same return convention as invertTiles. */
+  gradientTiles(
+    tiles: SampleArray[],
+    format: PixelFormat,
+    through: MaskedTarget,
+    spec: GradientFillSpec,
+    hdr: boolean,
+  ): (SampleArray | null)[] {
+    gradientTiles(tiles, format, through, spec, hdr);
     return returnUnshared(tiles);
   },
 

@@ -1566,3 +1566,138 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/* Gradients: strips, the options bar picker, the panel grid and the Gradient Editor */
+.gradient-strip {
+  display: block;
+  border-radius: 2px;
+}
+.gradient-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.gradient-picker-preview {
+  padding: 2px;
+  border-radius: 3px 0 0 3px;
+}
+.gradient-picker-arrow {
+  align-self: stretch;
+  padding: 0 3px;
+  border-left: 0;
+  border-radius: 0 3px 3px 0;
+}
+.gradient-picker-panel {
+  max-height: 360px;
+  overflow: auto;
+}
+.gradient-groups {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 6px;
+}
+.gradient-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 0 6px 18px;
+}
+.gradient-chip {
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 50%);
+  border-radius: 2px;
+  line-height: 0;
+}
+.gradient-chip.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.modal.gradient-editor {
+  width: min(430px, calc(100vw - 32px));
+}
+.gradient-editor .dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gradient-editor-presets {
+  height: 120px;
+  overflow: auto;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.gradient-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.gradient-field-row .option-text {
+  width: 200px;
+}
+.gradient-bar-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.gradient-bar {
+  align-self: center;
+  border: 1px solid var(--border);
+  line-height: 0;
+}
+.gradient-stop-row {
+  position: relative;
+  width: 360px;
+  height: 18px;
+  cursor: copy;
+}
+.gradient-stop {
+  position: absolute;
+  top: 2px;
+  width: 12px;
+  height: 14px;
+  margin-left: -6px;
+  padding: 2px;
+  background: var(--bg-panel);
+  border: 1px solid var(--fg-dim);
+  border-radius: 2px;
+  cursor: ew-resize;
+}
+.gradient-stop.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.gradient-stop.removing {
+  opacity: 0.3;
+}
+.gradient-stop-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgb(0 0 0 / 40%);
+}
+.gradient-midpoint {
+  position: absolute;
+  top: 5px;
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+  background: var(--fg);
+  transform: rotate(45deg);
+  cursor: ew-resize;
+}
+.gradient-midpoint:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.gradient-color-button {
+  width: 30px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+}
+.gradient-channel {
+  width: 14px;
+  font-weight: 600;
+}

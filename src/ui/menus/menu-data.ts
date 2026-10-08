@@ -508,6 +508,7 @@ export const MENUS: readonly TopMenu[] = [
       item('window.channels', 'Channels'),
       item('window.character', 'Character'),
       item('window.color', 'Color'),
+      item('window.gradients', 'Gradients'),
       item('window.histogram', 'Histogram'),
       item('window.panel.history', 'History'),
       item('window.info', 'Info'),

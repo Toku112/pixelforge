@@ -39,6 +39,7 @@ function setup() {
     setSymmetryEdit: () => {},
     colors: null,
     setSampleRing: () => {},
+    setGradientLine: () => {},
   };
   const tool = new TransformTool();
   tool.begin(

@@ -1,9 +1,9 @@
-/** Export Brushes: which groups go into the brush file. */
+/** Export Brushes / Export Gradients: which groups go into the file. */
 import { useState, type FormEvent } from 'react';
 import { useUi, type DialogRequest } from '../state/ui-store';
 import { Modal } from './Modal';
 
-export function ExportBrushesDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'export-brushes' }> }) {
+export function ExportGroupsDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'export-groups' }> }) {
   const close = useUi((s) => s.closeDialog);
   const [chosen, setChosen] = useState<string[]>(dialog.selected);
   const cancel = () => (close(dialog), dialog.resolve(null));
@@ -13,7 +13,7 @@ export function ExportBrushesDialog({ dialog }: { dialog: Extract<DialogRequest,
     dialog.resolve(dialog.groups.filter((g) => chosen.includes(g)));
   };
   return (
-    <Modal title="Export Brushes" onCancel={cancel}>
+    <Modal title={dialog.title} onCancel={cancel}>
       <form className="dialog-form" onSubmit={submit}>
         <fieldset className="dialog-fieldset">
           <legend>Groups</legend>
@@ -24,7 +24,7 @@ export function ExportBrushesDialog({ dialog }: { dialog: Extract<DialogRequest,
                 checked={chosen.includes(g)}
                 onChange={(e) => setChosen(e.target.checked ? [...chosen, g] : chosen.filter((c) => c !== g))}
               />
-              {g === '' ? 'Brushes outside groups' : g}
+              {g === '' ? dialog.ungroupedLabel : g}
             </label>
           ))}
         </fieldset>

@@ -112,6 +112,7 @@ export class CanvasView {
       setSymmetryEdit: (edit) => this.#ants?.setSymmetryEdit(edit),
       colors: options.colors ?? null,
       setSampleRing: (ring) => this.#ants?.setSampleRing(ring),
+      setGradientLine: (line) => this.#ants?.setGradientLine(line),
       toolOptionsChanged: () => options.toolOptionsChanged?.(),
     };
     canvas.tabIndex = 0; // focusable, so keyboard tools work after clicking the canvas

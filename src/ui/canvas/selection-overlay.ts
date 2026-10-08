@@ -15,6 +15,7 @@ import type {
   BrushHud,
   BrushOutline,
   CropBoxOverlay,
+  GradientLine,
   SelectionPreview,
   SampleRing,
   SymmetryEditOverlay,
@@ -44,6 +45,7 @@ export class SelectionOverlay {
   #symmetryHidden = false;
   #symmetryEdit: SymmetryEditOverlay | null = null;
   #ring: SampleRing | null = null;
+  #gradientLine: GradientLine | null = null;
   readonly #tipOutline: ((id: string, contour: 'normal' | 'full') => Promise<TipOutline | null>) | undefined;
   readonly #tipOutlines = new Map<string, TipOutline | 'pending' | null>();
   #crop: CropBoxOverlay | null = null;
@@ -106,6 +108,12 @@ export class SelectionOverlay {
     this.draw();
   }
 
+  /** The Gradient tool's drag line, or none. */
+  setGradientLine(line: GradientLine | null): void {
+    this.#gradientLine = line;
+    this.draw();
+  }
+
   /** A symmetry guide being placed (drawn with its handles), or none. */
   setSymmetryEdit(edit: SymmetryEditOverlay | null): void {
     this.#symmetryEdit = edit;
@@ -163,6 +171,7 @@ export class SelectionOverlay {
     if (doc && this.#crop) this.#drawCrop(ctx, doc, this.#crop);
     if (doc && this.#transform) this.#drawTransform(ctx, this.#transform);
     if (doc && this.#ring) this.#drawRing(ctx, this.#ring);
+    if (doc && this.#gradientLine) this.#drawGradientLine(ctx, this.#gradientLine);
     if (doc && this.#hud) this.#drawHud(ctx, this.#hud);
     else if (doc && this.#brush) this.#drawBrush(ctx, this.#brush);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -436,6 +445,34 @@ export class SelectionOverlay {
     ctx.lineWidth = Math.max(1, Math.round(dpr));
     ctx.strokeStyle = 'rgb(0 0 0 / 50%)';
     ctx.stroke();
+  }
+
+  /** The Gradient tool's drag: a line with a dot at the start and a square at the end. */
+  #drawGradientLine(ctx: CanvasRenderingContext2D, line: GradientLine): void {
+    const dpr = this.#renderer.devicePixelRatio;
+    const v = this.#renderer.viewport;
+    const a = v.docToView(line.start);
+    const b = v.docToView(line.end);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineWidth = 3 * dpr;
+    ctx.strokeStyle = 'rgb(0 0 0 / 60%)';
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, Math.round(dpr));
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+    const r = 3.5 * dpr;
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = 'rgb(0 0 0 / 70%)';
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, r, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillRect(b.x - r, b.y - r, 2 * r, 2 * r);
+    ctx.strokeRect(b.x - r, b.y - r, 2 * r, 2 * r);
   }
 
   /** A paint symmetry's guide (and, while it is placed, its centre, turn and size handles). */

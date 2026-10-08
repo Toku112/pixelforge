@@ -8,7 +8,8 @@ import { BrushNameDialog } from './BrushNameDialog';
 import { PreferencesDialog } from './PreferencesDialog';
 import { SymmetrySegmentsDialog } from './SymmetrySegmentsDialog';
 import { NameDialog } from './NameDialog';
-import { ExportBrushesDialog } from './ExportBrushesDialog';
+import { ExportGroupsDialog } from './ExportGroupsDialog';
+import { GradientEditorDialog } from './GradientEditor';
 import { ColorPickerDialog } from './ColorPicker';
 import { FillDialog } from './FillDialog';
 import { Modal } from './Modal';
@@ -195,8 +196,10 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <SymmetrySegmentsDialog dialog={dialog} />;
     case 'name':
       return <NameDialog dialog={dialog} />;
-    case 'export-brushes':
-      return <ExportBrushesDialog dialog={dialog} />;
+    case 'export-groups':
+      return <ExportGroupsDialog dialog={dialog} />;
+    case 'gradient-editor':
+      return <GradientEditorDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (

@@ -37,6 +37,7 @@ function setup() {
     setSymmetryEdit: () => {},
     colors: null,
     setSampleRing: () => {},
+    setGradientLine: () => {},
   };
   const tool = new CropTool();
   tool.activate(ctx);

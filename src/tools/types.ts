@@ -107,6 +107,12 @@ export interface ColorHost {
   readonly eyedropper: EyedropperOptions;
 }
 
+/** The Gradient tool's drag (document coordinates). */
+export interface GradientLine {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+}
+
 /** The sampling ring: the new colour (top half) over the current one (bottom half), at a document point. */
 export interface SampleRing {
   x: number;
@@ -239,6 +245,8 @@ export interface ToolContext {
   readonly colors: ColorHost | null;
   /** Shows the sampling ring, or hides it with null. */
   setSampleRing(ring: SampleRing | null): void;
+  /** Shows the Gradient tool's drag line, or hides it with null. */
+  setGradientLine(line: GradientLine | null): void;
 }
 
 /** Modifier and drag state that decides a tool's cursor. */

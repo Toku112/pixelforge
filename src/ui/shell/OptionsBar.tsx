@@ -9,6 +9,8 @@ import { DEFAULT_DYNAMICS } from '../../core/paint/dynamics';
 import { isPanelOpen } from '../dock/dock-model';
 import { CropTool } from '../../tools/crop/crop-tool';
 import { EyedropperTool } from '../../tools/eyedropper/eyedropper-tool';
+import { GradientTool } from '../../tools/gradient/gradient-tool';
+import { GradientOptionsBar } from './GradientOptions';
 import { SAMPLE_SIZES, type SampleSize, type SampleSource } from '../../core/paint/sample';
 import { BrushPicker } from './BrushPicker';
 import { SmoothingControls } from './SmoothingControls';
@@ -724,6 +726,7 @@ export function OptionsBar() {
       {tool instanceof MoveTool && <MoveOptions tool={tool} />}
       {tool instanceof CropTool && <CropOptions tool={tool} />}
       {tool instanceof EyedropperTool && <EyedropperOptionsBar tool={tool} />}
+      {tool instanceof GradientTool && <GradientOptionsBar tool={tool} />}
       {tool instanceof TransformTool && <TransformOptions tool={tool} />}
       {tool instanceof SymmetryTool && <SymmetryOptions tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}
