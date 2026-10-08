@@ -3,6 +3,8 @@ import type { IconName } from '../icons';
 import { HistoryPanel } from './HistoryPanel';
 import { LayersPanel } from './layers/LayersPanel';
 import { BrushSettingsPanel } from './BrushSettingsPanel';
+import { BrushesPanel } from './BrushesPanel';
+import { ToolPresetsPanel } from './ToolPresetsPanel';
 import { NavigatorPanel } from './NavigatorPanel';
 
 export interface PanelDefinition {
@@ -35,6 +37,36 @@ export const PANELS: Record<string, PanelDefinition> = {
     component: BrushSettingsPanel,
     float: { width: 430, height: 500 },
     menu: [{ label: 'Clear Brush Controls', command: 'brush.clearControls' }],
+  },
+  brushes: {
+    id: 'brushes',
+    title: 'Brushes',
+    icon: 'brush',
+    component: BrushesPanel,
+    float: { width: 330, height: 520 },
+    menu: [
+      { label: 'New Brush Preset…', command: 'brushes.newPreset' },
+      { label: 'New Brush Group…', command: 'brushes.newGroup' },
+      { label: 'Rename Brush…', command: 'brushes.rename' },
+      { label: 'Delete Brush', command: 'brushes.delete' },
+      { label: 'Rename Group…', command: 'brushes.renameGroup' },
+      { label: 'Delete Group…', command: 'brushes.deleteGroup' },
+      { label: 'Import Brushes…', command: 'brushes.import' },
+      { label: 'Export Brushes…', command: 'brushes.export' },
+      { label: 'Restore Default Brushes…', command: 'brushes.restore' },
+    ],
+  },
+  'tool-presets': {
+    id: 'tool-presets',
+    title: 'Tool Presets',
+    icon: 'toolPresets',
+    component: ToolPresetsPanel,
+    float: { width: 280, height: 360 },
+    menu: [
+      { label: 'New Tool Preset…', command: 'toolPresets.new' },
+      { label: 'Rename Tool Preset…', command: 'toolPresets.rename' },
+      { label: 'Delete Tool Preset', command: 'toolPresets.delete' },
+    ],
   },
   layers: {
     id: 'layers',

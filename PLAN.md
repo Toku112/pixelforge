@@ -13,10 +13,11 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 6 (paint symmetry); items 1–5 (pen input, tips, dynamics, texture, dual brush, wet
-  edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors, smoothing);
-  Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 7 (Brushes panel, presets, ABR import, Tool Presets)
+- Last completed: Part E item 7 (Brushes panel, brush presets and our default library, .pfbrush and .abr files, Tool
+  Presets); items 1–6 (pen input, tips, dynamics, texture, dual brush, wet edges, build-up, Brush Settings panel,
+  options bar, brush HUD, Preferences with painting cursors, smoothing, symmetry); Phase 1 Part D items 1–12 and the
+  automated part of item 13
+- Next up: Part E item 8 (brush engine speed: dab rendering in WebAssembly)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -309,12 +310,14 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
 - [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial (segments), mandala (segments); symmetry path editing
   ↳ partial: every type, placed by moving, turning and sizing its guide; path point editing and PSD storage with paths (Phase 5).
 - [ ] Brushes panel: groups, search, recent brushes, preview stroke, show additional preset info, Get more → import
+  ↳ partial: groups, search, recent brushes, preview strokes, import (Phase 2); additional preset info still to come.
 - [ ] Import ABR brush files; export our brush format
-- [ ] Our own default brush library (general, dry media, wet media, special effects) — created from scratch
+  ↳ partial: ABR versions 6–10 and our .pfbrush format; ABR versions 1–2 (before 2003) still to come.
+- [x] Our own default brush library (general, dry media, wet media, special effects) — created from scratch
 - [ ] Brush cursor options (normal/full-size tip, crosshair, show while painting), HUD resize/hardness
 - [ ] Pointer Events with pressure, tilt, twist; Windows Ink / Apple Pencil (iPad Safari) support; coalesced events for smooth strokes; predicted events for latency
   ↳ partial: pressure, tilt (incl. Safari's altitude/azimuth), twist, wheel and coalesced events reach every stroke; predicted events move the cursor ahead (D-035). Missing: checks on real Windows Ink and iPad hardware.
-- [ ] Tool Presets panel (save any tool + options, current tool only filter)
+- [x] Tool Presets panel (save any tool + options, current tool only filter)
 - [ ] Patterns panel, Gradients panel (groups, import GRD/PAT), Swatches panel (import ASE/ACO), Shapes panel (import CSH), Styles panel (import ASL)
 
 ## B10. Layer styles & blending options
@@ -651,7 +654,8 @@ engine first, then its controls, then the tools built on it.
   ↳ note: the smoothed path is what a stroke records; the string shows while painting (D-039).
 - [x] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path; the Symmetry menu in the options bar
   ↳ note: the guide is moved, turned and sized on the canvas; editing its points and storing it in PSD files come with paths (Phase 5) (D-040, FORMAT_NOTES §8).
-- [ ] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
+- [x] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
+  ↳ note: ABR files of format versions 6–10 (2003 on) through ag-psd; bristle and erodible tips are approximated by round tips until such tips exist; the options bar's tool icon is the tool preset picker (D-041, FORMAT_NOTES §9).
 - [ ] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
 - [ ] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)
 - [ ] Pencil tool (aliased, Auto Erase) and Eraser modes (Brush/Pencil/Block)

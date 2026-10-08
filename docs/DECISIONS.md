@@ -606,3 +606,29 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   mirrors are our own geometry from the descriptions of those types (FORMAT_NOTES §8).
 - Radial and Mandala ask for 2–12 segments (5 the first time, then the last count). A new symmetry is centred on the
   canvas, then placed at once (Enter applies, Escape keeps it where it was created).
+
+## D-041 — 2026-10-08 — Brush presets, brush files and tool presets
+
+**Decision:**
+
+- A brush preset is a name, a group and full brush settings (tip, size, every Brush Settings section); it may include
+  the tool settings (opacity, flow, mode, smoothing). The library (presets, groups, recent brushes, user tips,
+  imported patterns, tool presets) lives in IndexedDB (database `pixelforge-library`, now version 2; the brush tips
+  saved before are kept).
+- Our default library is our own: 19 presets in four groups, with seven sampled tips drawn by code (charcoal, chalk,
+  bristles, spatter, star, leaf, grass) and our built-in patterns. The defaults are copied into the library the first
+  time, so they can be renamed, moved or deleted; Restore Default Brushes brings them back (same ids, replacing
+  changed copies). Built-in tips and patterns are never stored: every copy of the app has them, and strokes and
+  presets name them by id.
+- Edit > Define Brush Preset now also makes a preset with the new tip (and chooses it), as the reference app adds the
+  new brush to the Brushes panel.
+- Brush files: ABR versions 6–10 are read with ag-psd's reader (already a dependency; MIT) in the codec worker and
+  mapped onto our settings; tips and patterns get ids prefixed per import so they never clash. What we cannot paint
+  yet is approximated and listed after the import (bristle and erodible tips become round tips; wetness and mix wait
+  for the Mixer Brush). Textures whose pattern the file does not carry use our Paper pattern. ABR versions 1–2
+  (before 2003) are refused with a clear message for now. Our own file (.pfbrush) is JSON with the presets and the
+  pixels of the user tips and patterns they use (FORMAT_NOTES §9); Export Brushes asks which groups.
+- Tool presets save the active tool with its settings (the brush tools with their smoothing and Protect Texture);
+  choosing one switches to its tool. Tools without settings (Hand, Zoom's view actions) have none. The options bar's
+  tool icon opens the active tool's presets, as in the reference app.
+- Deleting a preset keeps its tip in the library: recorded strokes (Actions) may still need it.

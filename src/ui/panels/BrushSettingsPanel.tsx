@@ -5,23 +5,21 @@
  * stroke at the bottom (painted in the worker by the same engine).
  */
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { brushStrokeSetup, resolveBrushResources } from '../../core/commands/builtin/paint';
-import { colorToSamples } from '../../core/color/color';
 import type { Pattern } from '../../core/pattern/pattern';
-import { strokePoint } from '../../core/paint/brush';
 import { DUAL_MODES, TEXTURE_MODES } from '../../core/paint/texture';
 import {
   DEFAULT_DYNAMICS,
-  StrokeDabber,
   type BrushDynamics,
   type ControlledJitter,
   type DynamicsControl,
 } from '../../core/paint/dynamics';
 import { PaintingTool } from '../../tools/paint/paint-tool';
+import { brushPreview } from '../brush-preview';
 import { useController } from '../AppContext';
 import { NumberField } from '../controls/NumberField';
-import { TipThumbnail } from '../shell/BrushPicker';
+import { TipThumbnail } from '../shell/TipThumbnail';
 import { TipPoseWidget } from './TipPoseWidget';
+import { isPanelOpen } from '../dock/dock-model';
 import { useUi } from '../state/ui-store';
 
 type Section = 'tip' | 'shape' | 'scatter' | 'texture' | 'dual' | 'color' | 'transfer' | 'pose';
@@ -222,54 +220,17 @@ export function BrushSettingsPanel() {
     let current = true;
     const width = 240;
     const height = 70;
-    const brush = { ...o, size: Math.min(o.size, 40) };
-    const colors = {
-      foreground: controller.colors.foreground,
-      background: controller.colors.background,
-      toSamples: (c: { r: number; g: number; b: number }) => colorToSamples(c, 'rgb', 8),
-    };
-    // Colour dynamics are for the Brush only (the Eraser has no colour to vary).
-    const varyColor = painting.kind === 'brush' && dyn.color.enabled;
-    const dabber = new StrokeDabber(brush, 12345, varyColor ? colors : null);
-    const dabs = [];
-    for (let i = 0; i <= 60; i++) {
-      const t = i / 60;
-      const p = strokePoint(
-        20 + t * (width - 40),
-        height / 2 - Math.sin(t * Math.PI * 2) * (height / 2 - 18),
-        Math.sin(t * Math.PI),
-      );
-      dabs.push(...dabber.add(p));
-    }
-    let res;
-    try {
-      res = resolveBrushResources(brush, controller.services.brushes, controller.services.patterns);
-    } catch {
-      return; // a tip that is no longer in the library: nothing to preview
-    }
-    // Painted in the paint colour (black for the Eraser), Normal, on transparent pixels.
+    // Painted in the paint colour (black for the Eraser, which has no colour to vary).
     const paint = painting.kind === 'brush' ? controller.colors.foreground : { r: 0, g: 0, b: 0 };
-    const setup = {
-      ...brushStrokeSetup(
-        { ...brush, mode: 'normal' },
-        'brush',
-        { depth: 8, colorChannels: 3, hasAlpha: true },
-        colorToSamples(paint, 'rgb', 8),
-        res,
-      ),
-      varyColor,
-      lockAlpha: false,
-      offsetX: 0,
-      offsetY: 0,
-      selection: null,
-    };
-    void controller.services.brushPreview(setup, dabs, width, height).then((rgba) => {
-      if (!current) return;
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
-    });
+    const brush = { ...o, size: Math.min(o.size, 40) };
+    void brushPreview(controller, brush, width, height, paint, painting.kind === 'brush' && dyn.color.enabled).then(
+      (rgba) => {
+        if (!current || !rgba) return;
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d')?.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+      },
+    );
     return () => {
       current = false;
     };
@@ -770,6 +731,17 @@ export function BrushSettingsPanel() {
   return (
     <div className="brush-settings">
       <div className="brush-sections" role="tablist" aria-label="Brush settings sections" aria-orientation="vertical">
+        <button
+          type="button"
+          className="option-button brush-settings-presets"
+          title="Show the Brushes panel"
+          onClick={() => {
+            // Opens the Brushes panel (it stays open if it already is).
+            if (!isPanelOpen(useUi.getState().dock, 'brushes')) controller.commands.run('window.brushes');
+          }}
+        >
+          Brushes
+        </button>
         {SECTIONS.map(([id, label]) => (
           <div key={id} className={`brush-section${section === id ? ' active' : ''}`}>
             {id !== 'tip' && (
@@ -802,6 +774,20 @@ export function BrushSettingsPanel() {
             }}
           />
           Smoothing
+        </label>
+        <label
+          className="brush-section brush-flag"
+          title="Keep the texture's pattern and scale when choosing another preset"
+        >
+          <input
+            type="checkbox"
+            checked={painting.protectTexture}
+            onChange={(e) => {
+              painting.setProtectTexture(e.target.checked);
+              bump();
+            }}
+          />
+          Protect Texture
         </label>
       </div>
       <div className="brush-section-body" role="tabpanel" aria-label={SECTIONS.find((s) => s[0] === section)![1]}>

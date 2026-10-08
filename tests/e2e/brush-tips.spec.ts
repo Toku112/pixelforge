@@ -189,7 +189,13 @@ test('Define Brush Preset makes a tip from the selection that paints its shape a
   const picker = page.getByRole('button', { name: 'Brush preset picker' });
   await expect(picker).toHaveText('30');
   await picker.click();
-  await expect(page.getByRole('option', { name: 'Bar tip' })).toHaveAttribute('aria-selected', 'true');
+  // Define Brush Preset also made a preset, chosen (and so in Recent Brushes too).
+  await expect(
+    page.getByRole('listbox', { name: 'Brush presets' }).getByRole('option', { name: 'Bar tip' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page.getByRole('listbox', { name: 'Recent brushes' }).getByRole('option', { name: 'Bar tip' }),
+  ).toBeVisible();
   await page.keyboard.press('Escape');
 
   // One dab: a 20 × 4 bar (scaled 1:1) centred where we click, not a disc.

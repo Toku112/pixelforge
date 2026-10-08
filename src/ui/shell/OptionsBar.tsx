@@ -11,6 +11,7 @@ import { CropTool } from '../../tools/crop/crop-tool';
 import { BrushPicker } from './BrushPicker';
 import { SmoothingControls } from './SmoothingControls';
 import { SymmetryMenu, SymmetryOptions } from './SymmetryMenu';
+import { ToolPresetPicker } from './ToolPresetPicker';
 import { TransformTool } from '../../tools/transform/transform-tool';
 import { SymmetryTool } from '../../tools/symmetry/symmetry-tool';
 import { viewActions } from '../../tools/hand/hand-tool';
@@ -22,7 +23,6 @@ import { useController } from '../AppContext';
 import { NumberField } from '../controls/NumberField';
 import { Icon, type IconName } from '../icons';
 import { useUi } from '../state/ui-store';
-import { toolIcon } from '../tool-icons';
 
 const SELECTION_MODES: [SelectionMode, string, IconName][] = [
   ['new', 'New selection', 'selectionNew'],
@@ -611,9 +611,7 @@ export function OptionsBar() {
 
   return (
     <div className="options-bar" role="toolbar" aria-label="Tool options">
-      <span className="options-tool-icon" title={tool?.name}>
-        <Icon name={toolIcon(toolId)} size={18} />
-      </span>
+      <ToolPresetPicker />
       <span className="options-divider" />
       {tool instanceof SelectionTool && <SelectionOptions key={tool.id} tool={tool} />}
       {tool instanceof PaintingTool && <PaintOptions key={tool.id} tool={tool} />}

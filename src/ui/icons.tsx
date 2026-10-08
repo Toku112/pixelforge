@@ -103,6 +103,11 @@ const icons = {
       <path d="m9 6 6 6-6 6" />
     </Svg>
   ),
+  chevronDown: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="m7 10 5 5 5-5" />
+    </Svg>
+  ),
   eye: (p: IconProps) => (
     <Svg {...p}>
       <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
@@ -285,6 +290,12 @@ const icons = {
       <path d="M12 4v16" strokeDasharray="2 2" />
       <path d="M11 11C9 6.5 6 5 4 5.5c-1.5.5-1 4 1 5.5 1 .7 2.5 1 3.5 1-1.5.5-3 2-2.5 3.5.5 2 3.5 1.5 5-1.5" />
       <path d="M13 11c2-4.5 5-6 7-5.5 1.5.5 1 4-1 5.5-1 .7-2.5 1-3.5 1 1.5.5 3 2 2.5 3.5-.5 2-3.5 1.5-5-1.5" />
+    </Svg>
+  ),
+  toolPresets: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 9h8M8 13h8M8 17h5" />
     </Svg>
   ),
   gear: (p: IconProps) => (

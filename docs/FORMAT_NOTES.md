@@ -374,3 +374,21 @@ Image Size, Canvas Size, Crop and Image Rotation rebuild each layer on the docum
   (`2·arm − r`), the tangent leaning `atan(2π·arm/s)` from the radius. Wavy `v = −(s/4)·sin(2πu/s)`: across the wave
   vertically (`v' = 2·wave − v`), mirrored across its slope. The copies are part of one stroke (one coverage, one
   History step); a stroke records its symmetry and replays it.
+
+## 9. Brush preset files
+
+- **Our .pfbrush file** is UTF-8 JSON: `{ "format": "pixelforge-brushes", "version": 1, "presets": [...], "tips":
+[...], "patterns": [...] }`. A preset is `{ id, name, group, brush, toolSettings, smoothing? }` with `brush` as in a
+  recorded stroke (size, hardness, opacity, flow, spacing, spacingEnabled, pressure toggles, angle, roundness, flips,
+  tip id, mode, dynamics). Tips are `{ id, name, width, height, data }` with `data` the coverage bytes (one per pixel)
+  in base64; patterns the same with RGBA bytes. Built-in tips (`pf-tip-…`) and patterns (`pf-…`) are not included.
+  Readers refuse other formats and newer versions, and check every image's size.
+- **ABR (versions 6–10)** as read by ag-psd: `8BIMsamp` sampled tips (8-bit coverage, raw or RLE), `8BIMpatt` patterns
+  (RGB, grayscale or indexed) and `8BIMdesc`, a descriptor whose `Brsh` list holds the presets. Mapping: tip shape
+  size, angle, roundness, hardness, spacing (and whether spacing is on), flips; sampled tips by their id; Shape
+  Dynamics with Minimum Diameter / Minimum Roundness as the jitters' minimums; controls off, fade (with steps), pen
+  pressure, pen tilt, stylus wheel, initial direction, direction, rotation (initial rotation → rotation); Scattering
+  (the scatter jitter is the amount, up to 1000 %), count and count jitter; Texture (pattern id, invert, scale,
+  brightness, contrast, mode, depth, minimum depth, depth jitter, each tip); Dual Brush (its tip, size as a share of
+  the main size, spacing, scatter, count, flip, mode); Color Dynamics; Transfer (opacity and flow); Brush Pose; Noise
+  and Wet Edges; tool options (opacity, flow, mode, pressure toggles, smoothing) make a preset with tool settings.

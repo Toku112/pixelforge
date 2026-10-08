@@ -11,14 +11,14 @@ Every dependency and every ML model must be listed here with its licence (CLAUDE
 
 ## Shipped (runtime) — npm
 
-| Package   | Licence      | Purpose                                      |
-| --------- | ------------ | -------------------------------------------- |
-| react     | MIT          | UI shell (panels, menus, dialogs)            |
-| react-dom | MIT          | React DOM renderer                           |
-| zustand   | MIT          | UI state stores                              |
-| ag-psd    | MIT          | Reading and writing PSD/PSB files            |
-| pako      | MIT AND Zlib | Deflate for ag-psd (ZIP-compressed PSD data) |
-| base64-js | MIT          | Used by ag-psd                               |
+| Package   | Licence      | Purpose                                                    |
+| --------- | ------------ | ---------------------------------------------------------- |
+| react     | MIT          | UI shell (panels, menus, dialogs)                          |
+| react-dom | MIT          | React DOM renderer                                         |
+| zustand   | MIT          | UI state stores                                            |
+| ag-psd    | MIT          | Reading and writing PSD/PSB files; reading ABR brush files |
+| pako      | MIT AND Zlib | Deflate for ag-psd (ZIP-compressed PSD data)               |
+| base64-js | MIT          | Used by ag-psd                                             |
 
 ## Build & test tooling — npm
 

@@ -49,6 +49,10 @@ export class PaintingTool implements Tool {
   readonly options: BrushSettings;
   /** Smoothing (options bar) and curves (the brush's Smoothing setting). */
   readonly smoothing: SmoothingOptions = { ...DEFAULT_SMOOTHING };
+  /** The brush preset last chosen (the Brushes panel shows it selected), or null. */
+  presetId: string | null = null;
+  /** Protect Texture (Brush Settings): switching presets keeps the texture's pattern and scale. */
+  protectTexture = false;
   #stroke: {
     session: PaintStroke;
     spacer: StrokeDabber;
@@ -85,6 +89,30 @@ export class PaintingTool implements Tool {
 
   setSmoothing(changes: Partial<SmoothingOptions>): void {
     Object.assign(this.smoothing, changes);
+  }
+
+  setProtectTexture(on: boolean): void {
+    this.protectTexture = on;
+  }
+
+  /** The tool's settings for a tool preset (plain data). */
+  presetOptions(): unknown {
+    return JSON.parse(
+      JSON.stringify({ brush: this.options, smoothing: this.smoothing, protectTexture: this.protectTexture }),
+    );
+  }
+
+  /** Applies a tool preset's settings (as from presetOptions). */
+  applyPresetOptions(raw: unknown): void {
+    const o = (raw ?? {}) as {
+      brush?: Partial<BrushSettings>;
+      smoothing?: Partial<SmoothingOptions>;
+      protectTexture?: boolean;
+    };
+    if (o.brush) this.setOptions(JSON.parse(JSON.stringify(o.brush)) as Partial<BrushSettings>);
+    if (o.smoothing) this.setSmoothing(o.smoothing);
+    if (typeof o.protectTexture === 'boolean') this.protectTexture = o.protectTexture;
+    this.presetId = null;
   }
 
   cursor(state: CursorState): string {

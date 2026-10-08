@@ -22,13 +22,23 @@ import {
   type BrushResources,
   type PaintTool,
 } from '../core/commands/builtin/paint';
-import { MAX_TIP_SIDE, stepBrushSize, stepHardness, type BrushMode, type BrushSettings } from '../core/paint/brush';
+import {
+  DEFAULT_BRUSH,
+  MAX_TIP_SIDE,
+  stepBrushSize,
+  stepHardness,
+  type BrushMode,
+  type BrushSettings,
+} from '../core/paint/brush';
 import { planFromDocument } from '../core/composite/flatten';
 import { DEFAULT_DYNAMICS } from '../core/paint/dynamics';
+import { applyPreset, presetFromBrush, type BrushBundle } from '../core/paint/presets';
+import { BRUSH_FILE_EXTENSION, readBrushFile, writeBrushFile } from '../io/brush-file';
+
 import { SYMMETRY_KINDS, defaultSymmetry, hasSegments, type SymmetryKind } from '../core/paint/symmetry';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
-import type { PaintHost, PaintStroke } from '../tools/types';
+import type { PaintHost, PaintStroke, Tool } from '../tools/types';
 import { PaintSession } from './paint-session';
 import { ColorSwatches } from './colors';
 import {
@@ -67,6 +77,7 @@ import type {
   CanvasSizeRequest,
   CanvasSizeResult,
   ConfirmRequest,
+  NameRequest,
   FillContents,
   FillRequest,
   FillResult,
@@ -139,6 +150,17 @@ export interface UiBridge {
   preferences(values: PreferenceValues): Promise<PreferenceValues | null>;
   /** Radial / Mandala symmetry: the segment count (2–12), or null when cancelled. */
   symmetrySegments(kind: 'radial' | 'mandala', segments: number): Promise<number | null>;
+  /** A name (and an optional checkbox), or null when cancelled. */
+  askName(request: NameRequest): Promise<{ name: string; option: boolean } | null>;
+  /** Export Brushes: the groups to export ('' for presets outside any group), or null. */
+  exportBrushes(request: { groups: string[]; selected: string[] }): Promise<string[] | null>;
+}
+
+/** A new unique id (presets, tips). */
+function newId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 const TOOL_COMMANDS: Record<string, string> = {
@@ -586,12 +608,256 @@ export class AppController {
       );
     const tip = { width: rect.w, height: rect.h, data };
     await brushes.ready;
-    const name = await this.#ui.brushName(tip, `Sampled Brush ${brushes.list().length + 1}`);
+    const count = brushes.list().filter((t) => brushes.isUserTip(t.id)).length;
+    const name = await this.#ui.brushName(tip, `Sampled Brush ${count + 1}`);
     if (!name) return;
-    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `tip-${Date.now()}`;
+    const id = newId();
     await brushes.add({ id, name, ...tip });
-    // The new tip becomes the Brush tool's, at its own size (as the reference app selects the new preset).
-    this.tools.brush.setOptions({ tip: id, size: Math.max(rect.w, rect.h), spacing: 0.25 });
+    // A preset with the new tip, chosen at once (the Brush tool's, at the tip's own size).
+    const brush = {
+      ...DEFAULT_BRUSH,
+      tip: id,
+      size: Math.max(rect.w, rect.h),
+      dynamics: structuredClone(DEFAULT_DYNAMICS),
+    };
+    const preset = presetFromBrush(newId(), name, null, brush, null);
+    await brushes.savePresets([preset]);
+    this.choosePreset(preset.id, this.tools.brush);
+  }
+
+  /** The active painting tool, or the Brush (made active) when another tool is. */
+  #paintToolOrBrush(): PaintingTool {
+    const tool = this.#paintTool();
+    if (tool) return tool;
+    this.#ui.setActiveTool(this.tools.brush.id, this.groupOf(this.tools.brush.id));
+    return this.tools.brush;
+  }
+
+  /** Chooses a brush preset for the active painting tool (the Brush when another tool is active). */
+  choosePreset(id: string, tool: PaintingTool = this.#paintToolOrBrush()): void {
+    const preset = this.services.brushes.preset(id);
+    if (!preset) return;
+    tool.setOptions(applyPreset(tool.options, preset, tool.protectTexture));
+    if (preset.toolSettings && preset.smoothing) tool.setSmoothing(preset.smoothing);
+    tool.presetId = id;
+    this.services.brushes.markUsed(id);
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** The preset the active painting tool uses, if any. */
+  get currentPresetId(): string | null {
+    return this.#paintTool()?.presetId ?? null;
+  }
+
+  /** New Brush Preset: the current brush under a name (with the tool's settings if asked). */
+  async newBrushPreset(): Promise<void> {
+    const brushes = this.services.brushes;
+    const tool = this.#paintToolOrBrush();
+    const answer = await this.#ui.askName({
+      title: 'New Brush Preset',
+      name: `Brush ${brushes.presets().length + 1}`,
+      option: { label: 'Include tool settings (opacity, flow, mode, smoothing)', checked: false },
+    });
+    if (!answer) return;
+    const group = (tool.presetId ? brushes.preset(tool.presetId)?.group : null) ?? null;
+    const preset = presetFromBrush(newId(), answer.name, group, tool.options, answer.option ? tool.smoothing : null);
+    await brushes.savePresets([preset]);
+    tool.presetId = preset.id;
+    this.#ui.toolOptionsChanged();
+  }
+
+  async newBrushGroup(): Promise<void> {
+    const brushes = this.services.brushes;
+    const answer = await this.#ui.askName({ title: 'New Brush Group', name: `Group ${brushes.groups().length + 1}` });
+    if (answer) await brushes.addGroup(answer.name);
+  }
+
+  /** The group of the current preset (null when it has none). */
+  get currentBrushGroup(): string | null {
+    const id = this.currentPresetId;
+    return (id ? this.services.brushes.preset(id)?.group : null) ?? null;
+  }
+
+  async renameBrushGroup(group = this.currentBrushGroup): Promise<void> {
+    if (group === null) return;
+    const answer = await this.#ui.askName({ title: 'Rename Brush Group', name: group });
+    if (answer && answer.name !== group) await this.services.brushes.renameGroup(group, answer.name);
+  }
+
+  async deleteBrushGroup(group = this.currentBrushGroup): Promise<void> {
+    if (group === null) return;
+    const count = this.services.brushes.presets().filter((p) => p.group === group).length;
+    const ok = await this.#ui.confirm({
+      title: 'Delete Brush Group',
+      message: `Delete the group “${group}” and the ${count} brush${count === 1 ? '' : 'es'} in it?`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    await this.services.brushes.removeGroup(group);
+    for (const t of [this.tools.brush, this.tools.eraser])
+      if (t.presetId && !this.services.brushes.preset(t.presetId)) t.presetId = null;
+    this.#ui.toolOptionsChanged();
+  }
+
+  async renameBrushPreset(id = this.currentPresetId): Promise<void> {
+    const preset = id ? this.services.brushes.preset(id) : undefined;
+    if (!preset) return;
+    const answer = await this.#ui.askName({ title: 'Rename Brush', name: preset.name });
+    if (answer) await this.services.brushes.renamePreset(preset.id, answer.name);
+  }
+
+  async deleteBrushPreset(id = this.currentPresetId): Promise<void> {
+    const preset = id ? this.services.brushes.preset(id) : undefined;
+    if (!preset) return;
+    const ok = await this.#ui.confirm({
+      title: 'Delete Brush',
+      message: `Delete the brush “${preset.name}”?`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    await this.services.brushes.removePreset(preset.id);
+    for (const t of [this.tools.brush, this.tools.eraser]) if (t.presetId === preset.id) t.presetId = null;
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** Import Brushes: .abr files of the reference app and our .pfbrush files. */
+  async importBrushes(): Promise<void> {
+    const files = await pickFiles({ 'application/octet-stream': ['.abr', `.${BRUSH_FILE_EXTENSION}`] }, 'Brushes');
+    const { brushes, patterns } = this.services;
+    for (const file of files) {
+      const group = file.name.replace(/\.[^.]+$/, '');
+      try {
+        let bundle: BrushBundle;
+        let notes: string[] = [];
+        if (/\.abr$/i.test(file.name)) {
+          const result = await this.services.codec.importAbr(file.bytes, group, `abr-${newId()}:`);
+          bundle = result;
+          notes = result.notes;
+        } else {
+          bundle = readBrushFile(file.bytes);
+        }
+        if (bundle.presets.length === 0) throw new Error('It has no brushes.');
+        await patterns.add(bundle.patterns);
+        await brushes.savePresets(
+          bundle.presets.map((p) => ({ ...p, group: p.group ?? group })),
+          bundle.tips,
+        );
+        if (notes.length > 0)
+          await this.#ui.alert(
+            `Imported ${bundle.presets.length} brushes from “${file.name}”`,
+            `Some settings were approximated: ${notes.join('; ')}.`,
+          );
+      } catch (error) {
+        await this.#ui.alert(`Could not import “${file.name}”`, error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  /** Export Brushes: the presets of chosen groups, with their tips and patterns, as our brush file. */
+  async exportBrushes(): Promise<void> {
+    const { brushes, patterns } = this.services;
+    const groups = brushes.groups();
+    const ungrouped = brushes.presets().some((p) => p.group === null);
+    const current = this.currentPresetId ? brushes.preset(this.currentPresetId)?.group : undefined;
+    const chosen = await this.#ui.exportBrushes({
+      groups: [...groups, ...(ungrouped ? [''] : [])],
+      selected: current !== undefined ? [current ?? ''] : groups.slice(0, 1),
+    });
+    if (!chosen || chosen.length === 0) return;
+    const presets = brushes.presets().filter((p) => chosen.includes(p.group ?? ''));
+    const tipIds = new Set(
+      presets.flatMap((p) => [p.brush.tip, p.brush.dynamics?.dual.enabled ? p.brush.dynamics.dual.tip : null]),
+    );
+    const patternIds = new Set(
+      presets.map((p) => (p.brush.dynamics?.texture.enabled ? p.brush.dynamics.texture.pattern : null)),
+    );
+    const bytes = writeBrushFile({
+      presets,
+      tips: brushes.list().filter((t) => tipIds.has(t.id) && brushes.isUserTip(t.id)),
+      patterns: patterns.userPatterns().filter((p) => patternIds.has(p.id)),
+    });
+    const name = chosen.length === 1 && chosen[0] ? chosen[0] : 'Brushes';
+    await saveFileAs(
+      bytes,
+      `${name}.${BRUSH_FILE_EXTENSION}`,
+      'application/octet-stream',
+      `.${BRUSH_FILE_EXTENSION}`,
+      'Brushes',
+    );
+  }
+
+  async restoreDefaultBrushes(): Promise<void> {
+    const ok = await this.#ui.confirm({
+      title: 'Restore Default Brushes',
+      message: 'Bring back the default brushes? Your own brushes stay.',
+      confirmLabel: 'Restore',
+    });
+    if (ok) await this.services.brushes.restoreDefaults();
+  }
+
+  // -- tool presets -----------------------------------------------------------
+
+  #toolPresetId: string | null = null;
+
+  /** The tool preset chosen last (the Tool Presets panel shows it selected). */
+  get currentToolPresetId(): string | null {
+    return this.#toolPresetId;
+  }
+
+  /** A tool's settings as plain data, or null for tools without settings. */
+  #toolSettings(tool: Tool): unknown {
+    if (tool.presetOptions) return tool.presetOptions();
+    const withOptions = tool as Tool & { options?: unknown };
+    return withOptions.options !== undefined ? (JSON.parse(JSON.stringify(withOptions.options)) as unknown) : null;
+  }
+
+  canMakeToolPreset(): boolean {
+    const tool = this.tools.byId.get(this.#ui.activeToolId());
+    return !!tool && this.#toolSettings(tool) !== null;
+  }
+
+  async newToolPreset(): Promise<void> {
+    const tool = this.tools.byId.get(this.#ui.activeToolId());
+    if (!tool) return;
+    const options = this.#toolSettings(tool);
+    if (options === null) return;
+    const library = this.services.toolPresets;
+    const answer = await this.#ui.askName({
+      title: 'New Tool Preset',
+      name: `${tool.name} ${library.list(tool.id).length + 1}`,
+    });
+    if (!answer) return;
+    const id = newId();
+    await library.add({ id, name: answer.name, toolId: tool.id, options });
+    this.#toolPresetId = id;
+    this.#ui.toolOptionsChanged();
+  }
+
+  /** Chooses a tool preset: its tool becomes active with the saved settings. */
+  chooseToolPreset(id: string): void {
+    const preset = this.services.toolPresets.get(id);
+    const tool = preset ? this.tools.byId.get(preset.toolId) : undefined;
+    if (!preset || !tool) return;
+    this.#ui.setActiveTool(tool.id, this.groupOf(tool.id));
+    const options = JSON.parse(JSON.stringify(preset.options)) as unknown;
+    if (tool.applyPresetOptions) tool.applyPresetOptions(options);
+    else (tool as Tool & { setOptions?(o: unknown): void }).setOptions?.(options);
+    this.#toolPresetId = id;
+    this.#ui.toolOptionsChanged();
+  }
+
+  async renameToolPreset(id = this.#toolPresetId): Promise<void> {
+    const preset = id ? this.services.toolPresets.get(id) : undefined;
+    if (!preset) return;
+    const answer = await this.#ui.askName({ title: 'Rename Tool Preset', name: preset.name });
+    if (answer) await this.services.toolPresets.rename(preset.id, answer.name);
+  }
+
+  async deleteToolPreset(id = this.#toolPresetId): Promise<void> {
+    const preset = id ? this.services.toolPresets.get(id) : undefined;
+    if (!preset) return;
+    await this.services.toolPresets.remove(preset.id);
+    if (this.#toolPresetId === preset.id) this.#toolPresetId = null;
     this.#ui.toolOptionsChanged();
   }
 
@@ -1474,8 +1740,29 @@ export class AppController {
       ['window.layers', 'layers', 'Layers'],
       ['window.panel.navigator', 'navigator', 'Navigator'],
       ['window.brushSettings', 'brush-settings', 'Brush Settings'],
+      ['window.brushes', 'brushes', 'Brushes'],
+      ['window.toolPresets', 'tool-presets', 'Tool Presets'],
     ] as const) {
       add({ id, label, checked: () => this.#ui.isPanelOpen(panel), run: () => this.#ui.togglePanel(panel) });
+    }
+    // Brushes and Tool Presets panels (their menus and buttons).
+    const hasPreset = () => this.currentPresetId !== null;
+    const hasToolPreset = () => this.#toolPresetId !== null;
+    for (const [id, label, run, enabled] of [
+      ['brushes.newPreset', 'New Brush Preset…', () => this.newBrushPreset(), undefined],
+      ['brushes.newGroup', 'New Brush Group…', () => this.newBrushGroup(), undefined],
+      ['brushes.rename', 'Rename Brush…', () => this.renameBrushPreset(), hasPreset],
+      ['brushes.delete', 'Delete Brush', () => this.deleteBrushPreset(), hasPreset],
+      ['brushes.renameGroup', 'Rename Group…', () => this.renameBrushGroup(), () => this.currentBrushGroup !== null],
+      ['brushes.deleteGroup', 'Delete Group…', () => this.deleteBrushGroup(), () => this.currentBrushGroup !== null],
+      ['brushes.import', 'Import Brushes…', () => this.importBrushes(), undefined],
+      ['brushes.export', 'Export Brushes…', () => this.exportBrushes(), undefined],
+      ['brushes.restore', 'Restore Default Brushes…', () => this.restoreDefaultBrushes(), undefined],
+      ['toolPresets.new', 'New Tool Preset…', () => this.newToolPreset(), () => this.canMakeToolPreset()],
+      ['toolPresets.rename', 'Rename Tool Preset…', () => this.renameToolPreset(), hasToolPreset],
+      ['toolPresets.delete', 'Delete Tool Preset', () => this.deleteToolPreset(), hasToolPreset],
+    ] as const) {
+      add({ id, label, run, ...(enabled ? { enabled } : {}) });
     }
     add({ id: 'window.workspace.essentials', label: 'Essentials (Default)', run: () => this.#ui.resetWorkspace() });
     add({ id: 'window.workspace.reset', label: 'Reset Essentials', run: () => this.#ui.resetWorkspace() });

@@ -7,6 +7,7 @@ import { compositeToSamples, flatten, isOpaque, type FlattenPlan } from '../core
 import init, * as codecs from '../wasm/pkg/codecs-st/codecs.js';
 import { withIccProfile } from '../io/webp-riff';
 import { readPsdFile, writePsdFile, type PsdFileData, type PsdNode, type PsdSaveData } from '../io/psd-format';
+import { importAbr, type AbrImport } from '../io/abr';
 import { exposeApi, transfer } from './rpc';
 
 const ready = init();
@@ -158,6 +159,18 @@ const psd = {
 };
 Object.assign(api, psd);
 
+const brushFiles = {
+  /** Reads an .abr brush file into presets, tips and patterns (see io/abr.ts). */
+  importAbr(bytes: Uint8Array, group: string, prefix: string): AbrImport {
+    const result = importAbr(bytes, group, prefix);
+    const buffers = new Set<ArrayBuffer>();
+    for (const item of [...result.tips, ...result.patterns])
+      if (!(item.data.buffer instanceof SharedArrayBuffer)) buffers.add(item.data.buffer);
+    return transfer(result, [...buffers]);
+  },
+};
+Object.assign(api, brushFiles);
+
 /** Replaces transparency with `matte` (colour 0–1): the composite becomes opaque. */
 function overMatte(composite: { colorChannels: number; data: Float32Array }, matte: readonly number[]): void {
   const cc = composite.colorChannels;
@@ -284,6 +297,6 @@ const browserWebp = {
 };
 Object.assign(api, browserWebp);
 
-export type CodecWorkerApi = typeof api & typeof psd & typeof lossy & typeof browserWebp;
+export type CodecWorkerApi = typeof api & typeof psd & typeof brushFiles & typeof lossy & typeof browserWebp;
 
 exposeApi(api);

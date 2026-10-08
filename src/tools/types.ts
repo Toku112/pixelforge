@@ -247,4 +247,7 @@ export interface Tool {
   deactivate?(ctx: ToolContext): void;
   /** The brush HUD gesture, for tools with a brush. */
   readonly adjustBrush?: BrushAdjuster;
+  /** Tool presets: the tool's settings as plain data, and applying them back. */
+  presetOptions?(): unknown;
+  applyPresetOptions?(options: unknown): void;
 }

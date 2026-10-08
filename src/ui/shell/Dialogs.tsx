@@ -7,6 +7,8 @@ import { NumberField } from '../controls/NumberField';
 import { BrushNameDialog } from './BrushNameDialog';
 import { PreferencesDialog } from './PreferencesDialog';
 import { SymmetrySegmentsDialog } from './SymmetrySegmentsDialog';
+import { NameDialog } from './NameDialog';
+import { ExportBrushesDialog } from './ExportBrushesDialog';
 import { ColorPickerDialog } from './ColorPicker';
 import { FillDialog } from './FillDialog';
 import { Modal } from './Modal';
@@ -191,6 +193,10 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <PreferencesDialog dialog={dialog} />;
     case 'symmetry-segments':
       return <SymmetrySegmentsDialog dialog={dialog} />;
+    case 'name':
+      return <NameDialog dialog={dialog} />;
+    case 'export-brushes':
+      return <ExportBrushesDialog dialog={dialog} />;
     case 'about': {
       const done = () => (close(dialog), dialog.resolve());
       return (

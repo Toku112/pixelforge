@@ -13,7 +13,7 @@ import type { ViewportState } from '../../engine/viewport/viewport';
 import { sanitizeLayout, type DockLayout } from '../dock/dock-model';
 import { essentialsLayout } from '../dock/workspaces';
 
-export const PANEL_IDS = ['history', 'navigator', 'layers', 'brush-settings'] as const;
+export const PANEL_IDS = ['history', 'navigator', 'layers', 'brush-settings', 'brushes', 'tool-presets'] as const;
 export type PanelKey = (typeof PANEL_IDS)[number];
 
 /** Name, blend mode and opacity from the New Layer / New Group dialogs. */
@@ -29,6 +29,13 @@ export interface LayerOptionsRequest {
   blendModes: readonly BlendMode[];
   blendMode: BlendMode;
   opacity: number;
+}
+
+/** A name to ask for (with an optional checkbox). */
+export interface NameRequest {
+  title: string;
+  name: string;
+  option?: { label: string; checked: boolean };
 }
 
 export interface ConfirmRequest {
@@ -67,6 +74,8 @@ export type DialogRequest =
       resolve: (name: string | null) => void;
     }
   | { kind: 'preferences'; values: PreferenceValues; resolve: (values: PreferenceValues | null) => void }
+  | ({ kind: 'name'; resolve: (answer: { name: string; option: boolean } | null) => void } & NameRequest)
+  | { kind: 'export-brushes'; groups: string[]; selected: string[]; resolve: (groups: string[] | null) => void }
   | {
       kind: 'symmetry-segments';
       symmetry: 'radial' | 'mandala';

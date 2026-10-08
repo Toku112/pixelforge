@@ -9,6 +9,7 @@ import type { StrokeSetup } from '../core/paint/stroke';
 import { BrushLibrary } from './brush-library';
 import { PatternLibrary } from './pattern-library';
 import { Preferences } from './preferences';
+import { ToolPresetLibrary } from './tool-presets';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
@@ -55,6 +56,8 @@ export interface AppServices {
   patterns: PatternLibrary;
   /** Edit > Preferences. */
   preferences: Preferences;
+  /** Tool presets. */
+  toolPresets: ToolPresetLibrary;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -86,5 +89,6 @@ export async function createServices(): Promise<AppServices> {
     brushes,
     patterns,
     preferences: new Preferences(),
+    toolPresets: new ToolPresetLibrary(),
   };
 }

@@ -14,6 +14,7 @@ import { colorToSamples, type RGB } from '../../color/color';
 import type { PixelFormat } from '../../document/pixel-format';
 import { builtInPattern, patternGray, type Pattern, type PatternSource } from '../../pattern/pattern';
 import { parseSymmetry, type Symmetry } from '../../paint/symmetry';
+import { builtInTip } from '../../paint/builtin-tips';
 import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
 import {
   DEFAULT_BRUSH,
@@ -213,7 +214,7 @@ function libraryTip(
   what: string,
 ): BrushTip | null {
   if (id === null) return null;
-  const tip = tips?.get(id);
+  const tip = tips?.get(id) ?? builtInTip(id);
   if (!tip) throw new CommandUnavailableError(`The ${what} this stroke uses is not in the brush library`);
   return tip;
 }

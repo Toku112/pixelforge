@@ -517,6 +517,7 @@ export const MENUS: readonly TopMenu[] = [
       item('window.paths', 'Paths'),
       item('window.properties', 'Properties'),
       item('window.swatches', 'Swatches'),
+      item('window.toolPresets', 'Tool Presets'),
       sep,
       item('window.optionsBar', 'Options'),
       item('window.toolsPanel', 'Tools'),

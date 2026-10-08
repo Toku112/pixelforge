@@ -1,56 +1,16 @@
 /**
- * The brush picker in the options bar: the current tip and size; opened, it sets
- * size, hardness, angle, roundness and flips, and chooses the round tip or one of
- * the sampled tips from Edit > Define Brush Preset (which can be deleted here).
+ * The brush preset picker in the options bar: the current tip and size; opened, it
+ * sets size, hardness, angle, roundness and flips, makes a preset of them, and lists
+ * the brush presets (as the Brushes panel does) to choose from.
  */
 import { useEffect, useReducer, useRef, useState } from 'react';
-import type { BrushTip } from '../../core/paint/brush';
 import type { PaintingTool } from '../../tools/paint/paint-tool';
 import { useController } from '../AppContext';
 import { NumberField } from '../controls/NumberField';
+import { Icon } from '../icons';
+import { BrushPresetList } from '../panels/BrushPresetList';
 import { useUi } from '../state/ui-store';
-
-/** A tip drawn as dark paint on white into a square of `box` CSS pixels (sampled, so large tips stay quick). */
-export function TipThumbnail({
-  tip,
-  box,
-  roundHardness,
-}: {
-  tip: BrushTip | null;
-  box: number;
-  roundHardness?: number;
-}) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const el = canvas.current;
-    const ctx = el?.getContext('2d');
-    if (!el || !ctx) return;
-    el.width = box;
-    el.height = box;
-    const image = ctx.createImageData(box, box);
-    const scale = tip ? Math.min(1, (box - 4) / Math.max(tip.width, tip.height)) : 1;
-    for (let y = 0; y < box; y++) {
-      for (let x = 0; x < box; x++) {
-        let cover: number;
-        if (tip) {
-          const tx = Math.floor((x - box / 2) / scale + tip.width / 2);
-          const ty = Math.floor((y - box / 2) / scale + tip.height / 2);
-          cover = tx < 0 || ty < 0 || tx >= tip.width || ty >= tip.height ? 0 : tip.data[ty * tip.width + tx]! / 255;
-        } else {
-          // The round tip: a disc with a soft rim set by hardness.
-          const r = box / 2 - 2;
-          const d = Math.hypot(x + 0.5 - box / 2, y + 0.5 - box / 2);
-          const h = roundHardness ?? 1;
-          cover = d >= r ? 0 : d <= r * h ? 1 : 1 - (d - r * h) / (r * (1 - h));
-        }
-        const v = Math.round(255 - cover * 255);
-        image.data.set([v, v, v, 255], (y * box + x) * 4);
-      }
-    }
-    ctx.putImageData(image, 0, 0);
-  }, [tip, box, roundHardness]);
-  return <canvas ref={canvas} className="tip-thumb" style={{ width: box, height: box }} />;
-}
+import { TipThumbnail } from './TipThumbnail';
 
 export function BrushPicker({ tool }: { tool: PaintingTool }) {
   const controller = useController();
@@ -62,7 +22,6 @@ export function BrushPicker({ tool }: { tool: PaintingTool }) {
   useEffect(() => library.onChange(redraw), [library]);
   const root = useRef<HTMLDivElement>(null);
   const o = tool.options;
-  const tips = library.list();
   const current = o.tip ? (library.get(o.tip) ?? null) : null;
   const set = (changes: Partial<typeof o>) => {
     tool.setOptions(changes);
@@ -72,10 +31,12 @@ export function BrushPicker({ tool }: { tool: PaintingTool }) {
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      // Dialogs opened from the list (Rename) are not "away".
+      const target = e.target as Element | null;
+      if (!root.current?.contains(target) && !target?.closest('.modal-backdrop')) setOpen(false);
     };
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape' && !document.querySelector('.modal-backdrop')) setOpen(false);
     };
     window.addEventListener('pointerdown', away, true);
     window.addEventListener('keydown', key);
@@ -84,9 +45,6 @@ export function BrushPicker({ tool }: { tool: PaintingTool }) {
       window.removeEventListener('keydown', key);
     };
   }, [open]);
-
-  const choose = (tip: BrushTip | null) =>
-    set(tip ? { tip: tip.id, size: Math.max(tip.width, tip.height) } : { tip: null, size: o.tip ? 30 : o.size });
 
   return (
     <div className="brush-picker" ref={root}>
@@ -102,7 +60,7 @@ export function BrushPicker({ tool }: { tool: PaintingTool }) {
         <span>{o.size}</span>
       </button>
       {open && (
-        <div className="brush-picker-panel" role="group" aria-label="Brush settings">
+        <div className="brush-picker-panel brush-picker-presets" role="group" aria-label="Brush settings">
           <div className="brush-picker-fields">
             <NumberField
               label="Size"
@@ -149,47 +107,17 @@ export function BrushPicker({ tool }: { tool: PaintingTool }) {
               <input type="checkbox" checked={o.flipY} onChange={(e) => set({ flipY: e.target.checked })} />
               Flip Y
             </label>
-          </div>
-          <div className="brush-tips" role="listbox" aria-label="Brush tips">
             <button
               type="button"
-              role="option"
-              aria-selected={o.tip === null}
-              aria-label="Round"
-              title="Round"
-              className="brush-tip"
-              onClick={() => choose(null)}
+              className="option-icon"
+              aria-label="New brush preset"
+              title="New brush preset from these settings"
+              onClick={() => controller.commands.run('brushes.newPreset')}
             >
-              <TipThumbnail tip={null} box={36} roundHardness={o.hardness} />
+              <Icon name="newLayer" size={16} />
             </button>
-            {tips.map((tip) => (
-              <button
-                key={tip.id}
-                type="button"
-                role="option"
-                aria-selected={o.tip === tip.id}
-                aria-label={tip.name}
-                title={`${tip.name} (${tip.width} × ${tip.height})`}
-                className="brush-tip"
-                onClick={() => choose(tip)}
-              >
-                <TipThumbnail tip={tip} box={36} />
-              </button>
-            ))}
           </div>
-          {current && (
-            <button
-              type="button"
-              className="option-button"
-              onClick={() => {
-                void library.remove(current.id);
-                set({ tip: null, size: 30 });
-              }}
-            >
-              Delete “{current.name}”
-            </button>
-          )}
-          {tips.length === 0 && <p className="hint">Make your own tips with Edit › Define Brush Preset.</p>}
+          <BrushPresetList strokesShown={false} />
         </div>
       )}
     </div>
