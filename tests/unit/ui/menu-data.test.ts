@@ -39,6 +39,7 @@ describe('menu bar data', () => {
       'edit.fillBackground',
       'edit.fillForegroundPreserve',
       'edit.fillBackgroundPreserve',
+      'edit.fillHistory',
     ]);
     const orphaned = DEFAULT_KEYMAP.map((b) => b.command).filter(
       (c) => /^(file|edit|image|layer|select|filter)\./.test(c) && !inMenus.has(c) && !keyboardOnly.has(c),

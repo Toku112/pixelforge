@@ -27,9 +27,18 @@
  * - Alt+right-drag (Ctrl+Option-drag on macOS) shows the brush HUD: drag left or
  *   right for the size, up (softer) or down (harder) for a round tip's hardness —
  *   or the opacity, by preference and for sampled tips.
+ * - The History Brush (Y) paints the layer back to how it was in the History Brush
+ *   source (chosen in the History panel's left column; the opening state unless
+ *   changed). The Art History Brush (Shift+Y) paints short stylised strokes in the
+ *   source's colours: Style sets their shape, Area how far around the pointer they
+ *   start, Tolerance keeps them to where the layer differs from the source; it keeps
+ *   painting while the pointer rests. Neither uses paint symmetry.
+ * - The Eraser's Erase to History brings back the source instead of erasing; holding
+ *   Alt/Option when a stroke starts turns it on (or off) for that stroke.
  */
-import type { PaintTool } from '../../core/commands/builtin/paint';
+import { usesSymmetry, type PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_PATTERN_ID } from '../../core/pattern/pattern';
+import { DEFAULT_ART_HISTORY, type ArtHistoryOptions } from '../../core/paint/art-history';
 import { DEFAULT_BRUSH, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
 import { DEFAULT_DYNAMICS, StrokeDabber } from '../../core/paint/dynamics';
 import {
@@ -44,12 +53,20 @@ import {
   type BrushAdjuster,
   type BrushOutline,
   type CursorState,
+  type PaintBeginOptions,
   type PaintStroke,
   type Tool,
   type ToolContext,
   type ToolPointerEvent,
 } from '../types';
-import { BRUSH_CURSOR, ERASER_CURSOR, EYEDROPPER_CURSOR, STAMP_CURSOR } from './cursors';
+import {
+  ART_HISTORY_CURSOR,
+  BRUSH_CURSOR,
+  ERASER_CURSOR,
+  EYEDROPPER_CURSOR,
+  HISTORY_BRUSH_CURSOR,
+  STAMP_CURSOR,
+} from './cursors';
 import { ColorSampler } from '../eyedropper/sampler';
 
 /** The Pattern Stamp's options. */
@@ -61,11 +78,41 @@ export interface StampOptions {
   impressionist: boolean;
 }
 
+/** A stroke being painted: the host's session, the spacer and smoothing, and the samples recorded. */
+interface ActiveStroke {
+  session: PaintStroke;
+  spacer: StrokeDabber;
+  smoother: StrokeSmoother;
+  curves: CurveSmoother | null;
+  points: StrokePoint[];
+  start: number;
+}
+
 const TOOL_NAMES: Record<PaintTool, string> = {
   brush: 'Brush Tool',
   pencil: 'Pencil Tool',
   eraser: 'Eraser Tool',
   'pattern-stamp': 'Pattern Stamp Tool',
+  'history-brush': 'History Brush Tool',
+  'art-history-brush': 'Art History Brush Tool',
+};
+
+const TOOL_KEYS: Record<PaintTool, string> = {
+  brush: 'B',
+  pencil: 'B',
+  eraser: 'E',
+  'pattern-stamp': 'S',
+  'history-brush': 'Y',
+  'art-history-brush': 'Y',
+};
+
+const STANDARD_CURSORS: Record<PaintTool, string> = {
+  brush: BRUSH_CURSOR,
+  pencil: BRUSH_CURSOR,
+  eraser: ERASER_CURSOR,
+  'pattern-stamp': STAMP_CURSOR,
+  'history-brush': HISTORY_BRUSH_CURSOR,
+  'art-history-brush': ART_HISTORY_CURSOR,
 };
 
 export class PaintingTool implements Tool {
@@ -86,14 +133,11 @@ export class PaintingTool implements Tool {
   eraserMode: 'brush' | 'pencil' | 'block' = 'brush';
   /** Pattern Stamp: the pattern, Aligned and Impressionist. */
   readonly stamp: StampOptions = { patternId: DEFAULT_PATTERN_ID, aligned: true, impressionist: false };
-  #stroke: {
-    session: PaintStroke;
-    spacer: StrokeDabber;
-    smoother: StrokeSmoother;
-    curves: CurveSmoother | null;
-    points: StrokePoint[];
-    start: number;
-  } | null = null;
+  /** Eraser: Erase to History. */
+  eraseToHistory = false;
+  /** Art History Brush: style, area and tolerance. */
+  readonly art: ArtHistoryOptions = { ...DEFAULT_ART_HISTORY };
+  #stroke: ActiveStroke | null = null;
   /** End of the last stroke, for Shift-click lines. */
   #lastEnd: StrokePoint | null = null;
   /** Alt-click with the Brush: picking the foreground colour. */
@@ -114,16 +158,16 @@ export class PaintingTool implements Tool {
     this.kind = kind;
     this.id = kind;
     this.name = TOOL_NAMES[kind];
-    this.key = kind === 'eraser' ? 'E' : kind === 'pattern-stamp' ? 'S' : 'B';
-    const size = kind === 'brush' ? 30 : kind === 'pencil' ? 1 : 50;
+    this.key = TOOL_KEYS[kind];
+    const size = kind === 'brush' ? 30 : kind === 'pencil' ? 1 : kind === 'art-history-brush' ? 10 : 50;
     this.options = {
       ...DEFAULT_BRUSH,
       size,
       aliased: kind === 'pencil',
       dynamics: structuredClone(DEFAULT_DYNAMICS),
     };
-    // The Pencil draws exact lines: no smoothing unless asked.
-    if (kind === 'pencil') this.smoothing.amount = 0;
+    // The Pencil draws exact lines, and the Art History Brush places its own strokes: no smoothing unless asked.
+    if (kind === 'pencil' || kind === 'art-history-brush') this.smoothing.amount = 0;
   }
 
   setAutoErase(on: boolean): void {
@@ -136,6 +180,19 @@ export class PaintingTool implements Tool {
 
   setStamp(changes: Partial<StampOptions>): void {
     Object.assign(this.stamp, changes);
+  }
+
+  setEraseToHistory(on: boolean): void {
+    this.eraseToHistory = on;
+  }
+
+  setArt(changes: Partial<ArtHistoryOptions>): void {
+    Object.assign(this.art, changes);
+  }
+
+  /** Paint symmetry applies to the Brush, Pencil, Eraser and Pattern Stamp. */
+  get usesSymmetry(): boolean {
+    return usesSymmetry(this.kind);
   }
 
   /**
@@ -176,6 +233,8 @@ export class PaintingTool implements Tool {
         autoErase: this.autoErase,
         eraserMode: this.eraserMode,
         stamp: this.stamp,
+        eraseToHistory: this.eraseToHistory,
+        art: this.art,
       }),
     );
   }
@@ -189,6 +248,8 @@ export class PaintingTool implements Tool {
       autoErase?: boolean;
       eraserMode?: string;
       stamp?: Partial<StampOptions>;
+      eraseToHistory?: boolean;
+      art?: Partial<ArtHistoryOptions>;
     };
     if (o.brush) this.setOptions(JSON.parse(JSON.stringify(o.brush)) as Partial<BrushSettings>);
     if (o.smoothing) this.setSmoothing(o.smoothing);
@@ -201,6 +262,12 @@ export class PaintingTool implements Tool {
       if (typeof o.stamp.aligned === 'boolean') this.stamp.aligned = o.stamp.aligned;
       if (typeof o.stamp.impressionist === 'boolean') this.stamp.impressionist = o.stamp.impressionist;
     }
+    if (typeof o.eraseToHistory === 'boolean') this.eraseToHistory = o.eraseToHistory;
+    if (o.art) {
+      if (typeof o.art.style === 'string') this.art.style = o.art.style;
+      if (typeof o.art.area === 'number') this.art.area = Math.min(500, Math.max(0, o.art.area));
+      if (typeof o.art.tolerance === 'number') this.art.tolerance = Math.min(1, Math.max(0, o.art.tolerance));
+    }
     this.presetId = null;
   }
 
@@ -208,7 +275,7 @@ export class PaintingTool implements Tool {
     if (this.kind === 'brush' && (state.altKey || this.#sampler.active)) return EYEDROPPER_CURSOR;
     switch (state.paintCursor ?? 'precise') {
       case 'standard':
-        return this.kind === 'brush' ? BRUSH_CURSOR : this.kind === 'pattern-stamp' ? STAMP_CURSOR : ERASER_CURSOR;
+        return STANDARD_CURSORS[this.kind];
       case 'precise':
         return 'crosshair';
       default:
@@ -238,12 +305,14 @@ export class PaintingTool implements Tool {
   #feed(points: StrokePoint[]): void {
     const stroke = this.#stroke;
     if (!stroke) return;
-    for (const p of points) {
-      for (const q of stroke.curves ? stroke.curves.push(p) : [p]) {
-        stroke.points.push(q);
-        stroke.session.add(stroke.spacer.add(q));
-      }
-    }
+    for (const p of points) for (const q of stroke.curves ? stroke.curves.push(p) : [p]) this.#paintAt(stroke, q);
+  }
+
+  /** A paint point into the record and to the spacer (the Art History Brush's session places its own dabs). */
+  #paintAt(stroke: ActiveStroke, q: StrokePoint): void {
+    stroke.points.push(q);
+    if (stroke.session.addPoints) stroke.session.addPoints([q]);
+    else stroke.session.add(stroke.spacer.add(q));
   }
 
   /**
@@ -371,23 +440,7 @@ export class PaintingTool implements Tool {
     if (!ctx.paint) return;
     const brush = this.#strokeBrush(ctx);
     const startAt = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
-    const session = ctx.paint.begin(
-      this.kind,
-      brush,
-      this.kind === 'pencil' && this.autoErase
-        ? { autoEraseAt: startAt }
-        : this.kind === 'pattern-stamp'
-          ? {
-              pattern: {
-                id: this.stamp.patternId,
-                // Aligned: fixed to the document; otherwise starting where this stroke starts.
-                originX: this.stamp.aligned ? 0 : Math.floor(startAt.x),
-                originY: this.stamp.aligned ? 0 : Math.floor(startAt.y),
-                impressionist: this.stamp.impressionist,
-              },
-            }
-          : undefined,
-    );
+    const session = ctx.paint.begin(this.kind, brush, this.#beginOptions(startAt, e.altKey));
     if (!session) return;
     const spacer = new StrokeDabber(brush, session.seed, session.colors, session.symmetry);
     const start = e.time ?? performance.now();
@@ -401,9 +454,34 @@ export class PaintingTool implements Tool {
       this.#feed([{ ...this.#lastEnd, time: 0 }]);
     }
     this.#feed(smoother.add(p));
-    const buildUp = !!this.options.dynamics?.buildUp;
+    // The Art History Brush keeps painting while the pointer rests.
+    const buildUp = !!this.options.dynamics?.buildUp || this.kind === 'art-history-brush';
     if (buildUp || (smoother.active && s.catchUp && !s.pulledString)) this.#startTimer(buildUp);
     ctx.setBrushOutline(this.#outline(e, ctx, true));
+  }
+
+  /** What a stroke starting at `at` takes beyond the brush; Alt turns the Eraser's Erase to History on or off. */
+  #beginOptions(at: { x: number; y: number }, altKey: boolean): PaintBeginOptions | undefined {
+    switch (this.kind) {
+      case 'pencil':
+        return this.autoErase ? { autoEraseAt: at } : undefined;
+      case 'eraser':
+        return this.eraseToHistory !== altKey ? { toHistory: true } : undefined;
+      case 'art-history-brush':
+        return { art: { ...this.art } };
+      case 'pattern-stamp':
+        return {
+          pattern: {
+            id: this.stamp.patternId,
+            // Aligned: fixed to the document; otherwise starting where this stroke starts.
+            originX: this.stamp.aligned ? 0 : Math.floor(at.x),
+            originY: this.stamp.aligned ? 0 : Math.floor(at.y),
+            impressionist: this.stamp.impressionist,
+          },
+        };
+      default:
+        return undefined;
+    }
   }
 
   onPointerMove(e: ToolPointerEvent, ctx: ToolContext): void {
@@ -426,12 +504,7 @@ export class PaintingTool implements Tool {
     if (!stroke) return;
     // Catch-up on Stroke End, then the last stretch of the curve.
     this.#feed(stroke.smoother.end());
-    if (stroke.curves) {
-      for (const q of stroke.curves.flush()) {
-        stroke.points.push(q);
-        stroke.session.add(stroke.spacer.add(q));
-      }
-    }
+    if (stroke.curves) for (const q of stroke.curves.flush()) this.#paintAt(stroke, q);
     this.#stroke = null;
     ctx.setBrushOutline(this.#outline(e, ctx)); // back from the painting cursor
     this.#lastEnd = stroke.points.at(-1) ?? null;
@@ -451,7 +524,7 @@ export class PaintingTool implements Tool {
   }
 
   activate(ctx: ToolContext): void {
-    ctx.showSymmetry(true);
+    ctx.showSymmetry(this.usesSymmetry);
   }
 
   deactivate(ctx: ToolContext): void {

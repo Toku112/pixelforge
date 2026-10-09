@@ -23,6 +23,29 @@ export const BRUSH_CURSOR = iconCursor(
   20,
 );
 
+/** The History Brush: the brush with a turning-back arrow. */
+export const HISTORY_BRUSH_CURSOR = iconCursor(
+  [
+    'M20 3.5 11.5 12',
+    'M11 11.5c1.4 1.2 1.7 3 .6 4.4-1.6 2.1-4.4 3.3-8.1 3.6 1.2-1.6 1.1-3.4 2-5 .9-1.8 3.7-4.4 5.5-3Z',
+    'M3.6 6.6a3 3 0 1 0 .9-2.2',
+    'M4.3 2.6v1.9h1.9',
+  ],
+  3,
+  20,
+);
+
+/** The Art History Brush: the brush with a curl. */
+export const ART_HISTORY_CURSOR = iconCursor(
+  [
+    'M20 3.5 11.5 12',
+    'M11 11.5c1.4 1.2 1.7 3 .6 4.4-1.6 2.1-4.4 3.3-8.1 3.6 1.2-1.6 1.1-3.4 2-5 .9-1.8 3.7-4.4 5.5-3Z',
+    'M3.5 8.5c0-2.8 1.7-5 3.8-5 1.6 0 2.6 1.1 2.6 2.4 0 1.1-.8 1.9-1.8 1.9-.9 0-1.5-.6-1.5-1.4',
+  ],
+  3,
+  20,
+);
+
 export const EYEDROPPER_CURSOR = iconCursor(
   ['M14.5 4.5a2.1 2.1 0 0 1 3 0l2 2a2.1 2.1 0 0 1 0 3l-2 2-5-5Z', 'm13 8-8.2 8.2-.8 3.8 3.8-.8L16 11'],
   4,

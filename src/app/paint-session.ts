@@ -6,8 +6,15 @@
  * batch at a time, later dabs waiting in a queue so painting never falls behind —
  * and marks the tiles changed so the canvas shows the stroke as it grows. When the
  * stroke ends it becomes one History step; cancelling restores the tiles.
+ *
+ * Strokes from the history (History Brush, Erase to History) send the source
+ * state's tiles that each batch needs along with it, once they are in memory. The
+ * Art History Brush's dabs are placed here, from the pointer samples (`addPoints`),
+ * once the source state can be read.
  */
 import { preparedStroke, type PaintTool, type StampPattern } from '../core/commands/builtin/paint';
+import { sourceTilesFor } from '../core/history/history-source';
+import type { ArtHistoryDabber, ArtHistoryOptions } from '../core/paint/art-history';
 import { LayerTileDiff } from '../core/commands/tile-diff';
 import type { ImageDocument } from '../core/document/document';
 import type { PixelLayer } from '../core/document/layers';
@@ -21,6 +28,18 @@ import type { PaintStroke } from '../tools/types';
 import type { LiveStroke } from '../workers/stroke-client';
 import type { Workspace } from './workspace';
 
+/** What a stroke takes beyond the brush (each only for the strokes that use it). */
+export interface PaintSessionOptions {
+  symmetry?: Symmetry | null;
+  pattern?: StampPattern | null;
+  /** Eraser: Erase to History. */
+  toHistory?: boolean;
+  /** History Brush, Erase to History: the source state's version of the layer, once in memory. */
+  source?: Promise<PixelLayer> | null;
+  /** Art History Brush: its options, and its dab placer once the source state can be read. */
+  art?: { options: ArtHistoryOptions; dabber: Promise<ArtHistoryDabber> } | null;
+}
+
 export class PaintSession implements PaintStroke {
   readonly #workspace: Workspace;
   readonly #doc: ImageDocument;
@@ -33,6 +52,15 @@ export class PaintSession implements PaintStroke {
   readonly colors: DynamicsColors | null;
   readonly symmetry: Symmetry | null;
   readonly #pattern: StampPattern | null;
+  readonly #toHistory: boolean;
+  /** Settles when the source tiles can be read (at once for strokes without a source). */
+  readonly #sourceReady: Promise<PixelLayer | null>;
+  /** Source tiles already sent ("tx,ty"). */
+  readonly #sourcesSent = new Set<string>();
+  readonly #art: PaintSessionOptions['art'];
+  #artDabber: ArtHistoryDabber | null = null;
+  /** Art History Brush pointer samples waiting for the dab placer. */
+  readonly #points: StrokePoint[] = [];
   readonly #diff: LayerTileDiff;
   readonly #touched = new Set<number>();
   readonly #queue: Dab[] = [];
@@ -53,13 +81,23 @@ export class PaintSession implements PaintStroke {
     color: number[],
     seed: number,
     colors: DynamicsColors | null,
-    symmetry: Symmetry | null = null,
-    pattern: StampPattern | null = null,
+    options: PaintSessionOptions = {},
   ) {
     this.seed = seed;
-    this.#pattern = pattern;
+    this.#pattern = options.pattern ?? null;
+    this.#toHistory = options.toHistory === true;
     this.colors = colors;
-    this.symmetry = symmetry;
+    this.symmetry = options.symmetry ?? null;
+    this.#sourceReady = options.source ?? Promise.resolve(null);
+    this.#sourceReady.catch((error: unknown) => (this.#failed ??= error));
+    this.#art = options.art;
+    this.#art?.dabber.then(
+      (dabber) => {
+        this.#artDabber = dabber;
+        this.#placeArt();
+      },
+      (error: unknown) => (this.#failed ??= error),
+    );
     this.#workspace = workspace;
     this.#doc = doc;
     this.#layer = layer;
@@ -76,6 +114,23 @@ export class PaintSession implements PaintStroke {
     if (this.#done || dabs.length === 0) return;
     this.#queue.push(...dabs);
     this.#pump();
+  }
+
+  /** Art History Brush: pointer samples (its dabs are placed here). */
+  addPoints(points: StrokePoint[]): void {
+    if (this.#done) return;
+    this.#points.push(...points);
+    this.#placeArt();
+  }
+
+  #placeArt(): void {
+    const dabber = this.#artDabber;
+    if (!dabber || this.#points.length === 0) return;
+    const dabs = this.#points.splice(0).flatMap((p) => dabber.add(p));
+    if (dabs.length > 0) {
+      this.#queue.push(...dabs);
+      this.#pump();
+    }
   }
 
   #pump(): void {
@@ -98,8 +153,19 @@ export class PaintSession implements PaintStroke {
       this.#diff.captureBefore(this.#doc, tx, ty);
       fresh.push({ tx, ty, data: layer.buffer.writableTile(tx, ty).data });
     }
-    this.#flight = this.#live
-      .paint(fresh, dabs)
+    this.#flight = this.#sourceReady
+      .then((source) => {
+        const sources = source
+          ? sourceTilesFor(
+              source,
+              fresh.map((t) => [t.tx, t.ty] as const),
+              layer.offsetX,
+              layer.offsetY,
+              this.#sourcesSent,
+            )
+          : [];
+        return this.#live.paint(fresh, dabs, sources);
+      })
       .then(() => {
         for (const [tx, ty] of coords) layer.buffer.markChanged(tx, ty);
       })
@@ -128,6 +194,11 @@ export class PaintSession implements PaintStroke {
   }
 
   async #record(points: StrokePoint[]): Promise<void> {
+    if (this.#art) {
+      // The last samples' dabs, once the placer is there.
+      await this.#art.dabber.catch(() => undefined);
+      this.#placeArt();
+    }
     await this.#drain();
     this.#live.end();
     this.#diff.captureAfter(this.#doc);
@@ -146,6 +217,8 @@ export class PaintSession implements PaintStroke {
       ...(this.colors ? { colors: { foreground: this.colors.foreground, background: this.colors.background } } : {}),
       ...(this.symmetry ? { symmetry: { ...this.symmetry } } : {}),
       ...(this.#pattern ? { pattern: { ...this.#pattern } } : {}),
+      ...(this.#toHistory ? { toHistory: true } : {}),
+      ...(this.#art ? { art: { ...this.#art.options } } : {}),
     };
     const diff = this.#diff;
     await this.#workspace.executePrepared(this.#doc, (ctx) => preparedStroke(ctx, params, diff));

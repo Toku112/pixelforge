@@ -6,23 +6,30 @@
  *
  * Preserve Transparency (and layers without alpha) keep each pixel's alpha and
  * only move its colour towards the blended colour.
+ *
+ * History contents bring back the History Brush source's version of the layer, as
+ * the History Brush does: in Normal (and Dissolve) mode each pixel moves towards the
+ * source pixel, transparency included.
  */
 import { maxSampleValue, samplesPerPixel, type PixelFormat, type SampleArray } from '../document/pixel-format';
 import type { LayerBlendMode } from '../document/layers';
 import { blendChannel, blendColor, dissolveNoise, isWholeColorMode } from '../composite/blend';
-import { TILE_SIZE } from '../document/tile';
+import { TILE_SIZE, tileIndex, tileKey } from '../document/tile';
 
 /** log2(TILE_SIZE): pixel index → row. */
 const TILE_SHIFT = Math.log2(TILE_SIZE);
 import { MaskReader } from '../selection/mask-ops';
 import type { MaskedTarget } from '../selection/masked-edits';
 import type { PatternPixels } from '../pattern/pattern';
+import type { SourcePixels } from '../history/history-source';
 
 export interface FillSpec extends BlendSpec {
   /** Colour samples of the fill. */
   color: number[];
   /** A pattern instead of the colour. */
   pattern?: PatternPixels | null;
+  /** History contents: the layer as it was in the History Brush source state. */
+  history?: SourcePixels | null;
 }
 
 export function fillTiles(
@@ -32,6 +39,10 @@ export function fillTiles(
   spec: FillSpec,
   hdr: boolean,
 ): void {
+  if (spec.history) {
+    blendSourceTiles(tiles, format, target, spec, hdr, historySource(spec.history), true);
+    return;
+  }
   const pattern = spec.pattern;
   if (pattern) {
     blendSourceTiles(tiles, format, target, spec, hdr, patternSource(pattern, format.colorChannels, 0, 0));
@@ -63,6 +74,26 @@ export function patternSource(
   };
 }
 
+/** A history state's version of the layer, as a blend source. */
+export function historySource(history: SourcePixels): (x: number, y: number, out: number[]) => number {
+  const { format, defaultPixel, offsetX, offsetY } = history;
+  const cc = format.colorChannels;
+  const spp = samplesPerPixel(format);
+  const max = maxSampleValue(format.depth);
+  const tiles = new Map<number, SampleArray>(history.tiles.map((t) => [tileKey(t.tx, t.ty), t.data]));
+  return (x, y, out) => {
+    const sx = x - offsetX;
+    const sy = y - offsetY;
+    const tx = tileIndex(sx);
+    const ty = tileIndex(sy);
+    const data = tiles.get(tileKey(tx, ty));
+    const o = data ? ((sy - ty * TILE_SIZE) * TILE_SIZE + (sx - tx * TILE_SIZE)) * spp : 0;
+    const px = data ?? defaultPixel;
+    for (let c = 0; c < cc; c++) out[c] = px[o + c]! / max;
+    return format.hasAlpha ? px[o + cc]! / max : 1;
+  };
+}
+
 /** How a source is blended into a layer (Fill, Gradient). */
 export interface BlendSpec {
   /** Behind paints only where the layer is transparent; Clear takes pixels away (layers with editable alpha only). */
@@ -75,7 +106,8 @@ export interface BlendSpec {
 /**
  * Blends a source into layer tiles through the selection: `source(x, y, out)` writes the
  * source's colour (channel values 0–1; 32-bit: linear) at document pixel (x, y) into `out`
- * and returns its opacity (0–1).
+ * and returns its opacity (0–1). With `restore`, Normal and Dissolve move pixels towards
+ * the source's, transparency included (History contents).
  */
 export function blendSourceTiles(
   tiles: SampleArray[],
@@ -84,6 +116,7 @@ export function blendSourceTiles(
   spec: BlendSpec,
   hdr: boolean,
   source: (x: number, y: number, out: number[]) => number,
+  restore = false,
 ): void {
   const cc = format.colorChannels;
   const spp = samplesPerPixel(format);
@@ -113,7 +146,24 @@ export function blendSourceTiles(
       const i = p * spp;
       const ab = format.hasAlpha ? data[i + cc]! / max : 1;
       if (keepAlpha && ab === 0) continue; // nothing there to recolour
-      let a = spec.opacity * m * source(x, y, s);
+      const as = source(x, y, s);
+      if (restore && (mode === 'normal' || mode === 'dissolve')) {
+        let t = spec.opacity * m;
+        if (mode === 'dissolve') t = dissolveNoise(x, y) < t ? 1 : 0;
+        if (t <= 0) continue;
+        if (keepAlpha) {
+          for (let c = 0; c < cc; c++) data[i + c] = q(data[i + c]! / max + (s[c]! - data[i + c]! / max) * t * as);
+          continue;
+        }
+        const ao = ab + (as - ab) * t;
+        for (let c = 0; c < cc; c++) {
+          const v = data[i + c]! / max;
+          data[i + c] = q(ao > 0 ? (ab * (1 - t) * v + as * t * s[c]!) / ao : v);
+        }
+        data[i + cc] = q(ao);
+        continue;
+      }
+      let a = spec.opacity * m * as;
       if (mode === 'dissolve') a = dissolveNoise(x, y) < a ? 1 : 0;
       if (a <= 0) continue;
       if (mode === 'normal') {

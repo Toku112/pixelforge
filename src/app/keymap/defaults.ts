@@ -50,6 +50,7 @@ const MENU: DefaultBinding[] = [
   { command: 'edit.fillBackground', keys: ['Mod+Backspace', 'Mod+Delete'] },
   { command: 'edit.fillForegroundPreserve', keys: ['Alt+Shift+Backspace'] },
   { command: 'edit.fillBackgroundPreserve', keys: ['Mod+Shift+Backspace'] },
+  { command: 'edit.fillHistory', keys: ['Mod+Alt+Backspace', 'Mod+Alt+Delete'] },
   { command: 'edit.contentAwareScale', keys: ['Mod+Alt+Shift+C'] },
   { command: 'edit.freeTransform', keys: ['Mod+T'] },
   { command: 'edit.transformAgain', keys: ['Mod+Shift+T'] },

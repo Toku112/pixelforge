@@ -20,6 +20,8 @@ export const TOOL_ICONS: Readonly<Record<string, IconName>> = {
   pencil: 'pencil',
   eraser: 'eraser',
   'pattern-stamp': 'patternStamp',
+  'history-brush': 'historyBrush',
+  'art-history-brush': 'artHistoryBrush',
   gradient: 'gradient',
   'paint-bucket': 'paintBucket',
 };

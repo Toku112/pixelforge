@@ -1,13 +1,26 @@
 /**
- * Brush, Pencil, Eraser and Pattern Stamp strokes as commands.
+ * Brush, Pencil, Eraser, Pattern Stamp, History Brush and Art History Brush strokes
+ * as commands.
  *
  * A stroke is painted live while the pointer moves (see app/paint-session.ts) and
  * then recorded with `preparedStroke`, which keeps the tile diff already made.
  * Its descriptor — the pointer samples, brush settings and colour — repaints the
- * same stroke when an Action replays it.
+ * same stroke when an Action replays it. Strokes that paint from the history (History
+ * Brush, Art History Brush, Erase to History) use the document's History Brush source
+ * when they are replayed.
  */
 import type { ImageDocument } from '../../document/document';
 import { effectiveLocks, layerCapabilities, type PixelLayer } from '../../document/layers';
+import { maxSampleValue } from '../../document/pixel-format';
+import { sourcePixels, sourceTilesFor, type SourcePixels } from '../../history/history-source';
+import {
+  ART_HISTORY_STYLES,
+  ArtHistoryDabber,
+  DEFAULT_ART_HISTORY,
+  layerReader,
+  type ArtHistoryOptions,
+  type ArtHistorySampler,
+} from '../../paint/art-history';
 import type { Tile } from '../../document/tile';
 import { LAYER_BLEND_MODES } from '../../document/layers';
 import { colorToSamples, type RGB } from '../../color/color';
@@ -29,7 +42,16 @@ import { CommandUnavailableError, type Command, type CommandContext, type JsonOb
 import type { CommandDefinition } from '../registry';
 import { LayerTileDiff } from '../tile-diff';
 
-export type PaintTool = 'brush' | 'pencil' | 'eraser' | 'pattern-stamp';
+export type PaintTool = 'brush' | 'pencil' | 'eraser' | 'pattern-stamp' | 'history-brush' | 'art-history-brush';
+
+const PAINT_TOOLS: readonly PaintTool[] = [
+  'brush',
+  'pencil',
+  'eraser',
+  'pattern-stamp',
+  'history-brush',
+  'art-history-brush',
+];
 
 /** The Pattern Stamp's pattern: its id, where it starts repeating, and Impressionist. */
 export interface StampPattern {
@@ -55,6 +77,10 @@ export interface StrokeParams {
   symmetry?: Symmetry;
   /** Pattern Stamp strokes: the pattern painted. */
   pattern?: StampPattern;
+  /** Eraser strokes: Erase to History (back to the History Brush source instead of erasing). */
+  toHistory?: boolean;
+  /** Art History Brush strokes: style, area and tolerance. */
+  art?: ArtHistoryOptions;
 }
 
 export const PAINT_LABELS: Record<PaintTool, string> = {
@@ -62,7 +88,44 @@ export const PAINT_LABELS: Record<PaintTool, string> = {
   pencil: 'Pencil',
   eraser: 'Eraser',
   'pattern-stamp': 'Pattern Stamp',
+  'history-brush': 'History Brush',
+  'art-history-brush': 'Art History Brush',
 };
+
+/** Strokes that bring back the History Brush source's pixels (History Brush, Erase to History). */
+export function paintsFromHistory(params: { tool: PaintTool; toHistory?: boolean }): boolean {
+  return params.tool === 'history-brush' || (params.tool === 'eraser' && params.toHistory === true);
+}
+
+/** Strokes that need the History Brush source (also the Art History Brush, for its colours). */
+export function usesHistory(params: { tool: PaintTool; toHistory?: boolean }): boolean {
+  return paintsFromHistory(params) || params.tool === 'art-history-brush';
+}
+
+/** Tools whose strokes Color Dynamics vary. */
+export function usesColorDynamics(tool: PaintTool): boolean {
+  return tool === 'brush' || tool === 'pencil' || tool === 'pattern-stamp';
+}
+
+/** Tools that paint with the document's paint symmetry (not the history brushes). */
+export function usesSymmetry(tool: PaintTool): boolean {
+  return tool !== 'history-brush' && tool !== 'art-history-brush';
+}
+
+/** What the Art History Brush reads: the source's version of the layer and the layer before the stroke. */
+export function artHistorySampler(
+  source: PixelLayer,
+  before: Pick<PixelLayer, 'buffer' | 'offsetX' | 'offsetY'>,
+): ArtHistorySampler {
+  const format = before.buffer.format;
+  const max = maxSampleValue(format.depth);
+  return {
+    source: layerReader(source, max),
+    layer: layerReader(before, max),
+    channels: format.colorChannels,
+    max,
+  };
+}
 
 /** The layer a stroke paints on: the active pixel layer, if its pixels may change. */
 export function paintTarget(doc: ImageDocument): PixelLayer | undefined {
@@ -77,6 +140,8 @@ export interface BrushResources {
   pattern: Pattern | null;
   /** The Pattern Stamp's pattern (with where it starts and Impressionist). */
   stamp?: { pattern: Pattern; at: StampPattern } | null;
+  /** The History Brush source (History Brush, Erase to History). */
+  history?: SourcePixels | null;
 }
 
 const tipData = (tip: BrushTip | null) => (tip ? { width: tip.width, height: tip.height, data: tip.data } : null);
@@ -101,7 +166,10 @@ export function brushStrokeSetup(
     mode: brush.mode,
     tip: tipData(res.tip),
     aliased: brush.aliased,
-    varyColor: (!!d?.color.enabled && tool !== 'eraser') || !!res.stamp?.at.impressionist,
+    // The Art History Brush's strokes each take a colour from the history.
+    varyColor:
+      (!!d?.color.enabled && usesColorDynamics(tool)) || !!res.stamp?.at.impressionist || tool === 'art-history-brush',
+    history: res.history ?? null,
     pattern: res.stamp
       ? {
           width: res.stamp.pattern.width,
@@ -178,23 +246,30 @@ class PaintStrokeCommand implements Command {
     const { doc, services } = this.#ctx;
     const layer = paintTarget(doc);
     if (!layer) throw new CommandUnavailableError('Painting needs an editable pixel layer');
-    const res = {
-      ...resolveBrushResources(this.#params.brush, services.brushTips, services.patterns),
-      stamp: resolveStamp(this.#params.pattern, services.patterns),
+    const p = this.#params;
+    let source: PixelLayer | null = null;
+    if (usesHistory(p)) {
+      if (!this.#ctx.history) throw new CommandUnavailableError('There is no history to paint from');
+      source = await this.#ctx.history.sourceLayer(layer.id);
+    }
+    const res: BrushResources = {
+      ...resolveBrushResources(p.brush, services.brushTips, services.patterns),
+      stamp: resolveStamp(p.pattern, services.patterns),
     };
-    const dabber = new StrokeDabber(
-      this.#params.brush,
-      this.#params.seed,
-      dynamicsColors(doc, this.#params),
-      this.#params.symmetry ?? null,
-    );
-    const dabs = unpackPoints(this.#params.points, this.#params.stride).flatMap((p) => dabber.add(p));
+    // The Art History Brush reads the layer as it is now, before any of the stroke is painted.
+    const dabber =
+      p.tool === 'art-history-brush'
+        ? new ArtHistoryDabber(p.brush, p.art ?? DEFAULT_ART_HISTORY, p.seed, artHistorySampler(source!, layer))
+        : new StrokeDabber(p.brush, p.seed, dynamicsColors(doc, p), p.symmetry ?? null);
+    const dabs = unpackPoints(p.points, p.stride).flatMap((q) => dabber.add(q));
     const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, res.tip !== null, res.dualTip !== null);
+    if (source && paintsFromHistory(p))
+      res.history = sourcePixels(source, sourceTilesFor(source, coords, layer.offsetX, layer.offsetY));
     const diff = new LayerTileDiff(layer.id);
     for (const [tx, ty] of coords) diff.captureBefore(doc, tx, ty);
     const tiles = coords.map(([tx, ty]) => layer.buffer.writableTile(tx, ty).data);
     try {
-      await services.pixelOps.paintStroke(strokeSetup(doc, layer, this.#params, res), tiles, coords, dabs);
+      await services.pixelOps.paintStroke(strokeSetup(doc, layer, p, res), tiles, coords, dabs);
     } catch (error) {
       diff.undo(doc);
       throw error;
@@ -227,7 +302,7 @@ export function dynamicsColors(
   doc: ImageDocument,
   params: Pick<StrokeParams, 'colors' | 'tool'>,
 ): DynamicsColors | null {
-  if (!params.colors || params.tool === 'eraser') return null;
+  if (!params.colors || !usesColorDynamics(params.tool)) return null;
   return { ...params.colors, toSamples: (c) => colorToSamples(c, doc.mode, doc.depth) };
 }
 
@@ -332,9 +407,8 @@ export const paintStrokeCommand: CommandDefinition = {
   name: 'paintStroke',
   isAvailable: (ctx) => paintTarget(ctx.doc) !== undefined,
   create: (ctx, p) => {
-    const tool = p['tool'];
-    if (tool !== 'brush' && tool !== 'pencil' && tool !== 'eraser' && tool !== 'pattern-stamp')
-      throw new Error('paintStroke: tool must be brush, pencil, eraser or pattern-stamp');
+    const tool = p['tool'] as PaintTool;
+    if (!PAINT_TOOLS.includes(tool)) throw new Error(`paintStroke: tool must be one of ${PAINT_TOOLS.join(', ')}`);
     const points = p['points'];
     const stride = p['stride'] ?? 3;
     if (stride !== 3 && stride !== POINT_FIELDS.length)
@@ -362,9 +436,24 @@ export const paintStrokeCommand: CommandDefinition = {
       ...(colors ? { colors } : {}),
       ...(symmetry ? { symmetry } : {}),
       ...(tool === 'pattern-stamp' ? { pattern: parseStampPattern(p['pattern']) } : {}),
+      ...(tool === 'eraser' && p['toHistory'] === true ? { toHistory: true } : {}),
+      ...(tool === 'art-history-brush' ? { art: parseArtHistory(p['art']) } : {}),
     });
   },
 };
+
+function parseArtHistory(v: unknown): ArtHistoryOptions {
+  if (v === undefined) return { ...DEFAULT_ART_HISTORY };
+  if (typeof v !== 'object' || v === null) throw new Error('paintStroke: Art History Brush options are required');
+  const o = v as Record<string, unknown>;
+  const style = ART_HISTORY_STYLES.find(([s]) => s === o['style'])?.[0];
+  if (!style) throw new Error('paintStroke: unknown Art History Brush style');
+  const area = o['area'];
+  const tolerance = o['tolerance'];
+  if (!isNum(area) || area < 0 || area > 500) throw new Error('paintStroke: area must be 0–500');
+  if (!isNum(tolerance) || tolerance < 0 || tolerance > 1) throw new Error('paintStroke: tolerance must be 0–1');
+  return { style, area, tolerance };
+}
 
 function parseStampPattern(v: unknown): StampPattern {
   const o = v as Partial<StampPattern> | null;

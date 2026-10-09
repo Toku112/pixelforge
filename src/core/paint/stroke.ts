@@ -14,6 +14,10 @@
  *   only the colour changes.
  * - Eraser: lowers alpha; on a layer without alpha or with locked transparency it
  *   paints the background colour instead.
+ * - History Brush and Erase to History (`history`): bring back the layer's pixels
+ *   from a history state — in Normal mode (and erasing) the pixel moves towards the
+ *   source pixel, transparency included; other modes paint the source's colours
+ *   like paint of their own.
  * - Tips: the computed round/elliptical tip, or a sampled tip read bilinearly from
  *   a pyramid of halved copies (so small dabs of a large tip stay smooth).
  * - Texture, Dual Brush, Noise and Wet Edges (texture.ts): Noise and Texture Each
@@ -28,6 +32,7 @@ import { TILE_SIZE, tileIndex, tileKey } from '../document/tile';
 import { MaskReader } from '../selection/mask-ops';
 import type { MaskData } from '../selection/selection';
 import type { PatternPixels } from '../pattern/pattern';
+import type { SourcePixels } from '../history/history-source';
 import { dabBounds, dabCoverage, type BrushMode, type Dab } from './brush';
 import {
   WET_RIM,
@@ -81,6 +86,8 @@ export interface StrokeSetup {
   varyColor?: boolean;
   /** Pattern Stamp: paints a pattern instead of `color`. */
   pattern?: StrokePattern | null;
+  /** History Brush and Erase to History: paints the layer as it was in a history state. */
+  history?: SourcePixels | null;
   varyOpacity?: boolean;
   /** Transparency of the layer is locked: alpha never changes. */
   lockAlpha: boolean;
@@ -194,6 +201,11 @@ export class StrokeRenderer {
   /** The Pattern Stamp's pattern in sample values (alpha 0–1), or null. */
   readonly #pattern: Float32Array | null;
   readonly #patternColor: number[] = [];
+  /** The History Brush's source tiles by key, or null. */
+  readonly #source: Map<number, SampleArray> | null;
+  readonly #sourceColor: number[] = [];
+  /** The source tile read last (most reads fall in the same tile). */
+  #sourceTile: { key: number; data: SampleArray | undefined } = { key: NaN, data: undefined };
 
   constructor(setup: StrokeSetup) {
     this.#setup = setup;
@@ -220,6 +232,21 @@ export class StrokeRenderer {
     }
     this.#hdr = setup.format.depth === 32;
     this.#q = this.#hdr ? (v) => v : (v) => Math.round(Math.min(max, Math.max(0, v)));
+    const history = setup.history;
+    if (history) {
+      if (history.format.colorChannels !== setup.format.colorChannels || history.format.depth !== setup.format.depth)
+        throw new Error('stroke: the history state does not fit the layer');
+      this.#source = new Map();
+      this.addSourceTiles(history.tiles);
+    } else {
+      this.#source = null;
+    }
+  }
+
+  /** More of the History Brush's source tiles (source layer tile coordinates). */
+  addSourceTiles(tiles: readonly { tx: number; ty: number; data: SampleArray }[]): void {
+    for (const t of tiles) this.#source?.set(tileKey(t.tx, t.ty), t.data);
+    this.#sourceTile = { key: NaN, data: undefined };
   }
 
   hasTile(tx: number, ty: number): boolean {
@@ -415,6 +442,29 @@ export class StrokeRenderer {
     const out = tile.data;
     const keepAlpha = !s.format.hasAlpha || s.lockAlpha;
     const mode = s.erase ? 'erase' : s.mode;
+    if (this.#source) {
+      const as = this.#sourceAt(x, y);
+      const src = this.#sourceColor;
+      if (mode === 'erase' || mode === 'normal' || mode === 'dissolve') {
+        // Back towards the source pixel, its transparency too.
+        const t = mode === 'dissolve' ? (dissolveNoise(x, y) < e ? 1 : 0) : e;
+        if (keepAlpha) {
+          for (let c = 0; c < cc; c++) out[i + c] = q(o[i + c]! + (src[c]! - o[i + c]!) * t * as);
+          return;
+        }
+        const ao = o[i + cc]! / max;
+        const a = ao + (as - ao) * t;
+        for (let c = 0; c < cc; c++) {
+          const v = o[i + c]! * ao * (1 - t) + src[c]! * as * t;
+          out[i + c] = a > 0 ? q(v / a) : o[i + c]!;
+        }
+        out[i + cc] = q(a * max);
+        return;
+      }
+      // Other modes: the source's colours as paint.
+      color = src;
+      e *= as;
+    }
     if (mode === 'erase' || mode === 'clear') {
       if (keepAlpha) {
         // The eraser paints the background colour where alpha cannot change; Clear does nothing there.
@@ -475,6 +525,28 @@ export class StrokeRenderer {
     return { color: out, alpha: data[o + n - 1]! };
   }
 
+  /** The History Brush source's colour samples (into #sourceColor) and alpha 0–1 at a document pixel. */
+  #sourceAt(x: number, y: number): number {
+    const h = this.#setup.history!;
+    const sx = x - h.offsetX;
+    const sy = y - h.offsetY;
+    const tx = tileIndex(sx);
+    const ty = tileIndex(sy);
+    const key = tileKey(tx, ty);
+    if (this.#sourceTile.key !== key) this.#sourceTile = { key, data: this.#source!.get(key) };
+    const data = this.#sourceTile.data;
+    const cc = h.format.colorChannels;
+    const spp = h.format.hasAlpha ? cc + 1 : cc;
+    const out = this.#sourceColor;
+    if (!data) {
+      for (let c = 0; c < cc; c++) out[c] = h.defaultPixel[c]!;
+      return h.format.hasAlpha ? h.defaultPixel[cc]! / this.#max : 1;
+    }
+    const o = ((sy - ty * TILE_SIZE) * TILE_SIZE + (sx - tx * TILE_SIZE)) * spp;
+    for (let c = 0; c < cc; c++) out[c] = data[o + c]!;
+    return h.format.hasAlpha ? data[o + cc]! / this.#max : 1;
+  }
+
   /** The paint colour at pixel p (scratch array, valid until the next call). */
   #paintColor(paint: Float32Array, p: number, cc: number): number[] {
     const out = this.#paintScratch;
@@ -491,8 +563,8 @@ export class StrokeRenderer {
 
 /**
  * Whether a stroke stays within what the WebAssembly painter covers (pixel-ops `BrushStroke`):
- * Normal, Behind, Clear or erasing, without texture, dual brush, wet edges, noise, or colours
- * and opacities that vary per dab. Others are painted by this renderer.
+ * Normal, Behind, Clear or erasing, without texture, dual brush, wet edges, noise, a pattern,
+ * a history source, or colours and opacities that vary per dab. Others are painted by this renderer.
  */
 export function wasmCanPaint(setup: StrokeSetup): boolean {
   return (
@@ -500,6 +572,7 @@ export function wasmCanPaint(setup: StrokeSetup): boolean {
     !setup.varyColor &&
     !setup.varyOpacity &&
     !setup.pattern &&
+    !setup.history &&
     !setup.texture &&
     !setup.dual &&
     !setup.noise &&

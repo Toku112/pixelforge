@@ -173,7 +173,7 @@ export interface CanvasSizeResult {
   color: RGB;
 }
 
-export type FillContents = 'foreground' | 'background' | 'color' | 'pattern' | 'black' | 'gray' | 'white';
+export type FillContents = 'foreground' | 'background' | 'color' | 'pattern' | 'history' | 'black' | 'gray' | 'white';
 
 export interface FillRequest {
   contents: FillContents;
@@ -190,6 +190,8 @@ export interface FillRequest {
 export interface FillResult {
   /** Pattern contents: the pattern's id (the colour is then unused). */
   pattern?: string;
+  /** History contents: the History Brush source (the colour is then unused). */
+  history?: boolean;
   color: RGB;
   mode: LayerBlendMode;
   opacity: number;

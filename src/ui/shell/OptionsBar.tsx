@@ -4,6 +4,7 @@ import { resetView, setViewRotation } from '../../tools/rotate-view/rotate-view-
 import { useEffect, useReducer } from 'react';
 import type { ResampleMethod } from '../../core/geometry/layer-geometry';
 import { BLEND_MODE_LABELS, brushModeMenu } from '../../core/composite/blend';
+import { ART_HISTORY_STYLES, type ArtHistoryStyle } from '../../core/paint/art-history';
 import type { BrushMode } from '../../core/paint/brush';
 import { DEFAULT_DYNAMICS } from '../../core/paint/dynamics';
 import { isPanelOpen } from '../dock/dock-model';
@@ -412,7 +413,18 @@ function TransformOptions({ tool }: { tool: TransformTool }) {
   );
 }
 
-/** Options of the Brush and Eraser. */
+/** The Art History Brush's mode menu (a few modes, as in the reference app). */
+const ART_HISTORY_MODES: readonly BrushMode[] = [
+  'normal',
+  'darken',
+  'lighten',
+  'hue',
+  'saturation',
+  'color',
+  'luminosity',
+];
+
+/** Options of the Brush, Pencil, Eraser, Pattern Stamp, History Brush and Art History Brush. */
 function PaintOptions({ tool }: { tool: PaintingTool }) {
   const controller = useController();
   const bump = useUi((s) => s.bumpToolOptions);
@@ -431,8 +443,32 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
   // Behind and Clear need transparency that may change (not the Background or locked transparency).
   const alphaEditable = layer?.kind === 'pixel' && layer.buffer.format.hasAlpha && !layer.locks.transparency;
   const eraser = tool.kind === 'eraser';
+  const art = tool.kind === 'art-history-brush';
   // The Eraser's Block mode is a fixed square at full strength: nothing else to set.
   const block = eraser && tool.eraserMode === 'block';
+  const modes = brushModeMenu(doc?.mode ?? 'rgb', doc?.depth ?? 8).filter((m) => !art || ART_HISTORY_MODES.includes(m));
+  const eraseToHistory = eraser && (
+    <label
+      className="option-check"
+      title="Bring back the History Brush source instead of erasing (Alt while starting a stroke switches)"
+    >
+      <input
+        type="checkbox"
+        checked={tool.eraseToHistory}
+        onChange={(e) => {
+          tool.setEraseToHistory(e.target.checked);
+          bump();
+        }}
+      />
+      Erase to History
+    </label>
+  );
+  const symmetry = tool.usesSymmetry && (
+    <>
+      <span className="options-divider" />
+      <SymmetryMenu />
+    </>
+  );
   const eraserMode = eraser && (
     <label className="option-field">
       Mode:
@@ -456,7 +492,8 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       <>
         {eraserMode}
         <span className="options-divider" />
-        <SymmetryMenu />
+        {eraseToHistory}
+        {symmetry}
       </>
     );
   return (
@@ -482,7 +519,7 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
             value={o.mode}
             onChange={(e) => set({ mode: e.target.value as BrushMode })}
           >
-            {brushModeMenu(doc?.mode ?? 'rgb', doc?.depth ?? 8).map((m) => (
+            {modes.map((m) => (
               <option key={m} value={m} disabled={(m === 'behind' || m === 'clear') && !alphaEditable}>
                 {m === 'behind' ? 'Behind' : m === 'clear' ? 'Clear' : BLEND_MODE_LABELS[m]}
               </option>
@@ -510,7 +547,7 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
       >
         <Icon name="penPressure" size={16} />
       </button>
-      {tool.kind !== 'pencil' && (
+      {tool.kind !== 'pencil' && !art && (
         <>
           <NumberField
             label="Flow:"
@@ -533,7 +570,7 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
           </button>
         </>
       )}
-      <SmoothingControls tool={tool} />
+      {!art && <SmoothingControls tool={tool} />}
       <span className="options-divider" />
       <NumberField
         label={
@@ -591,6 +628,61 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
           </label>
         </>
       )}
+      {art && (
+        <>
+          <span className="options-divider" />
+          <label className="option-field">
+            Style:
+            <select
+              className="option-select"
+              aria-label="Art History Brush style"
+              value={tool.art.style}
+              onChange={(e) => {
+                tool.setArt({ style: e.target.value as ArtHistoryStyle });
+                bump();
+              }}
+            >
+              {ART_HISTORY_STYLES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <NumberField
+            label="Area:"
+            title="How far around the pointer the strokes start (diameter)"
+            value={tool.art.area}
+            min={0}
+            max={500}
+            suffix=" px"
+            width={56}
+            onChange={(area) => {
+              tool.setArt({ area });
+              bump();
+            }}
+          />
+          <NumberField
+            label="Tolerance:"
+            title="Paint only where the layer differs from the source at least this much"
+            value={percent(tool.art.tolerance)}
+            min={0}
+            max={100}
+            suffix="%"
+            width={46}
+            onChange={(v) => {
+              tool.setArt({ tolerance: v / 100 });
+              bump();
+            }}
+          />
+        </>
+      )}
+      {eraser && (
+        <>
+          <span className="options-divider" />
+          {eraseToHistory}
+        </>
+      )}
       {tool.kind === 'pencil' && (
         <label className="option-check" title="A stroke starting on the foreground colour paints the background colour">
           <input
@@ -604,8 +696,7 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
           Auto Erase
         </label>
       )}
-      <span className="options-divider" />
-      <SymmetryMenu />
+      {symmetry}
     </>
   );
 }

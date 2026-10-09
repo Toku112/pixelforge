@@ -45,6 +45,8 @@ export function createTools() {
   const pencil = new PaintingTool('pencil');
   const eraser = new PaintingTool('eraser');
   const patternStamp = new PaintingTool('pattern-stamp');
+  const historyBrush = new PaintingTool('history-brush');
+  const artHistoryBrush = new PaintingTool('art-history-brush');
   const gradient = new GradientTool();
   const paintBucket = new PaintBucketTool();
   const groups: ToolGroup[] = [
@@ -59,6 +61,7 @@ export function createTools() {
     { id: 'eyedropper-group', tools: [eyedropper] },
     { id: 'brush-group', tools: [brush, pencil] },
     { id: 'stamp-group', tools: [patternStamp] },
+    { id: 'history-group', tools: [historyBrush, artHistoryBrush] },
     { id: 'eraser-group', tools: [eraser] },
     { id: 'gradient-group', tools: [gradient, paintBucket] },
     { id: 'hand-group', tools: [hand, rotateView] },
@@ -86,6 +89,8 @@ export function createTools() {
     pencil,
     eraser,
     patternStamp,
+    historyBrush,
+    artHistoryBrush,
     gradient,
     paintBucket,
     groups,

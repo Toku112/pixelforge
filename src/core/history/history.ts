@@ -10,11 +10,19 @@
  * 50), the oldest command is dropped. The initial entry then stays reachable as a
  * snapshot: jumping to it restores the captured state, after first saving the
  * current state as an anchor so the remaining entries can still be revisited.
+ *
+ * One entry is the History Brush source (the initial snapshot unless the user
+ * chooses another in the History panel). Its state is captured when it is chosen,
+ * so painting from it never has to step through the history. When the source
+ * entry goes away (undone states discarded, oldest states dropped), the initial
+ * snapshot becomes the source again.
  */
 import type { Command, CommandDescriptor } from '../commands/command';
 import { Emitter } from '../document/events';
 import type { ImageDocument } from '../document/document';
-import { alwaysResident, type TileResidency } from '../document/tile';
+import type { PixelLayer } from '../document/layers';
+import { alwaysResident, type Tile, type TileResidency } from '../document/tile';
+import { layerTiles, stateLayer, type HistorySource } from './history-source';
 import { captureDocumentState, restoreDocumentState, stateTiles, type DocumentState } from './snapshot';
 
 export const DEFAULT_HISTORY_STATES = 50;
@@ -26,6 +34,8 @@ export interface HistoryEntryView {
   readonly snapshot: boolean;
   /** "past" entries are applied, "future" ones are undone (shown dimmed in the panel). */
   readonly status: 'past' | 'current' | 'future';
+  /** The History Brush paints from this entry's state. */
+  readonly source: boolean;
 }
 
 interface Entry {
@@ -43,7 +53,7 @@ export interface HistoryOptions {
   residency?: TileResidency;
 }
 
-export class History {
+export class History implements HistorySource {
   readonly doc: ImageDocument;
   readonly changes = new Emitter<void>();
   readonly #residency: TileResidency;
@@ -61,6 +71,8 @@ export class History {
   #pending = 0;
   /** Entry index to return to with Toggle Last State. */
   #toggleTarget: number | null = null;
+  /** The History Brush source: an entry id and its captured state (null: the initial snapshot's). */
+  #source: { id: number; state: DocumentState | null };
 
   constructor(doc: ImageDocument, options: HistoryOptions = {}) {
     this.doc = doc;
@@ -68,6 +80,7 @@ export class History {
     this.#maxStates = Math.max(1, options.maxStates ?? DEFAULT_HISTORY_STATES);
     this.#entries = [{ id: this.#nextId++, label: options.initialLabel ?? 'Open', command: null }];
     this.#initialState = captureDocumentState(doc);
+    this.#source = { id: this.#entries[0]!.id, state: null };
   }
 
   get maxStates(): number {
@@ -107,7 +120,72 @@ export class History {
       label: e.label,
       snapshot: i === 0,
       status: i < this.#current ? 'past' : i === this.#current ? 'current' : 'future',
+      source: e.id === this.#source.id,
     }));
+  }
+
+  /** Index of the History Brush source entry. */
+  get sourceIndex(): number {
+    return Math.max(
+      0,
+      this.#entries.findIndex((e) => e.id === this.#source.id),
+    );
+  }
+
+  /** The state the History Brush paints from. */
+  get sourceState(): DocumentState {
+    return this.#source.state ?? this.#initialState;
+  }
+
+  /**
+   * Makes an entry the History Brush source (the History panel's source column). Its
+   * state is captured now: for an entry other than the current one, by stepping there
+   * and back.
+   */
+  setSource(index: number): Promise<void> {
+    return this.#enqueue(async () => {
+      const entry = this.#entries[index];
+      if (!entry) throw new Error(`No history entry at index ${index}`);
+      if (entry.id === this.#source.id) return;
+      if (index === 0) {
+        this.#source = { id: entry.id, state: null };
+        return;
+      }
+      const back = this.#current;
+      if (index !== back) {
+        // Everything both trips need, loaded first, so the steps happen without waiting in between.
+        await this.#residency.ensureResident(this.#pathTiles(back, index));
+        await this.#moveTo(index);
+      }
+      const state = captureDocumentState(this.doc);
+      if (index !== back) await this.#moveTo(back);
+      this.#source = { id: entry.id, state };
+    });
+  }
+
+  /** The source state's version of a layer of the document, its tiles in memory (see history-source.ts). */
+  async sourceLayer(layerId: string): Promise<PixelLayer> {
+    const layer = stateLayer(this.sourceState, this.doc, layerId);
+    await this.#residency.ensureResident(layerTiles(layer));
+    return layer;
+  }
+
+  /** The tiles undoing and redoing between two entries uses. */
+  *#pathTiles(from: number, to: number): IterableIterator<Tile> {
+    if (this.#purged && from === 0) {
+      // Leaving the initial snapshot goes through the anchor; coming back restores the snapshot.
+      yield* stateTiles(this.#initialState);
+      if (!this.#anchor) return;
+      yield* stateTiles(this.#anchor.state);
+      from = this.#anchor.index;
+    }
+    for (let i = Math.min(from, to) + 1; i <= Math.max(from, to); i++)
+      yield* this.#entries[i]!.command?.retainedTiles?.() ?? [];
+  }
+
+  /** The initial snapshot becomes the source again when the source entry is gone. */
+  #keepSource(): void {
+    if (!this.#entries.some((e) => e.id === this.#source.id)) this.#source = { id: this.#entries[0]!.id, state: null };
   }
 
   /** What a history step recorded (its command's descriptor), for Actions and diagnostics; null for snapshots. */
@@ -132,6 +210,7 @@ export class History {
       this.#anchor = null;
       this.#toggleTarget = null;
       this.#purge();
+      this.#keepSource();
     });
   }
 
@@ -219,6 +298,7 @@ export class History {
       this.#purged = true;
       this.#toggleTarget = null;
     }
+    this.#keepSource();
   }
 
   #enqueue(task: () => void | Promise<void>): Promise<void> {

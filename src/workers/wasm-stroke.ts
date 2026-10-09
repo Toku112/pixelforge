@@ -15,6 +15,8 @@ import type { BrushStroke } from '../wasm/pkg/pixel-ops-st/pixel_ops.js';
 export interface StrokePainter {
   hasTile(tx: number, ty: number): boolean;
   addTile(tx: number, ty: number, data: SampleArray): void;
+  /** More of the History Brush's source tiles (painters of strokes with a history source). */
+  addSourceTiles?(tiles: readonly { tx: number; ty: number; data: SampleArray }[]): void;
   applyDabs(dabs: readonly Dab[]): Set<number>;
   tile(key: number): { tx: number; ty: number; data: SampleArray } | undefined;
   /** Frees what the painter holds (WebAssembly memory). */

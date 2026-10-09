@@ -25,6 +25,7 @@ import type { ImageDocument } from '../document/document';
 import type { Rect } from '../document/geometry';
 import type { PixelFormat, SampleArray } from '../document/pixel-format';
 import type { Tile } from '../document/tile';
+import type { HistorySource } from '../history/history-source';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
@@ -216,6 +217,8 @@ export interface CommandServices {
 export interface CommandContext {
   doc: ImageDocument;
   services: CommandServices;
+  /** The document's History Brush source (History Brush strokes, Fill > History). */
+  history?: HistorySource;
   /** Progress/cancellation of this run, when the caller tracks it. */
   task?: TaskControl;
 }

@@ -13,14 +13,14 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 13 (Paint Bucket: foreground or pattern, tolerance, contiguous, anti-alias, all layers,
-  mode and opacity; G / Shift+G with the Gradient tool); items 1–12 (pen input, tips, dynamics, texture, dual brush,
-  wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors, smoothing,
-  symmetry, Brushes panel, presets, brush files, Tool Presets, WebAssembly dabs, Eyedropper, Color and Swatches panels,
-  Pencil and Eraser modes, Gradient tool and editor, patterns and the Pattern Stamp); Phase 1 Part D items 1–12 and the
-  automated part of item 13
-- Next up: Part E item 14 (History Brush, Art History Brush, the History panel's source column, Erase to History,
-  History contents in Edit > Fill)
+- Last completed: Part E item 14 (History Brush Y and Art History Brush Shift+Y, the History panel's source column,
+  the Eraser's Erase to History, History contents in Edit > Fill and Ctrl/Cmd+Alt+Backspace); items 1–13 (pen input,
+  tips, dynamics, texture, dual brush, wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences
+  with painting cursors, smoothing, symmetry, Brushes panel, presets, brush files, Tool Presets, WebAssembly dabs,
+  Eyedropper, Color and Swatches panels, Pencil and Eraser modes, Gradient tool and editor, patterns and the Pattern
+  Stamp, Paint Bucket); Phase 1 Part D items 1–12 and the automated part of item 13
+- Next up: Part E item 15 (Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers,
+  presets)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -116,8 +116,10 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Clone Stamp (S): aligned, sample modes, clone source overlay, ignore adjustment layers
 - [x] Pattern Stamp
   ↳ note: aligned or from each stroke, Impressionist (Part E item 12, D-046).
-- [ ] History Brush (Y)
-- [ ] Art History Brush: style, area, tolerance
+- [x] History Brush (Y)
+  ↳ note: paints the layer back to the source state chosen in the History panel, transparency included (Part E item 14, D-048).
+- [x] Art History Brush: style, area, tolerance
+  ↳ note: all ten styles; the strokes are our own design (FORMAT_NOTES §14, D-048).
 - [ ] Blur tool, Sharpen tool (protect detail), Smudge tool (finger painting)
 - [ ] Dodge (O): range shadows/midtones/highlights, exposure, protect tones
 - [ ] Burn
@@ -128,8 +130,8 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [x] Pencil tool: auto erase
 - [ ] Color Replacement tool: sampling (continuous/once/background swatch), limits, tolerance
 - [ ] Mixer Brush tool: wet, load, mix, flow, load after each stroke, clean after each stroke, sample all layers, presets
-- [ ] Eraser (E): brush/pencil/block modes, erase to history
-  ↳ partial: brush, pencil and block modes; Erase to History with the History Brush (Part E item 14).
+- [x] Eraser (E): brush/pencil/block modes, erase to history
+  ↳ note: Erase to History in every mode; Alt/Option when a stroke starts switches it for that stroke (D-048).
 - [ ] Background Eraser: sampling, limits, tolerance, protect foreground colour
 - [ ] Magic Eraser
 - [ ] Gradient tool (G): live on-canvas gradient (creates gradient fill layer) and classic mode; linear, radial, angle, reflected, diamond; reverse, dither, transparency; method (perceptual, linear, classic, smooth, stripes)
@@ -180,7 +182,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Search
 - [ ] Check Spelling, Find and Replace Text
 - [ ] Fill: foreground/background/colour/content-aware/pattern (incl. script patterns: brick fill, cross weave, random fill, spiral, symmetry fill, place along path, picture frame, tree)/history/black/50% gray/white; blending mode, opacity, preserve transparency
-  ↳ partial: foreground, background, colour, pattern, black, 50% gray and white with mode, opacity and preserve transparency; content-aware, script patterns and history to come.
+  ↳ partial: foreground, background, colour, pattern, history (also Ctrl/Cmd+Alt+Backspace), black, 50% gray and white with mode, opacity and preserve transparency; content-aware and script patterns to come.
 - [ ] Stroke: width, colour, location (inside/center/outside), blending
 - [ ] Content-Aware Fill workspace: sampling area brush, auto/rectangular/custom sampling, fill settings (colour adaptation, rotation adaptation, scale, mirror), output to new layer/current/duplicate
 - [ ] Generative Fill **(AI)**, Generate Image **(AI)**, Generate Background **(AI)**, Generate Similar **(AI)**, reference image, model picker (our providers), variations in Properties panel
@@ -440,7 +442,7 @@ All filters must work destructively and as **smart filters** (with filter mask, 
 ## B16. Window panels (each fully functional)
 
 - [ ] Actions, Adjustments, Brush Settings, Brushes, Channels, Character, Character Styles, Clone Source (5 sources, offset, scale, rotate, overlay), Color (sliders: grayscale/RGB/HSB/CMYK/Lab/web; wheel; cube), Comments (web-alt: local notes or optional collab), Content Credentials, Glyphs, Gradients, Histogram (compact/expanded/all channels, statistics, cache refresh), History (snapshots, non-linear history option, history brush source), Info (two readouts, doc info, sampler readouts, measurement), Layer Comps, Layers, Libraries (web-alt: local asset library), Measurement Log, Navigator, Notes, Paragraph, Paragraph Styles, Paths, Patterns, Properties (context-sensitive: document, layer, type, shape, smart object, adjustments, masks, quick actions), Shapes, Styles, Swatches, Timeline, Tool Presets, Version History
-  ↳ partial: Brush Settings, Brushes, Color, Gradients, History, Layers, Navigator, Patterns, Swatches and Tool Presets exist so far.
+  ↳ partial: Brush Settings, Brushes, Color, Gradients, History (with the History Brush source column; snapshots and non-linear history to come), Layers, Navigator, Patterns, Swatches and Tool Presets exist so far.
 - [ ] Options bar and Tools visibility toggles
 - [ ] Arrange submenu & Workspace submenu
 - [ ] Open documents list
@@ -679,7 +681,8 @@ engine first, then its controls, then the tools built on it.
   ↳ note: patterns are stored as 8-bit RGBA and converted to the document when used; .pat files are read (RGB, Grayscale, Indexed, CMYK, Lab; 8/16-bit; raw or RLE) and written; scripted patterns are not included; Pattern Stamp strokes use the TypeScript painter (D-046, FORMAT_NOTES §12).
 - [x] Paint Bucket: foreground or pattern, tolerance, contiguous, anti-alias, all layers, mode and opacity
   ↳ note: colours compared premultiplied (all transparent pixels alike), 4-neighbour contiguity, our own anti-aliased edge; the image is composited only as far as the fill reaches; blend-mode shortcuts and number keys now set the Gradient tool's and Paint Bucket's mode and opacity (D-047, FORMAT_NOTES §13).
-- [ ] History Brush (Y), Art History Brush, the History panel's source column, Eraser's Erase to History, History contents in Edit > Fill
+- [x] History Brush (Y), Art History Brush, the History panel's source column, Eraser's Erase to History, History contents in Edit > Fill
+  ↳ note: the source state is captured when chosen and falls back to the opening state when its row goes; painting needs the same layer and canvas in the source state, as in the reference app; in Normal mode pixels return to the source's, transparency included; history strokes use the TypeScript painter; the Art History Brush's strokes are our own design; snapshots stay with the History panel item (B16) (D-048, FORMAT_NOTES §14).
 - [ ] Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers, presets
 - [ ] Brush-based retouching that painters rely on: Smudge (finger painting), Blur and Sharpen (protect detail), Dodge, Burn and Sponge
 - [ ] Phase 2 exit test: a scripted painting session (pressure strokes, dynamics, symmetry, gradient, pattern, history brush, mixer brush) round-trips through PSD, plus the owner painting a small illustration with a tablet

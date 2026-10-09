@@ -485,3 +485,39 @@ Normal) or, with All Layers, the visible document.
 **Fill**: Edit > Fill's blend (§3.2 formulas through `blendSourceTiles`) of the foreground colour or the pattern
 (repeated from document (0, 0)) with the tool's mode and opacity, through the coverage as a mask; Behind and Clear as
 for the Gradient tool; locked transparency keeps alpha.
+
+## 14. History Brush and Art History Brush
+
+**Source pixel**: for a document pixel (x, y), the source layer's pixel (x − sx, y − sy), where (sx, sy) is that
+layer's offset in the source state; unallocated tiles read as its default pixel; a source without alpha has alpha 1.
+
+**Restoring** (History Brush and Fill > History in Normal or Dissolve, Erase to History), with the pixel's alpha ab and
+colour b, the source's alpha as and colour s, and t = the stroke's effective opacity at the pixel (coverage × Opacity ×
+selection; Dissolve: 1 where the dissolve noise is below it, else 0):
+
+- alpha may change: a = ab + (as − ab) · t; colour = (ab · (1 − t) · b + as · t · s) / a (b when a = 0);
+- alpha kept (locked transparency, no alpha): colour = b + (s − b) · t · as.
+
+**Other modes**: the source colour s is the paint colour and the paint's opacity is multiplied by as; then the usual
+brush (§8) or fill (§3.2) blend.
+
+**Art History Brush** (our own design). Bursts: one with the first sample, then whenever the pointer is at least
+max(2, D/2) px from the last burst or 50 ms of stroke time have passed (D = brush diameter). A burst starts
+n = clamp(⌈0.3 · π r² / (D · max(D, L))⌉, 1, 30) strokes, r = Area / 2 and L = the style's length; each at a uniform
+random point of the disc of radius r around the pointer (seeded random numbers: radius r·√u, angle 2πv, then the
+stroke's own seed). A stroke is skipped where the source is transparent, or where Tolerance T > 0 and
+max(|as − al|, max over channels |s·as − l·al| / max) < T (l, al: the layer before the stroke). Its colour is the
+source's at the start. Paths: steps of max(1, D/4) px for L px; the heading starts along the source's edge (or at
+random on flat areas), in a random one of the two ways; at each step Tight/Loose styles turn by f × (difference to the
+nearer way along the edge there), then every style adds its curl (fixed sign per stroke) and a uniform wobble in
+±w. The edge direction is the source brightness gradient (0.3 R + 0.59 G + 0.11 B, or the channel mean, times alpha;
+central differences at max(1, round(D/4)) px) turned by 90°; gradients below 0.02 count as flat. The path's points
+are spaced into dabs by the brush (its tip, spacing and dynamics; build-up off).
+
+| Style                        | L (× D)     | f    | wobble w | curl (°/step) |
+| ---------------------------- | ----------- | ---- | -------- | ------------- |
+| Tight Short / Medium / Long  | 1.5 / 3 / 6 | 0.8  | 4°       | 0             |
+| Loose Medium / Long          | 3 / 6       | 0.35 | 22°      | 0             |
+| Dab                          | 0 (one dab) | —    | —        | —             |
+| Tight Curl / Tight Curl Long | 3 / 6       | 0    | 3°       | 40            |
+| Loose Curl / Loose Curl Long | 4 / 8       | 0    | 12°      | 20            |

@@ -7,6 +7,7 @@ import type { PaintTool, StampPattern } from '../core/commands/builtin/paint';
 import type { CommandDescriptor } from '../core/commands/command';
 import type { RGB } from '../core/color/color';
 import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
+import type { ArtHistoryOptions } from '../core/paint/art-history';
 import type { DynamicsColors } from '../core/paint/dynamics';
 import type { Symmetry } from '../core/paint/symmetry';
 import type { EyedropperOptions } from '../core/paint/sample';
@@ -189,22 +190,28 @@ export interface PaintStroke {
   /** The paint symmetry the stroke mirrors its dabs with, or null. */
   readonly symmetry: Symmetry | null;
   add(dabs: Dab[]): void;
+  /** Strokes whose dabs the host places (the Art History Brush): pointer samples go here instead of `add`. */
+  addPoints?(points: StrokePoint[]): void;
   /** Ends the stroke (one History step); `points` are its pointer samples, for Actions. */
   end(points: StrokePoint[]): Promise<void>;
   cancel(): Promise<void>;
 }
 
+/** What a stroke takes beyond the brush. */
+export interface PaintBeginOptions {
+  /** The Pencil's Auto Erase: paint the background colour if this pixel has the foreground colour. */
+  autoEraseAt?: { x: number; y: number };
+  /** What the Pattern Stamp paints. */
+  pattern?: StampPattern;
+  /** The Eraser's Erase to History. */
+  toHistory?: boolean;
+  /** The Art History Brush's options. */
+  art?: ArtHistoryOptions;
+}
+
 /** Starts strokes on the active layer; null (after telling the user why) when it cannot be painted. */
 export interface PaintHost {
-  /**
-   * `autoEraseAt`: the Pencil's Auto Erase — paint the background colour if this pixel has the foreground colour;
-   * `pattern`: what the Pattern Stamp paints.
-   */
-  begin(
-    tool: PaintTool,
-    brush: BrushSettings,
-    options?: { autoEraseAt?: { x: number; y: number }; pattern?: StampPattern },
-  ): PaintStroke | null;
+  begin(tool: PaintTool, brush: BrushSettings, options?: PaintBeginOptions): PaintStroke | null;
 }
 
 export interface ToolContext {

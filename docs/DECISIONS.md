@@ -779,3 +779,42 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   the Gradient tool and the Paint Bucket while they are active, as they do for the Brush, rather than the layer's.
 - The Paint Bucket's pattern follows the pattern last chosen (Patterns panel, Edit > Fill, either tool's picker), as
   the Pattern Stamp's does.
+
+## D-048 — 2026-10-09 — History Brush, Art History Brush, Erase to History, Fill > History
+
+**Decision:**
+
+- The History Brush source is one History entry (the opening state until the user clicks another row's left column in
+  the History panel). Its state is captured the moment it is chosen — for a state other than the current one by
+  stepping the history there and back, with every tile both trips need loaded first — as the same cheap snapshot the
+  opening state uses (tiles are shared, not copied). Painting never steps through the history, and the captured state
+  stays valid while the History changes. When the source entry disappears (undone states discarded by a new step, or
+  the oldest states dropped past the limit), the opening state becomes the source again, as the source row is gone.
+- Painting from the source uses the source state's version of the layer being painted — the layer with the same id —
+  read at the same document position (so a layer moved since is painted back where it was). The state must have that
+  layer and the same canvas size, colour mode and bit depth; otherwise the History Brush, Art History Brush, Erase to
+  History and Fill > History refuse with our own explanation, as the reference app does.
+- In Normal mode (and Dissolve, and Erase to History) the History Brush moves each pixel towards the source pixel,
+  transparency included: a layer that was empty becomes empty again where painted, rather than the source being
+  painted over it. Other modes blend the source's colours like paint, its transparency lowering the paint. Locked
+  transparency and the Background keep alpha; only colours move. Fill > History uses the same rule over the
+  selection (or canvas). The exact compositing of the reference app is not documented; this is the expected result of
+  "painting a copy of the state back", to be compared with real output.
+- History Brush and Erase to History strokes are painted by the TypeScript renderer, which receives the source tiles
+  each batch of dabs needs (the WebAssembly painter handles plain colours only, as with the Pattern Stamp). Measured
+  in Node: about 15 ms per 500 px soft dab on a 16-bit layer (a plain-colour dab in TypeScript: about 9 ms). Painting
+  stays off the main thread and never falls behind (dabs queue), but very large history brushes trail the pointer;
+  moving these strokes to the WebAssembly painter is a later performance task.
+- The Art History Brush's strokes are our own design (FORMAT_NOTES §14): bursts of short strokes start at random
+  points within Area around the pointer, each in the source's colour at its start, running along the source's edges
+  (Tight), wandering (Loose), turning (Curl) or as single dabs (Dab); bursts follow the pointer and continue while it
+  rests. Tolerance compares the source with the layer as it was when the stroke began, so a stroke replays the same.
+  The strokes are placed on the main thread from point reads of the source (a few thousand per burst, well under a
+  millisecond); its mode menu is Normal, Darken, Lighten, Hue, Saturation, Color and Luminosity.
+- Neither history brush paints with paint symmetry (the reference app offers symmetry for the Brush, Pencil and
+  Eraser). Alt/Option held when an Eraser stroke starts switches Erase to History for that stroke.
+- Ctrl/Cmd+Alt/Option+Backspace (and Delete) fills from history, Normal at 100 %, like the reference app's shortcut.
+- Strokes record the tool (`history-brush`, `art-history-brush`, or the Eraser with `toHistory`) and the Art History
+  options; Fill records `history: true`. Replayed in an Action, they paint from the History Brush source of the
+  document they are replayed on.
+- History snapshots (New Snapshot) and non-linear history are left for the History panel item (PLAN B16).

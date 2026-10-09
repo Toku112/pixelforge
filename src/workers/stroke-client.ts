@@ -12,8 +12,15 @@ import { tileKey } from '../core/document/tile';
 import type { PixelWorkerClient } from './pixel-client';
 
 export interface LiveStroke {
-  /** Paints dabs; `tiles` are layer tiles touched for the first time (written in place). */
-  paint(tiles: { tx: number; ty: number; data: SampleArray }[], dabs: Dab[]): Promise<void>;
+  /**
+   * Paints dabs; `tiles` are layer tiles touched for the first time (written in place),
+   * `sources` the History Brush source tiles they need (strokes with a history source).
+   */
+  paint(
+    tiles: { tx: number; ty: number; data: SampleArray }[],
+    dabs: Dab[],
+    sources?: { tx: number; ty: number; data: SampleArray }[],
+  ): Promise<void>;
   /** Frees the worker's state for the stroke. */
   end(): void;
 }
@@ -30,10 +37,10 @@ export function createStrokeEngine(worker: PixelWorkerClient): StrokeEngine {
       const started = worker.strokeBegin(id, setup);
       const arrays = new Map<number, SampleArray>();
       return {
-        async paint(tiles, dabs) {
+        async paint(tiles, dabs, sources = []) {
           await started;
           for (const t of tiles) arrays.set(tileKey(t.tx, t.ty), t.data);
-          const edited = await worker.strokeDabs(id, tiles, dabs);
+          const edited = await worker.strokeDabs(id, tiles, dabs, sources);
           for (const e of edited) copySamples(arrays.get(tileKey(e.tx, e.ty))!, e.data);
         },
         end() {

@@ -139,7 +139,7 @@ export class Workspace {
   canExecute(name: string): boolean {
     const session = this.active;
     if (!session || session.history.busy) return false;
-    return this.registry.isAvailable(name, { doc: session.doc, services: this.#options.services });
+    return this.registry.isAvailable(name, this.#context(session));
   }
 
   /**
@@ -155,10 +155,7 @@ export class Workspace {
         throw new Error('No document is open');
       }
       const control = { cancelled: false, progress: (f: number) => this.#reportProgress(f) };
-      const command = this.registry.create(
-        { doc: session.doc, services: this.#options.services, task: control },
-        descriptor,
-      );
+      const command = this.registry.create({ ...this.#context(session), task: control }, descriptor);
       const timer = setTimeout(() => {
         if (this.#task?.control === control) {
           this.#task.shown = true;
@@ -186,8 +183,13 @@ export class Workspace {
       await this.#undoPreview();
       const session = this.#sessions.find((s) => s.doc === doc);
       if (!session) return; // closed meanwhile
-      await session.history.execute(build({ doc, services: this.#options.services }));
+      await session.history.execute(build(this.#context(session)));
     });
+  }
+
+  /** What commands on a document work with. */
+  #context(session: DocumentSession): CommandContext {
+    return { doc: session.doc, services: this.#options.services, history: session.history };
   }
 
   /** The command running long enough to show progress (after a short delay), or null. */
@@ -230,7 +232,7 @@ export class Workspace {
       await this.#undoPreview();
       const session = this.active;
       if (!session || session.history.busy) return;
-      const command = this.registry.create({ doc: session.doc, services: this.#options.services }, latest);
+      const command = this.registry.create(this.#context(session), latest);
       await command.execute();
       this.#preview = { session, undo: () => command.undo() };
     });

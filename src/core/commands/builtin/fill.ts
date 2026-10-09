@@ -4,15 +4,16 @@
  * transparency).
  *
  * Behaviour (own summary of the reference app): fills the selection — or the whole
- * canvas area of the active layer — with a colour or a pattern (repeated from the
- * document's top left corner), blended with a mode and opacity. Preserve
- * Transparency changes only existing pixels; it is not offered on the Background,
- * which has no transparency.
+ * canvas area of the active layer — with a colour, a pattern (repeated from the
+ * document's top left corner) or History (the layer as it was in the History Brush
+ * source state), blended with a mode and opacity. Preserve Transparency changes only
+ * existing pixels; it is not offered on the Background, which has no transparency.
  */
 import { LAYER_BLEND_MODES, layerCapabilities, type LayerBlendMode, type PixelLayer } from '../../document/layers';
 import type { Tile } from '../../document/tile';
 import type { FillSpec } from '../../paint/fill';
 import { builtInPattern, patternSamples } from '../../pattern/pattern';
+import { sourcePixels, sourceTilesFor } from '../../history/history-source';
 import { Selection } from '../../selection/selection';
 import { CommandUnavailableError, type Command, type CommandContext, type JsonObject } from '../command';
 import { canvasLayerTiles, selectedLayerTiles } from '../pixel-targets';
@@ -24,8 +25,8 @@ function target(ctx: CommandContext): PixelLayer | undefined {
   return layer?.kind === 'pixel' && layerCapabilities(layer).editPixels ? layer : undefined;
 }
 
-/** What the fill descriptor records: a pattern by its id. */
-type FillParams = Omit<FillSpec, 'pattern'> & { pattern?: string };
+/** What the fill descriptor records: a pattern by its id; `history` for History contents. */
+type FillParams = Omit<FillSpec, 'pattern' | 'history'> & { pattern?: string; history?: true };
 
 class FillCommand implements Command {
   readonly label = 'Fill';
@@ -48,8 +49,9 @@ class FillCommand implements Command {
     const { doc, services } = this.#ctx;
     const layer = target(this.#ctx);
     if (!layer) throw new CommandUnavailableError('Fill needs an editable pixel layer');
-    const { pattern: patternId, ...rest } = this.#spec;
+    const { pattern: patternId, history, ...rest } = this.#spec;
     let spec: FillSpec = rest;
+    const source = history ? await this.#source(layer) : null;
     if (patternId !== undefined) {
       const pattern = services.patterns?.get(patternId) ?? builtInPattern(patternId);
       if (!pattern) throw new CommandUnavailableError('The pattern of this fill is not in the pattern library');
@@ -57,11 +59,13 @@ class FillCommand implements Command {
         ...rest,
         pattern: { width: pattern.width, height: pattern.height, data: patternSamples(pattern, doc.mode, doc.depth) },
       };
-    } else if (rest.color.length !== doc.colorChannels)
+    } else if (!source && rest.color.length !== doc.colorChannels)
       throw new Error('fill: color needs one value per colour channel');
     // The selected part of the canvas (or all of it) — also where the layer has no tiles yet.
     const selection = doc.selection ?? Selection.all();
     const { coords, through } = selectedLayerTiles(doc, layer, selection, canvasLayerTiles(doc, layer));
+    if (source)
+      spec = { ...spec, history: sourcePixels(source, sourceTilesFor(source, coords, layer.offsetX, layer.offsetY)) };
     const diff = new LayerTileDiff(layer.id);
     for (const [tx, ty] of coords) diff.captureBefore(doc, tx, ty);
     const tiles = coords.map(([tx, ty]) => layer.buffer.writableTile(tx, ty).data);
@@ -74,6 +78,13 @@ class FillCommand implements Command {
     for (const [tx, ty] of coords) layer.buffer.markChanged(tx, ty);
     diff.captureAfter(doc);
     this.#diff = diff;
+  }
+
+  /** The History Brush source's version of the layer (History contents). */
+  #source(layer: PixelLayer): Promise<PixelLayer> {
+    const history = this.#ctx.history;
+    if (!history) throw new CommandUnavailableError('There is no history to fill from');
+    return history.sourceLayer(layer.id);
   }
 
   retainedTiles(): Iterable<Tile> {
@@ -95,7 +106,9 @@ export const fillCommand: CommandDefinition = {
   create: (ctx, p) => {
     const pattern = p['pattern'];
     if (pattern !== undefined && typeof pattern !== 'string') throw new Error('fill: pattern must be a pattern id');
-    const raw = p['color'] ?? (pattern !== undefined ? [] : undefined);
+    const history = p['history'] === true;
+    if (history && pattern !== undefined) throw new Error('fill: History contents take no pattern');
+    const raw = p['color'] ?? (pattern !== undefined || history ? [] : undefined);
     if (!Array.isArray(raw) || !raw.every((v) => typeof v === 'number' && Number.isFinite(v)))
       throw new Error('fill: color must be a list of numbers');
     const color = raw as number[];
@@ -111,6 +124,7 @@ export const fillCommand: CommandDefinition = {
       opacity,
       preserveTransparency: preserve,
       ...(pattern !== undefined ? { pattern } : {}),
+      ...(history ? { history: true as const } : {}),
     });
   },
 };

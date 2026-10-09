@@ -15,15 +15,21 @@ import { suggestedCopyName } from '../core/commands/builtin/layer-common';
 import { mergeKind } from '../core/commands/builtin/merge';
 import { colorToSamples, rgbToHex, type RGB } from '../core/color/color';
 import {
+  artHistorySampler,
   dynamicsColors,
   paintTarget,
+  paintsFromHistory,
   resolveBrushResources,
   resolveStamp,
   strokeSetup,
+  usesColorDynamics,
+  usesHistory,
+  usesSymmetry,
   type BrushResources,
   type PaintTool,
-  type StampPattern,
 } from '../core/commands/builtin/paint';
+import { HistorySourceError, sourcePixels, stateLayer } from '../core/history/history-source';
+import { ArtHistoryDabber, DEFAULT_ART_HISTORY } from '../core/paint/art-history';
 import {
   DEFAULT_BRUSH,
   MAX_TIP_SIDE,
@@ -31,6 +37,7 @@ import {
   stepHardness,
   type BrushMode,
   type BrushSettings,
+  type StrokePoint,
 } from '../core/paint/brush';
 import { planFromDocument } from '../core/composite/flatten';
 import { DEFAULT_DYNAMICS } from '../core/paint/dynamics';
@@ -47,7 +54,7 @@ import { GradientTool } from '../tools/gradient/gradient-tool';
 import { PaintBucketTool } from '../tools/paint-bucket/paint-bucket-tool';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
-import type { ColorHost, PaintHost, PaintStroke, Tool } from '../tools/types';
+import type { ColorHost, PaintBeginOptions, PaintHost, PaintStroke, Tool } from '../tools/types';
 import { PaintSession } from './paint-session';
 import { ColorSwatches } from './colors';
 import {
@@ -199,6 +206,7 @@ const GROUP_COMMANDS: Record<string, string> = {
   'tool.brush': 'brush-group',
   'tool.gradient': 'gradient-group',
   'tool.stamp': 'stamp-group',
+  'tool.historyBrush': 'history-group',
 };
 
 export class AppController {
@@ -307,11 +315,7 @@ export class AppController {
     }
   }
 
-  #beginStroke(
-    tool: PaintTool,
-    brush: BrushSettings,
-    options: { autoEraseAt?: { x: number; y: number }; pattern?: StampPattern } = {},
-  ): PaintStroke | null {
+  #beginStroke(tool: PaintTool, brush: BrushSettings, options: PaintBeginOptions = {}): PaintStroke | null {
     const ws = this.workspace;
     const session = ws.active;
     if (!session || ws.running) return null;
@@ -321,6 +325,8 @@ export class AppController {
       pencil: 'the Pencil',
       eraser: 'the Eraser',
       'pattern-stamp': 'the Pattern Stamp',
+      'history-brush': 'the History Brush',
+      'art-history-brush': 'the Art History Brush',
     }[tool];
     const layer = paintTarget(doc);
     if (!layer) {
@@ -333,6 +339,17 @@ export class AppController {
       void this.#ui.alert(`Could not use ${what}`, reason);
       return null;
     }
+    const kind = { tool, ...(options.toHistory ? { toHistory: true } : {}) };
+    // Strokes from the history need the source state's version of this layer.
+    let source: PixelLayer | null = null;
+    if (usesHistory(kind)) {
+      try {
+        source = stateLayer(session.history.sourceState, doc, layer.id);
+      } catch (error) {
+        void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
+        return null;
+      }
+    }
     let color: number[];
     try {
       color = colorToSamples(tool === 'eraser' ? this.colors.background : this.colors.foreground, doc.mode, doc.depth);
@@ -343,11 +360,13 @@ export class AppController {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
       return null;
     }
+    const restores = source !== null && paintsFromHistory(kind);
     let res: BrushResources;
     try {
       res = {
         ...resolveBrushResources(brush, this.services.brushes, this.services.patterns),
         stamp: resolveStamp(options.pattern, this.services.patterns),
+        history: restores ? sourcePixels(source!) : null,
       };
     } catch (error) {
       void this.#ui.alert(`Could not use ${what}`, error instanceof Error ? error.message : String(error));
@@ -355,36 +374,49 @@ export class AppController {
     }
     // A fresh seed per stroke; the colours only when Color Dynamics vary between them.
     const seed = Math.floor(Math.random() * 2 ** 31);
-    const varyColor = tool !== 'eraser' && !!brush.dynamics?.color.enabled;
+    const varyColor = usesColorDynamics(tool) && !!brush.dynamics?.color.enabled;
     const colors = varyColor ? { foreground: this.colors.foreground, background: this.colors.background } : undefined;
     const params = {
-      tool,
+      ...kind,
       brush,
       color,
       seed,
       ...(colors ? { colors } : {}),
       ...(options.pattern ? { pattern: options.pattern } : {}),
     };
+    // The Art History Brush reads the layer as it is before the stroke paints into it.
+    const before =
+      tool === 'art-history-brush'
+        ? { buffer: layer.buffer.clone(), offsetX: layer.offsetX, offsetY: layer.offsetY }
+        : null;
     const live = this.services.strokes.begin(strokeSetup(doc, layer, params, res));
-    const symmetry = doc.symmetry?.enabled ? doc.symmetry : null;
-    const stroke = new PaintSession(
-      ws,
-      doc,
-      layer,
-      live,
-      tool,
-      brush,
-      color,
-      seed,
-      dynamicsColors(doc, params),
+    const symmetry = doc.symmetry?.enabled && usesSymmetry(tool) ? doc.symmetry : null;
+    // The source's tiles may have been moved to disk: they are read once back in memory.
+    const resident = source ? session.history.sourceLayer(layer.id) : null;
+    const artOptions = { ...DEFAULT_ART_HISTORY, ...options.art };
+    const artBrush = structuredClone(brush);
+    const art =
+      before && resident
+        ? {
+            options: artOptions,
+            dabber: resident.then(
+              (src) => new ArtHistoryDabber(artBrush, artOptions, seed, artHistorySampler(src, before)),
+            ),
+          }
+        : null;
+    const stroke = new PaintSession(ws, doc, layer, live, tool, brush, color, seed, dynamicsColors(doc, params), {
       symmetry,
-      options.pattern ?? null,
-    );
+      pattern: options.pattern ?? null,
+      toHistory: options.toHistory === true,
+      source: restores ? resident : null,
+      art,
+    });
     return {
       seed,
       colors: stroke.colors,
       symmetry,
       add: (dabs) => stroke.add(dabs),
+      ...(art ? { addPoints: (points: StrokePoint[]) => stroke.addPoints(points) } : {}),
       end: async (points) => {
         try {
           await stroke.end(points);
@@ -466,6 +498,10 @@ export class AppController {
       pattern: this.currentPatternId ?? DEFAULT_PATTERN_ID,
     });
     if (!result || ws.active?.doc !== doc) return;
+    if (result.history) {
+      await this.#fillFromHistory(result.mode, result.opacity, result.preserveTransparency && !!canPreserve);
+      return;
+    }
     if (result.pattern !== undefined) {
       this.choosePattern(result.pattern);
       await this.workspace.execute({
@@ -1319,6 +1355,19 @@ export class AppController {
     });
   }
 
+  /** Fills with the History Brush source (Fill > History, Ctrl/Cmd+Alt+Backspace), explaining when it cannot. */
+  async #fillFromHistory(mode: LayerBlendMode, opacity: number, preserve: boolean): Promise<void> {
+    try {
+      await this.workspace.execute({
+        name: 'fill',
+        params: { history: true, mode, opacity, preserveTransparency: preserve },
+      });
+    } catch (error) {
+      if (!(error instanceof HistorySourceError)) throw error;
+      await this.#ui.alert('Could not fill', error.message);
+    }
+  }
+
   /** Tells the user why something cannot be done. */
   report(title: string, message: string): Promise<void> {
     return this.#ui.alert(title, message);
@@ -1784,6 +1833,12 @@ export class AppController {
       label: 'Fill…',
       enabled: () => !toolBusy() && ws.canExecute('fill'),
       run: () => this.fillWithDialog(),
+    });
+    add({
+      id: 'edit.fillHistory',
+      label: 'Fill from History',
+      enabled: () => !toolBusy() && ws.canExecute('fill'),
+      run: () => this.#fillFromHistory('normal', 1, false),
     });
     for (const [id, label, which, preserve] of [
       ['edit.fillForeground', 'Fill with Foreground Color', 'foreground', false],

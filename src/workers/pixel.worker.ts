@@ -387,12 +387,19 @@ const conversions = {
 
   /**
    * Paints a batch of dabs of a live stroke into its tiles (`tiles`: tiles touched
-   * for the first time). Tiles in shared memory change in place; edited copies of
-   * the others are returned for the caller to copy over.
+   * for the first time; `sources`: History Brush source tiles they need). Tiles in
+   * shared memory change in place; edited copies of the others are returned for the
+   * caller to copy over.
    */
-  strokeDabs(id: number, tiles: { tx: number; ty: number; data: SampleArray }[], dabs: Dab[]) {
+  strokeDabs(
+    id: number,
+    tiles: { tx: number; ty: number; data: SampleArray }[],
+    dabs: Dab[],
+    sources: { tx: number; ty: number; data: SampleArray }[] = [],
+  ) {
     const renderer = strokes.get(id);
     if (!renderer) throw new Error(`No stroke ${id}`);
+    if (sources.length > 0) renderer.addSourceTiles?.(sources);
     for (const t of tiles) renderer.addTile(t.tx, t.ty, t.data);
     const edited: { tx: number; ty: number; data: SampleArray }[] = [];
     for (const key of renderer.applyDabs(dabs)) {

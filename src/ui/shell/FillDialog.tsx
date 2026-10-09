@@ -1,8 +1,8 @@
 /**
  * Edit > Fill: what to fill with (foreground, background, a picked colour, a
- * pattern, black, 50 % gray or white), the blend mode and opacity, and Preserve
- * Transparency. Choosing "Color…" opens the Color Picker straight away; "Pattern"
- * shows a pattern picker.
+ * pattern, the History Brush source, black, 50 % gray or white), the blend mode and
+ * opacity, and Preserve Transparency. Choosing "Color…" opens the Color Picker
+ * straight away; "Pattern" shows a pattern picker.
  */
 import { useState, type FormEvent } from 'react';
 import type { RGB } from '../../core/color/color';
@@ -18,6 +18,7 @@ const CONTENTS: [FillContents, string][] = [
   ['background', 'Background Color'],
   ['color', 'Color…'],
   ['pattern', 'Pattern'],
+  ['history', 'History'],
   ['black', 'Black'],
   ['gray', '50% Gray'],
   ['white', 'White'],
@@ -44,6 +45,7 @@ export function FillDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 
       case 'color':
         return picked;
       case 'pattern': // not used: the pattern fills
+      case 'history': // not used: the history state fills
       case 'black':
         return { r: 0, g: 0, b: 0 };
       case 'gray':
@@ -80,6 +82,7 @@ export function FillDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 
       opacity: opacity / 100,
       preserveTransparency: preserve,
       ...(contents === 'pattern' ? { pattern } : {}),
+      ...(contents === 'history' ? { history: true } : {}),
     });
   };
 
