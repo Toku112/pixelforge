@@ -18,7 +18,14 @@ _Update this section at the end of every session._
   brush HUD, Preferences with painting cursors, smoothing, symmetry, Brushes panel, presets, brush files, Tool
   Presets, WebAssembly dabs, Eyedropper, Color and Swatches panels, Pencil and Eraser modes, Gradient tool and
   editor); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 13 (Paint Bucket)
+- Next up: Part E item 13 (Paint Bucket). In progress, not committed: `src/core/selection/bucket.ts` (the area to
+  fill: tolerance, contiguous, anti-alias, limited by the selection; no tests yet) and `PixelOps.bucketMask` wired
+  through the pixel worker, its client and the test helpers. Still to do: unit tests for `bucketMask`; a `paintBucket`
+  command (History "Paint Bucket"; samples the active layer at full opacity or all layers via `planFromDocument`;
+  fills the mask with the foreground colour or a pattern through `pixelOps.fill`, honouring mode, opacity and locked
+  transparency); the Paint Bucket tool sharing G with the Gradient tool (options: Foreground/Pattern, pattern
+  picker, Mode incl. Behind/Clear, Opacity, Tolerance 0–255 default 32, Anti-alias, Contiguous, All Layers); icon and
+  cursor; e2e test; D-047 and FORMAT_NOTES §13.
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -112,7 +119,8 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Content-Aware Move tool: move/extend, structure, colour, transform on drop
 - [ ] Red Eye tool: pupil size, darken amount
 - [ ] Clone Stamp (S): aligned, sample modes, clone source overlay, ignore adjustment layers
-- [ ] Pattern Stamp
+- [x] Pattern Stamp
+  ↳ note: aligned or from each stroke, Impressionist (Part E item 12, D-046).
 - [ ] History Brush (Y)
 - [ ] Art History Brush: style, area, tolerance
 - [ ] Blur tool, Sharpen tool (protect detail), Smudge tool (finger painting)
@@ -130,6 +138,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Background Eraser: sampling, limits, tolerance, protect foreground colour
 - [ ] Magic Eraser
 - [ ] Gradient tool (G): live on-canvas gradient (creates gradient fill layer) and classic mode; linear, radial, angle, reflected, diamond; reverse, dither, transparency; method (perceptual, linear, classic, smooth, stripes)
+  ↳ partial: classic mode with all shapes, options and methods (Part E item 11, D-045); the live gradient fill layer comes with fill layers.
 - [ ] Paint Bucket: foreground/pattern, tolerance, contiguous, all layers
 
 ### Drawing & type
@@ -175,6 +184,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Search
 - [ ] Check Spelling, Find and Replace Text
 - [ ] Fill: foreground/background/colour/content-aware/pattern (incl. script patterns: brick fill, cross weave, random fill, spiral, symmetry fill, place along path, picture frame, tree)/history/black/50% gray/white; blending mode, opacity, preserve transparency
+  ↳ partial: foreground, background, colour, pattern, black, 50% gray and white with mode, opacity and preserve transparency; content-aware, script patterns and history to come.
 - [ ] Stroke: width, colour, location (inside/center/outside), blending
 - [ ] Content-Aware Fill workspace: sampling area brush, auto/rectangular/custom sampling, fill settings (colour adaptation, rotation adaptation, scale, mirror), output to new layer/current/duplicate
 - [ ] Generative Fill **(AI)**, Generate Image **(AI)**, Generate Background **(AI)**, Generate Similar **(AI)**, reference image, model picker (our providers), variations in Properties panel
@@ -189,7 +199,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Auto-Blend Layers (panorama, stack images / focus stacking; seamless tones; content-aware fill transparent areas)
 - [ ] Sky Replacement **(AI)**: sky library (our own skies), shift edge, fade edge, brightness, temperature, scale, flip, foreground lighting/adjustment, output to new layers
 - [ ] Define Brush Preset, Define Pattern, Define Custom Shape
-  ↳ partial: Define Brush Preset works (Part E item 1, D-035).
+  ↳ partial: Define Brush Preset (Part E item 1, D-035) and Define Pattern (Part E item 12, D-046) work; Define Custom Shape comes with shapes.
 - [ ] Purge (clipboard, histories, all, video cache)
 - [ ] Presets: Preset Manager, Export/Import Presets, Migrate Presets
 - [ ] Color Settings (see B13), Assign Profile, Convert to Profile
@@ -322,7 +332,7 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
   ↳ partial: pressure, tilt (incl. Safari's altitude/azimuth), twist, wheel and coalesced events reach every stroke; predicted events move the cursor ahead (D-035). Missing: checks on real Windows Ink and iPad hardware.
 - [x] Tool Presets panel (save any tool + options, current tool only filter)
 - [ ] Patterns panel, Gradients panel (groups, import GRD/PAT), Swatches panel (import ASE/ACO), Shapes panel (import CSH), Styles panel (import ASL)
-  ↳ partial: Swatches panel with ASE/ACO import (Phase 2).
+  ↳ partial: Swatches panel with ASE/ACO import, Gradients panel with GRD import/export, Patterns panel with PAT import/export (Phase 2); Shapes and Styles panels come with shapes and layer styles.
 
 ## B10. Layer styles & blending options
 
@@ -434,6 +444,7 @@ All filters must work destructively and as **smart filters** (with filter mask, 
 ## B16. Window panels (each fully functional)
 
 - [ ] Actions, Adjustments, Brush Settings, Brushes, Channels, Character, Character Styles, Clone Source (5 sources, offset, scale, rotate, overlay), Color (sliders: grayscale/RGB/HSB/CMYK/Lab/web; wheel; cube), Comments (web-alt: local notes or optional collab), Content Credentials, Glyphs, Gradients, Histogram (compact/expanded/all channels, statistics, cache refresh), History (snapshots, non-linear history option, history brush source), Info (two readouts, doc info, sampler readouts, measurement), Layer Comps, Layers, Libraries (web-alt: local asset library), Measurement Log, Navigator, Notes, Paragraph, Paragraph Styles, Paths, Patterns, Properties (context-sensitive: document, layer, type, shape, smart object, adjustments, masks, quick actions), Shapes, Styles, Swatches, Timeline, Tool Presets, Version History
+  ↳ partial: Brush Settings, Brushes, Color, Gradients, History, Layers, Navigator, Patterns, Swatches and Tool Presets exist so far.
 - [ ] Options bar and Tools visibility toggles
 - [ ] Arrange submenu & Workspace submenu
 - [ ] Open documents list
