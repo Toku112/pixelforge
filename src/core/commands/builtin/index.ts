@@ -9,6 +9,7 @@ import { layerCommands } from './layers';
 import { mergeCommands } from './merge';
 import { moveSelectedPixelsCommand } from './move-pixels';
 import { paintStrokeCommand } from './paint';
+import { paintBucketCommand } from './paint-bucket';
 import { selectionCommands } from './selection';
 import { setLayerPropsCommand } from './set-layer-props';
 import { setSymmetryCommand } from './symmetry';
@@ -20,6 +21,7 @@ export function registerBuiltinCommands(registry: CommandRegistry): void {
   registry.register(clearCommand);
   registry.register(fillCommand);
   registry.register(gradientCommand);
+  registry.register(paintBucketCommand);
   registry.register(paintStrokeCommand);
   registry.register(setLayerPropsCommand);
   registry.register(translateLayersCommand);

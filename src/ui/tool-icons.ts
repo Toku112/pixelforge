@@ -21,6 +21,7 @@ export const TOOL_ICONS: Readonly<Record<string, IconName>> = {
   eraser: 'eraser',
   'pattern-stamp': 'patternStamp',
   gradient: 'gradient',
+  'paint-bucket': 'paintBucket',
 };
 
 export function toolIcon(toolId: string): IconName {

@@ -1710,3 +1710,7 @@
   gap: 2px;
   border-radius: 3px;
 }
+.pattern-picker .gradient-picker-preview:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

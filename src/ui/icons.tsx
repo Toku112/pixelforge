@@ -308,6 +308,14 @@ const icons = {
       <rect x="14" y="14" width="4" height="4" fill="currentColor" fillOpacity="0.7" stroke="none" />
     </Svg>
   ),
+  paintBucket: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M10.5 4 19 12.5l-6.4 6.4a1.6 1.6 0 0 1-2.2 0l-5.8-5.8a1.6 1.6 0 0 1 0-2.2Z" />
+      <path d="M7.3 8.2C5 5.9 4.4 4 5.4 3s3-.4 5.3 1.9" />
+      <path d="M5.2 12.2h13.4" />
+      <path d="M20.5 15c1 1.4 1.6 2.4 1.6 3.2a1.6 1.6 0 0 1-3.2 0c0-.8.6-1.8 1.6-3.2Z" fill="currentColor" />
+    </Svg>
+  ),
   gradient: (p: IconProps) => (
     <Svg {...p}>
       <rect x="3.5" y="5.5" width="17" height="13" rx="1.5" />

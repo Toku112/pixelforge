@@ -11,6 +11,8 @@ import { CropTool } from '../../tools/crop/crop-tool';
 import { EyedropperTool } from '../../tools/eyedropper/eyedropper-tool';
 import { GradientTool } from '../../tools/gradient/gradient-tool';
 import { GradientOptionsBar } from './GradientOptions';
+import { PaintBucketTool } from '../../tools/paint-bucket/paint-bucket-tool';
+import { PaintBucketOptionsBar } from './PaintBucketOptions';
 import { PatternPicker } from './PatternPicker';
 import { SAMPLE_SIZES, type SampleSize, type SampleSource } from '../../core/paint/sample';
 import { BrushPicker } from './BrushPicker';
@@ -760,6 +762,7 @@ export function OptionsBar() {
       {tool instanceof CropTool && <CropOptions tool={tool} />}
       {tool instanceof EyedropperTool && <EyedropperOptionsBar tool={tool} />}
       {tool instanceof GradientTool && <GradientOptionsBar tool={tool} />}
+      {tool instanceof PaintBucketTool && <PaintBucketOptionsBar tool={tool} />}
       {tool instanceof TransformTool && <TransformOptions tool={tool} />}
       {tool instanceof SymmetryTool && <SymmetryOptions tool={tool} />}
       {toolId === 'hand' && <ViewButtons />}

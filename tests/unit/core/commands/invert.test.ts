@@ -95,6 +95,7 @@ describe('Invert command', () => {
       maskBounds: () => Promise.reject(new Error('not used')),
       brushTipFromImage: () => Promise.reject(new Error('not used')),
       patternFromImage: () => Promise.reject(new Error('not used')),
+      bucketMask: () => Promise.reject(new Error('not used')),
       sampleColor: () => Promise.reject(new Error('not used')),
       contentBounds: () => Promise.reject(new Error('not used')),
       transformLayerPixels: () => Promise.reject(new Error('not used')),

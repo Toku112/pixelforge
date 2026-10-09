@@ -9,10 +9,12 @@ export function PatternPicker({
   value,
   onChange,
   label = 'Pattern picker',
+  disabled = false,
 }: {
   value: string;
   onChange: (id: string) => void;
   label?: string;
+  disabled?: boolean;
 }) {
   const controller = useController();
   const library = controller.services.patterns;
@@ -41,6 +43,7 @@ export function PatternPicker({
         className="gradient-picker-preview"
         aria-label={label}
         aria-expanded={open}
+        disabled={disabled}
         title={pattern ? `${pattern.name} — click to choose another pattern` : 'Choose a pattern'}
         onClick={() => setOpen(!open)}
         onKeyDown={(e) => {
@@ -53,7 +56,7 @@ export function PatternPicker({
         {pattern ? <PatternThumb pattern={pattern} size={20} /> : <Icon name="pattern" size={20} />}
         <Icon name="chevronDown" size={12} />
       </button>
-      {open && (
+      {open && !disabled && (
         <div className="brush-picker-panel gradient-picker-panel" role="group" aria-label="Patterns">
           <PatternList
             selectedId={value}

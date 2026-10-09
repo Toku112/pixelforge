@@ -43,6 +43,8 @@ import { DEFAULT_PATTERN_ID, MAX_PATTERN_SIDE } from '../core/pattern/pattern';
 
 import { sampleRect, samplePlan, sampledToRgb, type EyedropperOptions } from '../core/paint/sample';
 import { SYMMETRY_KINDS, defaultSymmetry, hasSegments, type SymmetryKind } from '../core/paint/symmetry';
+import { GradientTool } from '../tools/gradient/gradient-tool';
+import { PaintBucketTool } from '../tools/paint-bucket/paint-bucket-tool';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
 import type { ColorHost, PaintHost, PaintStroke, Tool } from '../tools/types';
@@ -415,9 +417,20 @@ export class AppController {
     this.#ui.toolOptionsChanged();
   }
 
+  /** The active tool when it is the Gradient tool or the Paint Bucket (a mode and opacity, no brush). */
+  #fillTool(): GradientTool | PaintBucketTool | null {
+    const tool = this.tools.byId.get(this.#ui.activeToolId());
+    return tool instanceof GradientTool || tool instanceof PaintBucketTool ? tool : null;
+  }
+
+  #setFillToolOptions(changes: { mode?: BrushMode; opacity?: number }): void {
+    this.#fillTool()?.setOptions(changes);
+    this.#ui.toolOptionsChanged();
+  }
+
   /**
-   * Number keys: opacity (Shift: flow) of the Brush/Eraser, the Gradient tool's opacity,
-   * or the opacity of the selected layers (Shift: fill) with other tools. 1 = 10 % … 0 = 100 %; two digits typed quickly
+   * Number keys: opacity (Shift: flow) of the Brush/Eraser, the Gradient tool's or Paint Bucket's
+   * opacity, or the opacity of the selected layers (Shift: fill) with other tools. 1 = 10 % … 0 = 100 %; two digits typed quickly
    * give a precise value ("4", "5" → 45 %; "0", "5" → 5 %).
    */
   #numberKey(digit: number, shift: boolean): void {
@@ -432,10 +445,8 @@ export class AppController {
     }
     const value = percent / 100;
     if (this.#paintTool()) this.#setPaintOptions(shift ? { flow: value } : { opacity: value });
-    else if (!shift && this.#ui.activeToolId() === 'gradient') {
-      this.tools.gradient.setOptions({ opacity: value });
-      this.#ui.toolOptionsChanged();
-    } else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });
+    else if (!shift && this.#fillTool()) this.#setFillToolOptions({ opacity: value });
+    else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });
   }
 
   /** Edit > Fill: asks how to fill, then fills the selection (or canvas) of the active layer. */
@@ -970,11 +981,12 @@ export class AppController {
     return id && this.services.patterns.get(id) ? id : null;
   }
 
-  /** A pattern clicked: the Pattern Stamp paints it and Edit > Fill offers it. */
+  /** A pattern clicked: the Pattern Stamp and the Paint Bucket use it and Edit > Fill offers it. */
   choosePattern(id: string): void {
     if (!this.services.patterns.get(id)) return;
     this.#patternId = id;
     this.tools.patternStamp.setStamp({ patternId: id });
+    this.tools.paintBucket.setOptions({ patternId: id });
     this.#ui.toolOptionsChanged();
   }
 
@@ -2063,15 +2075,19 @@ export class AppController {
       },
     });
 
-    // Blend modes (Alt+Shift+letter, Shift+Plus/Minus): with the Brush active they set its
-    // Mode (as in the reference app); otherwise the selected layers' blend mode. The
-    // Eraser has no mode, so they do nothing with it rather than change the layer.
-    const brushTool = () => (this.#paintTool()?.kind === 'brush' ? this.#paintTool() : null);
+    // Blend modes (Alt+Shift+letter, Shift+Plus/Minus): with the Brush, the Gradient tool or
+    // the Paint Bucket active they set the tool's Mode (as in the reference app); otherwise
+    // the selected layers' blend mode. The other painting tools (Eraser…) have no mode here,
+    // so they do nothing with them rather than change the layer.
+    const ownsModeKeys = () => this.#paintTool() !== null || this.#fillTool() !== null;
+    const brushTool = (): { options: { mode: BrushMode } } | null =>
+      this.#paintTool()?.kind === 'brush' ? this.#paintTool() : this.#fillTool();
     const brushModes = (): readonly BrushMode[] => {
       const d = doc();
       return d ? brushModeMenu(d.mode, d.depth) : [];
     };
-    const setBrushMode = (mode: BrushMode) => this.#setPaintOptions({ mode });
+    const setBrushMode = (mode: BrushMode) =>
+      this.#paintTool() ? this.#setPaintOptions({ mode }) : this.#setFillToolOptions({ mode });
     const blendTargets = (): LayerNode[] => {
       const d = doc();
       if (!d) return [];
@@ -2093,7 +2109,7 @@ export class AppController {
       add({
         id,
         label,
-        enabled: () => (this.#paintTool() ? !!brushTool() && !!doc() : blendTargets().length > 0),
+        enabled: () => (ownsModeKeys() ? !!brushTool() && !!doc() : blendTargets().length > 0),
         run: () => {
           const brush = brushTool();
           if (brush) {
@@ -2117,7 +2133,7 @@ export class AppController {
         enabled: () => {
           const d = doc();
           if (!d || !availableBlendModes(d.mode, d.depth).includes(mode)) return false;
-          return this.#paintTool() ? !!brushTool() : blendTargets().length > 0;
+          return ownsModeKeys() ? !!brushTool() : blendTargets().length > 0;
         },
         run: () => (brushTool() ? setBrushMode(mode) : setBlendMode(mode)),
       });

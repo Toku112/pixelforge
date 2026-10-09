@@ -14,6 +14,7 @@ import type { LayerGeometry } from './builtin/geometry';
 import type { Dab } from '../paint/brush';
 import type { FillSpec } from '../paint/fill';
 import type { GradientFillSpec } from '../paint/gradient-fill';
+import type { BucketOptions } from '../selection/bucket';
 import type { MovePixelsSetup } from '../paint/move-pixels';
 import type { StrokeSetup } from '../paint/stroke';
 import type { MaskedTarget } from '../selection/masked-edits';
@@ -89,6 +90,14 @@ export interface PixelOps {
   ): Promise<MaskData | null>;
   /** Edit > Define Brush Preset: tip coverage (0–255) of `rect` of the visible image (see core/paint/define-tip.ts). */
   brushTipFromImage(plan: FlattenPlan, rect: Rect, mask: MaskData | null, canvas: Rect): Promise<Uint8Array>;
+  /** The Paint Bucket's area (see core/selection/bucket.ts); null when nothing is to be filled. */
+  bucketMask(
+    plan: FlattenPlan,
+    seed: { x: number; y: number },
+    options: BucketOptions,
+    selection: MaskData | null,
+    canvas: Rect,
+  ): Promise<MaskData | null>;
   /** Edit > Define Pattern: the visible image in `rect` as RGBA, and whether the selection covers it all sharply. */
   patternFromImage(
     plan: FlattenPlan,

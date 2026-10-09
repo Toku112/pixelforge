@@ -13,19 +13,14 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 12 (Patterns: Define Pattern, Patterns panel, .pat files, pattern fill, Pattern Stamp);
-  items 1–11 (pen input, tips, dynamics, texture, dual brush, wet edges, build-up, Brush Settings panel, options bar,
-  brush HUD, Preferences with painting cursors, smoothing, symmetry, Brushes panel, presets, brush files, Tool
-  Presets, WebAssembly dabs, Eyedropper, Color and Swatches panels, Pencil and Eraser modes, Gradient tool and
-  editor); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 13 (Paint Bucket). In progress, not committed: `src/core/selection/bucket.ts` (the area to
-  fill: tolerance, contiguous, anti-alias, limited by the selection; no tests yet) and `PixelOps.bucketMask` wired
-  through the pixel worker, its client and the test helpers. Still to do: unit tests for `bucketMask`; a `paintBucket`
-  command (History "Paint Bucket"; samples the active layer at full opacity or all layers via `planFromDocument`;
-  fills the mask with the foreground colour or a pattern through `pixelOps.fill`, honouring mode, opacity and locked
-  transparency); the Paint Bucket tool sharing G with the Gradient tool (options: Foreground/Pattern, pattern
-  picker, Mode incl. Behind/Clear, Opacity, Tolerance 0–255 default 32, Anti-alias, Contiguous, All Layers); icon and
-  cursor; e2e test; D-047 and FORMAT_NOTES §13.
+- Last completed: Part E item 13 (Paint Bucket: foreground or pattern, tolerance, contiguous, anti-alias, all layers,
+  mode and opacity; G / Shift+G with the Gradient tool); items 1–12 (pen input, tips, dynamics, texture, dual brush,
+  wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences with painting cursors, smoothing,
+  symmetry, Brushes panel, presets, brush files, Tool Presets, WebAssembly dabs, Eyedropper, Color and Swatches panels,
+  Pencil and Eraser modes, Gradient tool and editor, patterns and the Pattern Stamp); Phase 1 Part D items 1–12 and the
+  automated part of item 13
+- Next up: Part E item 14 (History Brush, Art History Brush, the History panel's source column, Erase to History,
+  History contents in Edit > Fill)
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -139,7 +134,8 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Magic Eraser
 - [ ] Gradient tool (G): live on-canvas gradient (creates gradient fill layer) and classic mode; linear, radial, angle, reflected, diamond; reverse, dither, transparency; method (perceptual, linear, classic, smooth, stripes)
   ↳ partial: classic mode with all shapes, options and methods (Part E item 11, D-045); the live gradient fill layer comes with fill layers.
-- [ ] Paint Bucket: foreground/pattern, tolerance, contiguous, all layers
+- [x] Paint Bucket: foreground/pattern, tolerance, contiguous, all layers
+  ↳ note: also anti-alias, mode (with Behind and Clear) and opacity; our own anti-aliased edge (Part E item 13, D-047).
 
 ### Drawing & type
 - [ ] Pen tool (P): shape/path/pixels mode, rubber band, auto add/delete, path operations
@@ -681,7 +677,8 @@ engine first, then its controls, then the tools built on it.
   ↳ note: the method curves and noise patterns are our own approximation, to be compared with real reference output; .grd version 5 is read and written (version 3 is refused); the live gradient fill layer comes with fill layers in Phase 3 (D-045, FORMAT_NOTES §11).
 - [x] Patterns: Edit > Define Pattern, Patterns panel, PAT import, Pattern contents in Edit > Fill, Pattern Stamp tool
   ↳ note: patterns are stored as 8-bit RGBA and converted to the document when used; .pat files are read (RGB, Grayscale, Indexed, CMYK, Lab; 8/16-bit; raw or RLE) and written; scripted patterns are not included; Pattern Stamp strokes use the TypeScript painter (D-046, FORMAT_NOTES §12).
-- [ ] Paint Bucket: foreground or pattern, tolerance, contiguous, anti-alias, all layers, mode and opacity
+- [x] Paint Bucket: foreground or pattern, tolerance, contiguous, anti-alias, all layers, mode and opacity
+  ↳ note: colours compared premultiplied (all transparent pixels alike), 4-neighbour contiguity, our own anti-aliased edge; the image is composited only as far as the fill reaches; blend-mode shortcuts and number keys now set the Gradient tool's and Paint Bucket's mode and opacity (D-047, FORMAT_NOTES §13).
 - [ ] History Brush (Y), Art History Brush, the History panel's source column, Eraser's Erase to History, History contents in Edit > Fill
 - [ ] Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers, presets
 - [ ] Brush-based retouching that painters rely on: Smudge (finger painting), Blur and Sharpen (protect detail), Dodge, Burn and Sponge

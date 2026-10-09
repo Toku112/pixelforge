@@ -750,3 +750,32 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   channels are the first written arrays of the pattern's image; the next written one is its transparency. CMYK is
   converted with the simple uncalibrated formula and Lab through D65 sRGB, as for swatches. We write RGB(A),
   uncompressed.
+
+## D-047 — 2026-10-09 — Paint Bucket
+
+**Decision:**
+
+- The area is found in the pixel worker (`src/core/selection/bucket.ts`, FORMAT_NOTES §13): a pixel belongs when its
+  colour is within Tolerance of the clicked pixel's, comparing premultiplied values as the largest difference of any
+  channel or the alpha on a 0–255 scale. Premultiplying makes every fully transparent pixel the same colour, so a
+  click in an empty part of a layer fills all the empty space it joins, whatever colour the hidden pixels hold.
+  Contiguous joins pixels through their four neighbours (not diagonals), so a one-pixel diagonal line holds a fill.
+- Anti-alias gives each pixel just outside the area partial coverage — full minus how far beyond Tolerance its colour
+  is — so a fill meets anti-aliased line art without a light gap or a hard step. The reference app's exact edge
+  softening is not documented; this is our own rule, to be compared with real output.
+- Without All Layers the colours compared are the active layer's own pixels as if it were visible, opaque and in
+  Normal mode (its opacity, blend mode and visibility do not matter); with All Layers, what all visible layers show.
+  Only the active layer changes either way.
+- The fill reuses Edit > Fill's blending (`fillTiles`, now also taking Behind and Clear) with the area as its mask;
+  the selection limits the area and its soft values carry over. Locked transparency (and the Background) keep alpha,
+  as with the Gradient tool. Patterns repeat from the document's top left corner, as in Edit > Fill. A click outside
+  the canvas or the selection does nothing (no History step).
+- The descriptor records the click pixel, the options and the colour as document values (or the pattern's id), so an
+  Action replays the same fill.
+- The image is composited in 256-pixel blocks only as the fill reaches them: a small fill in a 6000 × 4000 image takes
+  about 5 ms; filling half of it about 0.6 s and every pixel (not Contiguous) about 1 s in the worker, most of it in
+  the TypeScript compositor (`flatten`), which a faster compositor would speed up for every feature using it.
+- The blend-mode shortcuts (Alt+Shift+letter, Shift+Plus/Minus) and the number keys now set the Mode and Opacity of
+  the Gradient tool and the Paint Bucket while they are active, as they do for the Brush, rather than the layer's.
+- The Paint Bucket's pattern follows the pattern last chosen (Patterns panel, Edit > Fill, either tool's picker), as
+  the Pattern Stamp's does.

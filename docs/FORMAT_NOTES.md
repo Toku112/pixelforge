@@ -471,3 +471,17 @@ depth (8 or 16), rectangle (4 × u32), u16 depth, u8 compression (0 raw, 1 RLE: 
 rows), data. 16-bit values are big-endian. CMYK channels hold 255 − ink. We read the colour channels from the first
 written arrays and the transparency from the next written one; we write 24 channel slots with R, G, B (and alpha when
 the pattern has transparency) written raw and the rest unwritten.
+
+## 13. Paint Bucket
+
+**Area**: with the clicked pixel's premultiplied composite value t (channels and alpha, 0–1, each clamped to ≤ 1) and
+a pixel's value p, its distance is d = round(255 · max over channels and alpha of |p − t|). Without Anti-alias the
+area is { d ≤ Tolerance } (Contiguous: the part joined to the click through 4-neighbours). With Anti-alias, each pixel
+outside the area with a 4-neighbour inside it gets coverage round(255 · (1 − (d − Tolerance) / (255 − Tolerance))),
+at most 254, when positive. The coverage is then multiplied by the selection value / 255 (pixels where the selection
+is 0 are never part of the area). The compared composite is the active layer alone (visible, opacity 1, fill 1,
+Normal) or, with All Layers, the visible document.
+
+**Fill**: Edit > Fill's blend (§3.2 formulas through `blendSourceTiles`) of the foreground colour or the pattern
+(repeated from document (0, 0)) with the tool's mode and opacity, through the coverage as a mask; Behind and Clear as
+for the Gradient tool; locked transparency keeps alpha.

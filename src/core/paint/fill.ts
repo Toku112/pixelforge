@@ -19,7 +19,6 @@ import type { MaskedTarget } from '../selection/masked-edits';
 import type { PatternPixels } from '../pattern/pattern';
 
 export interface FillSpec extends BlendSpec {
-  mode: LayerBlendMode;
   /** Colour samples of the fill. */
   color: number[];
   /** A pattern instead of the colour. */
