@@ -1,5 +1,6 @@
 /**
- * Brush and Pencil (B, Shift+B to switch), Eraser (E) and Pattern Stamp (S) tools.
+ * Brush, Pencil and Mixer Brush (B, Shift+B to switch), Eraser (E), Pattern Stamp (S),
+ * History Brush and Art History Brush (Y) tools.
  *
  * Behaviour (own summary of the reference app):
  * - Drag to paint with the foreground colour (Brush) or to erase (Eraser: to
@@ -35,10 +36,20 @@
  *   painting while the pointer rests. Neither uses paint symmetry.
  * - The Eraser's Erase to History brings back the source instead of erasing; holding
  *   Alt/Option when a stroke starts turns it on (or off) for that stroke.
+ * - The Mixer Brush mixes its paint with the canvas (core/paint/mixer.ts). Alt/Option-click
+ *   loads it with the image under the tip; choosing a foreground colour loads that colour.
+ *   What it holds carries from stroke to stroke unless it is cleaned and loaded after each.
  */
 import { usesSymmetry, type PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_PATTERN_ID } from '../../core/pattern/pattern';
 import { DEFAULT_ART_HISTORY, type ArtHistoryOptions } from '../../core/paint/art-history';
+import {
+  DEFAULT_MIXER,
+  INITIAL_MIXER,
+  afterStroke,
+  type MixerBrushState,
+  type MixerOptions,
+} from '../../core/paint/mixer';
 import { DEFAULT_BRUSH, type BrushSettings, type StrokePoint } from '../../core/paint/brush';
 import { DEFAULT_DYNAMICS, StrokeDabber } from '../../core/paint/dynamics';
 import {
@@ -53,6 +64,7 @@ import {
   type BrushAdjuster,
   type BrushOutline,
   type CursorState,
+  type MixerBegin,
   type PaintBeginOptions,
   type PaintStroke,
   type Tool,
@@ -65,6 +77,8 @@ import {
   ERASER_CURSOR,
   EYEDROPPER_CURSOR,
   HISTORY_BRUSH_CURSOR,
+  MIXER_CURSOR,
+  MIXER_LOAD_CURSOR,
   STAMP_CURSOR,
 } from './cursors';
 import { ColorSampler } from '../eyedropper/sampler';
@@ -95,6 +109,7 @@ const TOOL_NAMES: Record<PaintTool, string> = {
   'pattern-stamp': 'Pattern Stamp Tool',
   'history-brush': 'History Brush Tool',
   'art-history-brush': 'Art History Brush Tool',
+  'mixer-brush': 'Mixer Brush Tool',
 };
 
 const TOOL_KEYS: Record<PaintTool, string> = {
@@ -104,6 +119,7 @@ const TOOL_KEYS: Record<PaintTool, string> = {
   'pattern-stamp': 'S',
   'history-brush': 'Y',
   'art-history-brush': 'Y',
+  'mixer-brush': 'B',
 };
 
 const STANDARD_CURSORS: Record<PaintTool, string> = {
@@ -113,6 +129,7 @@ const STANDARD_CURSORS: Record<PaintTool, string> = {
   'pattern-stamp': STAMP_CURSOR,
   'history-brush': HISTORY_BRUSH_CURSOR,
   'art-history-brush': ART_HISTORY_CURSOR,
+  'mixer-brush': MIXER_CURSOR,
 };
 
 export class PaintingTool implements Tool {
@@ -137,6 +154,14 @@ export class PaintingTool implements Tool {
   eraseToHistory = false;
   /** Art History Brush: style, area and tolerance. */
   readonly art: ArtHistoryOptions = { ...DEFAULT_ART_HISTORY };
+  /** Mixer Brush: Wet, Load, Mix, Sample All Layers, loading and cleaning after each stroke. */
+  readonly mixer: MixerOptions = { ...DEFAULT_MIXER };
+  /** Mixer Brush: what the brush holds (it may lag behind a stroke still finishing). */
+  mixerState: MixerBrushState = INITIAL_MIXER;
+  /** Called when what the Mixer Brush holds changes (the options bar shows it). */
+  onMixerChange: (() => void) | null = null;
+  /** Settles when the last Mixer Brush stroke or load has updated `mixerState`. */
+  #mixerReady: Promise<void> = Promise.resolve();
   #stroke: ActiveStroke | null = null;
   /** End of the last stroke, for Shift-click lines. */
   #lastEnd: StrokePoint | null = null;
@@ -159,10 +184,13 @@ export class PaintingTool implements Tool {
     this.id = kind;
     this.name = TOOL_NAMES[kind];
     this.key = TOOL_KEYS[kind];
-    const size = kind === 'brush' ? 30 : kind === 'pencil' ? 1 : kind === 'art-history-brush' ? 10 : 50;
+    const size =
+      kind === 'brush' || kind === 'mixer-brush' ? 30 : kind === 'pencil' ? 1 : kind === 'art-history-brush' ? 10 : 50;
     this.options = {
       ...DEFAULT_BRUSH,
       size,
+      // Wet paint shows each dab of a widely spaced brush: the Mixer Brush starts closely spaced.
+      ...(kind === 'mixer-brush' ? { spacing: 0.05 } : {}),
       aliased: kind === 'pencil',
       dynamics: structuredClone(DEFAULT_DYNAMICS),
     };
@@ -188,6 +216,72 @@ export class PaintingTool implements Tool {
 
   setArt(changes: Partial<ArtHistoryOptions>): void {
     Object.assign(this.art, changes);
+  }
+
+  setMixer(changes: Partial<MixerOptions>): void {
+    Object.assign(this.mixer, changes);
+  }
+
+  /** Changes what the Mixer Brush holds, after any stroke still finishing has handed it on. */
+  #updateMixer(change: Promise<((s: MixerBrushState) => MixerBrushState) | null>): void {
+    this.#mixerReady = this.#mixerReady
+      .then(async () => {
+        const f = await change;
+        if (!f) return;
+        this.mixerState = f(this.mixerState);
+        this.onMixerChange?.();
+      })
+      .catch(() => undefined);
+  }
+
+  /** Load Brush (and choosing a foreground colour): fills the reservoir with the foreground colour. */
+  loadForeground(): void {
+    this.#updateMixer(Promise.resolve((s) => ({ ...s, load: { kind: 'foreground' }, level: 1 })));
+  }
+
+  /** Clean Brush: empties the brush of all paint. */
+  cleanBrush(): void {
+    this.#updateMixer(Promise.resolve((s) => ({ ...s, level: 0, pickup: null })));
+  }
+
+  /** Settles once what the Mixer Brush holds is up to date (for tests and the options bar). */
+  mixerSettled(): Promise<void> {
+    return this.#mixerReady;
+  }
+
+  /** Alt-click with the Mixer Brush: loads it with the image under the tip (its average with Load Solid Colors Only). */
+  #loadFromImage(e: ToolPointerEvent, ctx: ToolContext): void {
+    const host = ctx.paint;
+    if (!host?.loadMixer) return;
+    const at = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
+    const loaded = host.loadMixer(at, this.options.size, this.mixer.sampleAllLayers, this.mixer.solidOnly).then(
+      (load) => (load ? (s: MixerBrushState): MixerBrushState => ({ ...s, load, level: 1 }) : null),
+      (error: unknown) => {
+        ctx.report('Could not load the Mixer Brush', error instanceof Error ? error.message : String(error));
+        return null;
+      },
+    );
+    this.#updateMixer(loaded);
+  }
+
+  /** A Mixer Brush stroke's start: it waits for the stroke before it, and hands on what it ends with. */
+  #mixerStart(): { begin: MixerBegin; settle: () => void } {
+    const ready = this.#mixerReady;
+    let settle: () => void = () => {};
+    this.#mixerReady = new Promise((resolve) => (settle = resolve));
+    const options = { ...this.mixer };
+    return {
+      settle,
+      begin: {
+        options,
+        state: ready.then(() => this.mixerState),
+        finish: (end, mode) => {
+          if (end) this.mixerState = afterStroke(this.mixerState, end, mode, options);
+          settle();
+          this.onMixerChange?.();
+        },
+      },
+    };
   }
 
   /** Paint symmetry applies to the Brush, Pencil, Eraser and Pattern Stamp. */
@@ -235,6 +329,7 @@ export class PaintingTool implements Tool {
         stamp: this.stamp,
         eraseToHistory: this.eraseToHistory,
         art: this.art,
+        mixer: this.mixer,
       }),
     );
   }
@@ -250,6 +345,7 @@ export class PaintingTool implements Tool {
       stamp?: Partial<StampOptions>;
       eraseToHistory?: boolean;
       art?: Partial<ArtHistoryOptions>;
+      mixer?: Partial<MixerOptions>;
     };
     if (o.brush) this.setOptions(JSON.parse(JSON.stringify(o.brush)) as Partial<BrushSettings>);
     if (o.smoothing) this.setSmoothing(o.smoothing);
@@ -268,11 +364,24 @@ export class PaintingTool implements Tool {
       if (typeof o.art.area === 'number') this.art.area = Math.min(500, Math.max(0, o.art.area));
       if (typeof o.art.tolerance === 'number') this.art.tolerance = Math.min(1, Math.max(0, o.art.tolerance));
     }
+    if (o.mixer) {
+      const m = o.mixer;
+      const share = (v: unknown, lo: number) => (typeof v === 'number' ? Math.min(1, Math.max(lo, v)) : undefined);
+      const wet = share(m.wet, 0);
+      const load = share(m.load, 0.01);
+      const mix = share(m.mix, 0);
+      if (wet !== undefined) this.mixer.wet = wet;
+      if (load !== undefined) this.mixer.load = load;
+      if (mix !== undefined) this.mixer.mix = mix;
+      for (const key of ['sampleAllLayers', 'loadAfterStroke', 'cleanAfterStroke', 'solidOnly'] as const)
+        if (typeof m[key] === 'boolean') this.mixer[key] = m[key];
+    }
     this.presetId = null;
   }
 
   cursor(state: CursorState): string {
     if (this.kind === 'brush' && (state.altKey || this.#sampler.active)) return EYEDROPPER_CURSOR;
+    if (this.kind === 'mixer-brush' && state.altKey) return MIXER_LOAD_CURSOR;
     switch (state.paintCursor ?? 'precise') {
       case 'standard':
         return STANDARD_CURSORS[this.kind];
@@ -437,12 +546,30 @@ export class PaintingTool implements Tool {
       this.#sampler.begin(e, ctx, 'foreground');
       return;
     }
+    if (this.kind === 'mixer-brush' && e.altKey) {
+      this.#loadFromImage(e, ctx);
+      return;
+    }
     if (!ctx.paint) return;
     const brush = this.#strokeBrush(ctx);
     const startAt = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
-    const session = ctx.paint.begin(this.kind, brush, this.#beginOptions(startAt, e.altKey));
-    if (!session) return;
-    const spacer = new StrokeDabber(brush, session.seed, session.colors, session.symmetry);
+    const mixer = this.kind === 'mixer-brush' ? this.#mixerStart() : null;
+    const session = ctx.paint.begin(
+      this.kind,
+      brush,
+      mixer ? { mixer: mixer.begin } : this.#beginOptions(startAt, e.altKey),
+    );
+    if (!session) {
+      mixer?.settle();
+      return;
+    }
+    const spacer = new StrokeDabber(
+      brush,
+      session.seed,
+      session.colors,
+      session.symmetry,
+      mixer ? { wet: mixer.begin.options.wet, mix: mixer.begin.options.mix } : null,
+    );
     const start = e.time ?? performance.now();
     const p = this.#point(e, ctx, start);
     const s = this.smoothing;
@@ -515,8 +642,9 @@ export class PaintingTool implements Tool {
 
   onPointerHover(e: ToolPointerEvent, ctx: ToolContext): void {
     if (!ctx.document) return;
-    // Alt with the Brush shows the Eyedropper instead of the tip.
-    ctx.setBrushOutline(this.kind === 'brush' && e.altKey ? null : this.#outline(e, ctx));
+    // Alt with the Brush shows the Eyedropper instead of the tip, with the Mixer Brush the loading target.
+    const alt = e.altKey && (this.kind === 'brush' || this.kind === 'mixer-brush');
+    ctx.setBrushOutline(alt ? null : this.#outline(e, ctx));
   }
 
   onPointerLeave(ctx: ToolContext): void {

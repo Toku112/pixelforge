@@ -10,7 +10,7 @@
  *   Initial Direction and Direction. Minimum Diameter / Minimum Roundness are floors.
  * - Scattering throws dabs sideways (Both Axes: also along the stroke) by a share of
  *   the diameter, several per step (Count, Count Jitter).
- * - Transfer varies each dab's opacity and flow.
+ * - Transfer varies each dab's opacity and flow, and for the Mixer Brush its Wet and Mix.
  * - Color Dynamics varies the colour between foreground and background and in hue,
  *   saturation and brightness, per stroke or per dab; Purity shifts saturation.
  * - Brush Pose overrides the pen's tilt, rotation or pressure.
@@ -66,7 +66,14 @@ export interface BrushDynamics {
     count: number;
     countJitter: ControlledJitter;
   };
-  transfer: { enabled: boolean; opacity: ControlledJitter; flow: ControlledJitter };
+  transfer: {
+    enabled: boolean;
+    opacity: ControlledJitter;
+    flow: ControlledJitter;
+    /** Mixer Brush: Wetness Jitter and Mix Jitter. */
+    wetness: ControlledJitter;
+    mix: ControlledJitter;
+  };
   color: {
     enabled: boolean;
     /** Vary per dab (otherwise once per stroke). */
@@ -163,7 +170,7 @@ export const DEFAULT_DYNAMICS: BrushDynamics = {
     count: 1,
     countJitter: jitter(),
   },
-  transfer: { enabled: false, opacity: jitter(), flow: jitter() },
+  transfer: { enabled: false, opacity: jitter(), flow: jitter(), wetness: jitter(), mix: jitter() },
   color: { enabled: false, perTip: true, fgbg: jitter(), hue: 0, saturation: 0, brightness: 0, purity: 0 },
   pose: {
     enabled: false,
@@ -230,6 +237,12 @@ export interface Placement {
   initialDirection: number;
 }
 
+/** The Mixer Brush's Wet and Mix, which Transfer varies per dab. */
+export interface MixerBase {
+  wet: number;
+  mix: number;
+}
+
 /** The colours a stroke may use (sRGB 0–1) and how to make samples of them. */
 export interface DynamicsColors {
   foreground: RGB;
@@ -247,12 +260,21 @@ export class DabDynamics {
   readonly #opacity: number;
   /** The stroke's colour when Color Dynamics vary per stroke. */
   #strokeColor: number[] | null = null;
+  /** Mixer Brush strokes: the Wet and Mix that Transfer varies (other strokes draw no numbers for them). */
+  readonly #mixer: MixerBase | null;
 
-  constructor(dynamics: BrushDynamics, seed: number, colors: DynamicsColors | null, opacity = 1) {
+  constructor(
+    dynamics: BrushDynamics,
+    seed: number,
+    colors: DynamicsColors | null,
+    opacity = 1,
+    mixer: MixerBase | null = null,
+  ) {
     this.#d = dynamics;
     this.#random = seededRandom(seed);
     this.#colors = colors;
     this.#opacity = opacity;
+    this.#mixer = mixer;
   }
 
   /** 0–1 from a control at a placement (1 when off). For Fade, falls from 1 to 0 over `fadeSteps`. */
@@ -384,6 +406,11 @@ export class DabDynamics {
     if (tr.enabled) {
       dab.opacity = (base.opacity ?? this.#opacity) * this.#vary(tr.opacity, p);
       dab.strength *= this.#vary(tr.flow, p);
+      const mixer = this.#mixer;
+      if (mixer) {
+        dab.wet = mixer.wet * this.#vary(tr.wetness, p);
+        dab.mix = mixer.mix * this.#vary(tr.mix, p);
+      }
     }
     if (d.color.enabled && this.#colors) {
       if (d.color.perTip || !this.#strokeColor) this.#strokeColor = this.#color(p);
@@ -421,18 +448,25 @@ export class StrokeDabber {
   readonly #dual: DualDabber | null;
   readonly #mirror: ReturnType<typeof symmetryCopies> | null;
 
-  /** `symmetry`: every dab is also painted at its mirror images. */
-  constructor(brush: BrushSettings, seed: number, colors: DynamicsColors | null, symmetry: Symmetry | null = null) {
+  /** `symmetry`: every dab is also painted at its mirror images; `mixer`: a Mixer Brush stroke's Wet and Mix. */
+  constructor(
+    brush: BrushSettings,
+    seed: number,
+    colors: DynamicsColors | null,
+    symmetry: Symmetry | null = null,
+    mixer: MixerBase | null = null,
+  ) {
     this.#mirror = symmetry?.enabled ? symmetryCopies(symmetry) : null;
     const d = brush.dynamics;
-    const dynamics = dynamicsOff(d) ? null : new DabDynamics(d!, seed, colors, brush.opacity);
+    const dynamics = dynamicsOff(d) ? null : new DabDynamics(d!, seed, colors, brush.opacity, mixer);
     this.#dynamics = dynamics;
     this.#spacer = new DabSpacer(
       brush,
       dynamics && ((placed) => dynamics.sizeScale(placed)),
       d?.buildUp ? BUILD_UP_INTERVAL : 0,
     );
-    this.#dual = d?.dual.enabled ? new DualDabber(brush, d.dual, seed) : null;
+    // The Mixer Brush has no Dual Brush.
+    this.#dual = d?.dual.enabled && !mixer ? new DualDabber(brush, d.dual, seed) : null;
   }
 
   /** The dabs a pointer sample adds: the brush's, then the dual tip's (marked `dual`), and their mirror images. */
@@ -576,6 +610,8 @@ export function parseDynamics(v: unknown): BrushDynamics {
       enabled: bool(transfer, 'enabled', false),
       opacity: controlled(transfer['opacity'], D.transfer.opacity),
       flow: controlled(transfer['flow'], D.transfer.flow),
+      wetness: controlled(transfer['wetness'], D.transfer.wetness),
+      mix: controlled(transfer['mix'], D.transfer.mix),
     },
     color: {
       enabled: bool(color, 'enabled', false),

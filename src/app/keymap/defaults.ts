@@ -173,6 +173,7 @@ const KEYS: DefaultBinding[] = [
   { command: 'brush.lastPreset', keys: ['Shift+.'] },
   ...Array.from({ length: 10 }, (_, i) => ({ command: `paint.opacity${i}`, keys: [String(i)] })),
   ...Array.from({ length: 10 }, (_, i) => ({ command: `paint.flow${i}`, keys: [`Shift+${i}`] })),
+  ...Array.from({ length: 10 }, (_, i) => ({ command: `paint.mix${i}`, keys: [`Alt+Shift+${i}`] })),
   { command: 'move.nudgeLeft', keys: ['ArrowLeft'] },
   { command: 'move.nudgeRight', keys: ['ArrowRight'] },
   { command: 'move.nudgeUp', keys: ['ArrowUp'] },

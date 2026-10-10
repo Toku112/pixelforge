@@ -41,6 +41,7 @@ import { bucketMask, type BucketOptions } from '../core/selection/bucket';
 import { gradientTiles, type GradientFillSpec } from '../core/paint/gradient-fill';
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
 import { StrokeRenderer, wasmCanPaint, type StrokeSetup } from '../core/paint/stroke';
+import { MixerRenderer, sampleMixerLoad, type MixerEnd } from '../core/paint/mixer';
 import { WasmStrokeRenderer, type StrokePainter } from './wasm-stroke';
 import { selectionOutline } from '../core/selection/outline';
 import type { MaskData } from '../core/selection/selection';
@@ -147,6 +148,7 @@ const strokes = new Map<number, StrokePainter>();
 
 /** The WebAssembly painter where it covers the stroke, otherwise the TypeScript renderer. */
 async function strokePainter(setup: StrokeSetup): Promise<StrokePainter> {
+  if (setup.mixer) return new MixerRenderer(setup);
   if (!wasmCanPaint(setup)) return new StrokeRenderer(setup);
   const { ops, memory } = await ready;
   return new WasmStrokeRenderer(ops.BrushStroke, setup, memory);
@@ -268,6 +270,11 @@ const conversions = {
   /** See PixelOps.sampleColor. */
   sampleColor(plan: FlattenPlan, rect: Rect): number[] | null {
     return sampleArea(plan, rect);
+  },
+
+  /** See PixelOps.mixerLoad. */
+  mixerLoad(plan: FlattenPlan, rect: Rect, canvas: Rect, solid: boolean) {
+    return sampleMixerLoad(plan, rect, canvas, solid);
   },
 
   /** See PixelOps.contentBounds. */
@@ -410,6 +417,11 @@ const conversions = {
       edited,
       edited.map((t) => t.data.buffer as ArrayBuffer),
     );
+  },
+
+  /** What a live Mixer Brush stroke's brush holds now (null for other strokes). */
+  strokeMixerEnd(id: number): MixerEnd | null {
+    return strokes.get(id)?.mixerEnd?.() ?? null;
   },
 
   strokeEnd(id: number): void {

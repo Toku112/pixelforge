@@ -237,9 +237,14 @@ export function BrushSettingsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- redraw on any option or colour change
   }, [version, colorVersion, toolId]);
 
-  if (!painting || !o) return <p className="panel-empty">Choose the Brush, Pencil or Eraser to set its brush here.</p>;
+  if (!painting || !o) return <p className="panel-empty">Choose a painting tool to set its brush here.</p>;
 
   const enabled = (s: Section) => s !== 'tip' && dyn[s].enabled;
+  // The Mixer Brush's paint comes from its reservoir and the canvas: no colour, texture, dual tip or wet edges.
+  const mixer = painting.kind === 'mixer-brush';
+  const unavailable = (s: Section | Flag) =>
+    (s === 'color' && (painting.kind === 'eraser' || mixer)) ||
+    (mixer && (s === 'texture' || s === 'dual' || s === 'wetEdges'));
   const tips = controller.services.brushes.list();
   const currentTip = o.tip ? (controller.services.brushes.get(o.tip) ?? null) : null;
   const tex = dyn.texture;
@@ -477,6 +482,7 @@ export function BrushSettingsPanel() {
           value={dyn.transfer.opacity}
           controls={BASIC}
           minimum="Minimum Opacity"
+          disabled={mixer}
           onChange={(opacity) => setDyn('transfer', { opacity })}
         />
         <JitterRows
@@ -485,6 +491,22 @@ export function BrushSettingsPanel() {
           controls={BASIC}
           minimum="Minimum Flow"
           onChange={(flow) => setDyn('transfer', { flow })}
+        />
+        <JitterRows
+          label="Wetness Jitter"
+          value={dyn.transfer.wetness}
+          controls={BASIC}
+          minimum="Minimum Wetness"
+          disabled={!mixer}
+          onChange={(wetness) => setDyn('transfer', { wetness })}
+        />
+        <JitterRows
+          label="Mix Jitter"
+          value={dyn.transfer.mix}
+          controls={BASIC}
+          minimum="Minimum Mix"
+          disabled={!mixer}
+          onChange={(mix) => setDyn('transfer', { mix })}
         />
       </>
     ),
@@ -749,7 +771,7 @@ export function BrushSettingsPanel() {
                 type="checkbox"
                 aria-label={`Use ${label}`}
                 checked={enabled(id)}
-                disabled={id === 'color' && painting.kind === 'eraser'}
+                disabled={unavailable(id)}
                 onChange={(e) => setDyn(id, { enabled: e.target.checked })}
               />
             )}
@@ -760,7 +782,12 @@ export function BrushSettingsPanel() {
         ))}
         {FLAGS.map(([id, label]) => (
           <label key={id} className="brush-section brush-flag">
-            <input type="checkbox" checked={dyn[id]} onChange={(e) => setFlag(id, e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={dyn[id]}
+              disabled={unavailable(id)}
+              onChange={(e) => setFlag(id, e.target.checked)}
+            />
             {label}
           </label>
         ))}

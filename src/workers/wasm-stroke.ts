@@ -8,6 +8,7 @@ import { tileKey } from '../core/document/tile';
 import type { SampleArray } from '../core/document/pixel-format';
 import type { Dab } from '../core/paint/brush';
 import type { StrokeSetup } from '../core/paint/stroke';
+import type { MixerEnd } from '../core/paint/mixer';
 import { MaskReader } from '../core/selection/mask-ops';
 import type { BrushStroke } from '../wasm/pkg/pixel-ops-st/pixel_ops.js';
 
@@ -19,6 +20,8 @@ export interface StrokePainter {
   addSourceTiles?(tiles: readonly { tx: number; ty: number; data: SampleArray }[]): void;
   applyDabs(dabs: readonly Dab[]): Set<number>;
   tile(key: number): { tx: number; ty: number; data: SampleArray } | undefined;
+  /** Mixer Brush strokes: what the brush holds now. */
+  mixerEnd?(): MixerEnd;
   /** Frees what the painter holds (WebAssembly memory). */
   dispose?(): void;
 }

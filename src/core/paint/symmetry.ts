@@ -196,12 +196,13 @@ export function symmetryCopies(s: Symmetry): Copy[] {
 /** Every copy of the dabs (the originals first), dropping copies that fall nowhere. */
 export function applySymmetry(dabs: readonly Dab[], copies: readonly Copy[]): Dab[] {
   const out: Dab[] = [];
-  for (const copy of copies) {
+  copies.forEach((copy, i) => {
     for (const d of dabs) {
       const c = copy(d);
-      if (c) out.push(c);
+      // Mirror images say which copy they belong to (the Mixer Brush keeps paint per copy).
+      if (c) out.push(i === 0 ? c : { ...c, copy: i });
     }
-  }
+  });
   return out;
 }
 

@@ -17,6 +17,7 @@ import type { GradientFillSpec } from '../paint/gradient-fill';
 import type { BucketOptions } from '../selection/bucket';
 import type { MovePixelsSetup } from '../paint/move-pixels';
 import type { StrokeSetup } from '../paint/stroke';
+import type { EncodedPaint, MixerPreview } from '../paint/mixer';
 import type { MaskedTarget } from '../selection/masked-edits';
 import type { SelectionMode, SelectionShape } from '../selection/mask-ops';
 import type { MaskData } from '../selection/selection';
@@ -108,6 +109,13 @@ export interface PixelOps {
   ): Promise<{ data: Uint8Array; rectangular: boolean }>;
   /** The average colour of `plan` over `rect` (document channels 0–1), or null where nothing is painted. */
   sampleColor(plan: FlattenPlan, rect: Rect): Promise<number[] | null>;
+  /** Mixer Brush Alt-click: paint taken from `rect` of the image `plan` shows (see core/paint/mixer.ts). */
+  mixerLoad(
+    plan: FlattenPlan,
+    rect: Rect,
+    canvas: Rect,
+    solid: boolean,
+  ): Promise<{ paint: EncodedPaint; preview: MixerPreview }>;
   /** The exact bounds of the selected pixels within the canvas (Image > Crop); null when none are. */
   maskBounds(mask: MaskData, canvas: Rect): Promise<Rect | null>;
   /** Select > Inverse; null when nothing is left selected. */

@@ -8,6 +8,8 @@ import type { CommandDescriptor } from '../core/commands/command';
 import type { RGB } from '../core/color/color';
 import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
 import type { ArtHistoryOptions } from '../core/paint/art-history';
+import type { MixerBrushState, MixerEnd, MixerLoad, MixerOptions } from '../core/paint/mixer';
+import type { ColorMode } from '../core/document/pixel-format';
 import type { DynamicsColors } from '../core/paint/dynamics';
 import type { Symmetry } from '../core/paint/symmetry';
 import type { EyedropperOptions } from '../core/paint/sample';
@@ -207,11 +209,30 @@ export interface PaintBeginOptions {
   toHistory?: boolean;
   /** The Art History Brush's options. */
   art?: ArtHistoryOptions;
+  /** The Mixer Brush: see MixerBegin. */
+  mixer?: MixerBegin;
+}
+
+/**
+ * A Mixer Brush stroke's options, and what the brush holds as it starts (once the stroke before
+ * it has finished); `finish` is told what it ends with (null when the stroke was not recorded),
+ * once only, unless `begin` returns null.
+ */
+export interface MixerBegin {
+  options: MixerOptions;
+  state: Promise<MixerBrushState>;
+  finish(end: MixerEnd | null, mode: ColorMode): void;
 }
 
 /** Starts strokes on the active layer; null (after telling the user why) when it cannot be painted. */
 export interface PaintHost {
   begin(tool: PaintTool, brush: BrushSettings, options?: PaintBeginOptions): PaintStroke | null;
+  /**
+   * Mixer Brush Alt-click: paint from the active document within a tip of `size` at a document
+   * point (the active layer, or all visible layers; the average colour only with `solid`); null
+   * where there is no document (or its colours cannot be read yet).
+   */
+  loadMixer?(at: { x: number; y: number }, size: number, allLayers: boolean, solid: boolean): Promise<MixerLoad | null>;
 }
 
 export interface ToolContext {

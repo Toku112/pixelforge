@@ -5,16 +5,20 @@
  * (copy-on-write, capturing them for undo), sends the batch to the worker — one
  * batch at a time, later dabs waiting in a queue so painting never falls behind —
  * and marks the tiles changed so the canvas shows the stroke as it grows. When the
- * stroke ends it becomes one History step; cancelling restores the tiles.
+ * stroke ends it becomes one History step; cancelling restores the tiles. A stroke
+ * begun while the one before it on the same document is still being finished waits
+ * for it before touching any tile, so neither loses paint to the other's copies.
  *
  * Strokes from the history (History Brush, Erase to History) send the source
  * state's tiles that each batch needs along with it, once they are in memory. The
  * Art History Brush's dabs are placed here, from the pointer samples (`addPoints`),
- * once the source state can be read.
+ * once the source state can be read. A Mixer Brush stroke records what the brush held
+ * as it began and hands on what it holds at the end.
  */
 import { preparedStroke, type PaintTool, type StampPattern } from '../core/commands/builtin/paint';
 import { sourceTilesFor } from '../core/history/history-source';
 import type { ArtHistoryDabber, ArtHistoryOptions } from '../core/paint/art-history';
+import type { MixerEnd, MixerStroke } from '../core/paint/mixer';
 import { LayerTileDiff } from '../core/commands/tile-diff';
 import type { ImageDocument } from '../core/document/document';
 import type { PixelLayer } from '../core/document/layers';
@@ -38,7 +42,15 @@ export interface PaintSessionOptions {
   source?: Promise<PixelLayer> | null;
   /** Art History Brush: its options, and its dab placer once the source state can be read. */
   art?: { options: ArtHistoryOptions; dabber: Promise<ArtHistoryDabber> } | null;
+  /**
+   * Mixer Brush: what the brush starts with (once the stroke before has handed it on), and
+   * where to hand on what it holds at the end (null when the stroke was not recorded).
+   */
+  mixer?: { stroke: Promise<MixerStroke>; finish(end: MixerEnd | null): void } | null;
 }
+
+/** The stroke begun last on each document, settling once it has been recorded or cancelled. */
+const lastStroke = new WeakMap<ImageDocument, Promise<void>>();
 
 export class PaintSession implements PaintStroke {
   readonly #workspace: Workspace;
@@ -59,6 +71,9 @@ export class PaintSession implements PaintStroke {
   readonly #sourcesSent = new Set<string>();
   readonly #art: PaintSessionOptions['art'];
   #artDabber: ArtHistoryDabber | null = null;
+  readonly #mixer: PaintSessionOptions['mixer'];
+  /** What the Mixer Brush ended the recorded stroke with. */
+  #mixerEnd: MixerEnd | null = null;
   /** Art History Brush pointer samples waiting for the dab placer. */
   readonly #points: StrokePoint[] = [];
   readonly #diff: LayerTileDiff;
@@ -69,6 +84,8 @@ export class PaintSession implements PaintStroke {
   #done = false;
   /** Settles when the stroke has been recorded or cancelled (tracked by the workspace). */
   readonly #finished: Promise<void>;
+  /** Settles when the stroke before this one on the document has been recorded or cancelled. */
+  readonly #after: Promise<void>;
   #finish: () => void = () => {};
 
   constructor(
@@ -91,6 +108,8 @@ export class PaintSession implements PaintStroke {
     this.#sourceReady = options.source ?? Promise.resolve(null);
     this.#sourceReady.catch((error: unknown) => (this.#failed ??= error));
     this.#art = options.art;
+    this.#mixer = options.mixer ?? null;
+    this.#mixer?.stroke.catch((error: unknown) => (this.#failed ??= error));
     this.#art?.dabber.then(
       (dabber) => {
         this.#artDabber = dabber;
@@ -108,6 +127,8 @@ export class PaintSession implements PaintStroke {
     this.#diff = new LayerTileDiff(layer.id);
     this.#finished = new Promise((resolve) => (this.#finish = resolve));
     workspace.trackWork(this.#finished);
+    this.#after = lastStroke.get(doc) ?? Promise.resolve();
+    lastStroke.set(doc, this.#finished);
   }
 
   add(dabs: Dab[]): void {
@@ -136,6 +157,19 @@ export class PaintSession implements PaintStroke {
   #pump(): void {
     if (this.#flight || this.#queue.length === 0 || this.#failed) return;
     const dabs = this.#queue.splice(0);
+    this.#flight = this.#after
+      .then(() => this.#paint(dabs))
+      .catch((error: unknown) => {
+        this.#failed = error;
+      })
+      .finally(() => {
+        this.#flight = null;
+        this.#pump();
+      });
+  }
+
+  /** Prepares the tiles a batch reaches first, paints it in the worker and shows the changed tiles. */
+  async #paint(dabs: Dab[]): Promise<void> {
     const layer = this.#layer;
     const dual = this.#brush.dynamics?.dual;
     const coords = dabTiles(
@@ -153,29 +187,18 @@ export class PaintSession implements PaintStroke {
       this.#diff.captureBefore(this.#doc, tx, ty);
       fresh.push({ tx, ty, data: layer.buffer.writableTile(tx, ty).data });
     }
-    this.#flight = this.#sourceReady
-      .then((source) => {
-        const sources = source
-          ? sourceTilesFor(
-              source,
-              fresh.map((t) => [t.tx, t.ty] as const),
-              layer.offsetX,
-              layer.offsetY,
-              this.#sourcesSent,
-            )
-          : [];
-        return this.#live.paint(fresh, dabs, sources);
-      })
-      .then(() => {
-        for (const [tx, ty] of coords) layer.buffer.markChanged(tx, ty);
-      })
-      .catch((error: unknown) => {
-        this.#failed = error;
-      })
-      .finally(() => {
-        this.#flight = null;
-        this.#pump();
-      });
+    const source = await this.#sourceReady;
+    const sources = source
+      ? sourceTilesFor(
+          source,
+          fresh.map((t) => [t.tx, t.ty] as const),
+          layer.offsetX,
+          layer.offsetY,
+          this.#sourcesSent,
+        )
+      : [];
+    await this.#live.paint(fresh, dabs, sources);
+    for (const [tx, ty] of coords) layer.buffer.markChanged(tx, ty);
   }
 
   async #drain(): Promise<void> {
@@ -189,6 +212,7 @@ export class PaintSession implements PaintStroke {
     try {
       await this.#record(points);
     } finally {
+      this.#mixer?.finish(this.#mixerEnd);
       this.#finish();
     }
   }
@@ -200,6 +224,13 @@ export class PaintSession implements PaintStroke {
       this.#placeArt();
     }
     await this.#drain();
+    const mixerEnd =
+      this.#mixer && !this.#failed && this.#touched.size > 0
+        ? await this.#live.mixerEnd().catch((error: unknown) => {
+            this.#failed ??= error;
+            return null;
+          })
+        : null;
     this.#live.end();
     this.#diff.captureAfter(this.#doc);
     if (this.#failed) {
@@ -219,9 +250,11 @@ export class PaintSession implements PaintStroke {
       ...(this.#pattern ? { pattern: { ...this.#pattern } } : {}),
       ...(this.#toHistory ? { toHistory: true } : {}),
       ...(this.#art ? { art: { ...this.#art.options } } : {}),
+      ...(this.#mixer ? { mixer: await this.#mixer.stroke } : {}),
     };
     const diff = this.#diff;
     await this.#workspace.executePrepared(this.#doc, (ctx) => preparedStroke(ctx, params, diff));
+    this.#mixerEnd = mixerEnd;
   }
 
   /** Abandons the stroke, restoring the layer. */
@@ -235,6 +268,7 @@ export class PaintSession implements PaintStroke {
       this.#diff.captureAfter(this.#doc);
       this.#diff.undo(this.#doc);
     } finally {
+      this.#mixer?.finish(null);
       this.#finish();
     }
   }

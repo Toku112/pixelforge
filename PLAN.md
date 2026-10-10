@@ -13,14 +13,17 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 14 (History Brush Y and Art History Brush Shift+Y, the History panel's source column,
+- Last completed: Part E item 15 (Mixer Brush: reservoir and paint taken up, Wet/Load/Mix/Flow, load and clean after
+  each stroke, Alt-click loading, Load Solid Colors Only, Sample All Layers, useful combinations, Wetness and Mix
+  Jitter); item 14 (History Brush Y and Art History Brush Shift+Y, the History panel's source column,
   the Eraser's Erase to History, History contents in Edit > Fill and Ctrl/Cmd+Alt+Backspace); items 1–13 (pen input,
   tips, dynamics, texture, dual brush, wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences
   with painting cursors, smoothing, symmetry, Brushes panel, presets, brush files, Tool Presets, WebAssembly dabs,
   Eyedropper, Color and Swatches panels, Pencil and Eraser modes, Gradient tool and editor, patterns and the Pattern
   Stamp, Paint Bucket); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 15 (Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers,
-  presets)
+- Next up: Part E item 16 (brush-based retouching painters rely on: Smudge with finger painting, Blur and Sharpen
+  with protect detail, Dodge, Burn and Sponge). The Mixer Brush's renderer (core/paint/mixer.ts) already drags paint
+  dab by dab, which the Smudge tool can build on.
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -129,7 +132,8 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Brush tool (B): see B9 Brush engine
 - [x] Pencil tool: auto erase
 - [ ] Color Replacement tool: sampling (continuous/once/background swatch), limits, tolerance
-- [ ] Mixer Brush tool: wet, load, mix, flow, load after each stroke, clean after each stroke, sample all layers, presets
+- [x] Mixer Brush tool: wet, load, mix, flow, load after each stroke, clean after each stroke, sample all layers, presets
+  ↳ note: our own paint-mixing model and combination values; the brush load swatch and menu (Load Brush, Clean Brush, Load Solid Colors Only), Alt-click loading from the image; number keys set Wet/Flow/Mix (Part E item 15, D-049).
 - [x] Eraser (E): brush/pencil/block modes, erase to history
   ↳ note: Erase to History in every mode; Alt/Option when a stroke starts switches it for that stroke (D-048).
 - [ ] Background Eraser: sampling, limits, tolerance, protect foreground colour
@@ -312,8 +316,8 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
   - [x] Texture (pattern, invert, scale, brightness, contrast, texture each tip, mode, depth, jitter)
   - [x] Dual Brush
   - [x] Color Dynamics (FG/BG jitter, hue/sat/brightness jitter, purity, apply per tip)
-  - [ ] Transfer (opacity/flow/wetness/mix jitter)
-    ↳ partial: opacity and flow jitter; wetness and mix come with the Mixer Brush.
+  - [x] Transfer (opacity/flow/wetness/mix jitter)
+    ↳ note: wetness and mix jitter apply to the Mixer Brush (D-049).
   - [x] Brush Pose (override tilt/rotation/pressure)
   - [ ] Noise, Wet Edges, Build-up, Smoothing, Protect Texture
     ↳ partial: all but Protect Texture (with brush presets).
@@ -683,6 +687,7 @@ engine first, then its controls, then the tools built on it.
   ↳ note: colours compared premultiplied (all transparent pixels alike), 4-neighbour contiguity, our own anti-aliased edge; the image is composited only as far as the fill reaches; blend-mode shortcuts and number keys now set the Gradient tool's and Paint Bucket's mode and opacity (D-047, FORMAT_NOTES §13).
 - [x] History Brush (Y), Art History Brush, the History panel's source column, Eraser's Erase to History, History contents in Edit > Fill
   ↳ note: the source state is captured when chosen and falls back to the opening state when its row goes; painting needs the same layer and canvas in the source state, as in the reference app; in Normal mode pixels return to the source's, transparency included; history strokes use the TypeScript painter; the Art History Brush's strokes are our own design; snapshots stay with the History panel item (B16) (D-048, FORMAT_NOTES §14).
-- [ ] Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers, presets
+- [x] Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers, presets
+  ↳ note: our own model of wet paint (reservoir + paint taken up, per pass so spacing hardly matters), checked visually, to be compared with real output; strokes record what the brush held, so Actions replay them exactly; Sample All Layers reads the layers below plus the painted layer; mirror images have their own brush; Texture, Dual Brush, Color Dynamics and Wet Edges are greyed for it; painted by the TypeScript renderer (~1,300 px/s of travel with a 500 px brush). Also fixed: a stroke begun while the previous one was still finishing could lose the end of that stroke (D-049, FORMAT_NOTES §15).
 - [ ] Brush-based retouching that painters rely on: Smudge (finger painting), Blur and Sharpen (protect detail), Dodge, Burn and Sponge
 - [ ] Phase 2 exit test: a scripted painting session (pressure strokes, dynamics, symmetry, gradient, pattern, history brush, mixer brush) round-trips through PSD, plus the owner painting a small illustration with a tablet

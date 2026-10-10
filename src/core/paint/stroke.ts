@@ -33,6 +33,7 @@ import { MaskReader } from '../selection/mask-ops';
 import type { MaskData } from '../selection/selection';
 import type { PatternPixels } from '../pattern/pattern';
 import type { SourcePixels } from '../history/history-source';
+import type { MixerSetup } from './mixer';
 import { dabBounds, dabCoverage, type BrushMode, type Dab } from './brush';
 import {
   WET_RIM,
@@ -45,7 +46,7 @@ import {
   type TextureMode,
 } from './texture';
 
-type TipData = { width: number; height: number; data: Uint8Array };
+export type TipData = { width: number; height: number; data: Uint8Array };
 
 /** Brush Texture as the renderer needs it (the pattern as gray levels). */
 export interface StrokeTexture {
@@ -89,6 +90,8 @@ export interface StrokeSetup {
   /** History Brush and Erase to History: paints the layer as it was in a history state. */
   history?: SourcePixels | null;
   varyOpacity?: boolean;
+  /** Mixer Brush strokes: how the paint mixes, and what the brush holds as the stroke starts (core/paint/mixer.ts). */
+  mixer?: MixerSetup | null;
   /** Transparency of the layer is locked: alpha never changes. */
   lockAlpha: boolean;
   /** The layer's position in the document. */
@@ -128,13 +131,13 @@ interface TileState {
 }
 
 /** A sampled tip as a pyramid: level 0 is the tip (0–1), each next level half the size. */
-interface TipPyramid {
+export interface TipPyramid {
   levels: { w: number; h: number; data: Float32Array }[];
   /** The tip's longer side at level 0. */
   side: number;
 }
 
-function buildPyramid(tip: TipData): TipPyramid {
+export function buildPyramid(tip: TipData): TipPyramid {
   const first = new Float32Array(tip.width * tip.height);
   for (let i = 0; i < first.length; i++) first[i] = tip.data[i]! / 255;
   const levels = [{ w: tip.width, h: tip.height, data: first }];
@@ -181,6 +184,47 @@ function sampleLevel(level: { w: number; h: number; data: Float32Array }, u: num
     at(x0, y0 + 1) * (1 - fx) * fy +
     at(x0 + 1, y0 + 1) * fx * fy
   );
+}
+
+/** A sampled tip's scale at a dab (document px per tip px) and the pyramid level about one tip px per document px. */
+export function tipScale(dab: Dab, tip: TipPyramid | null): { scale: number; level: number } {
+  if (!tip) return { scale: 1, level: 0 };
+  const scale = dab.size / tip.side;
+  return { scale, level: Math.min(tip.levels.length - 1, Math.max(0, Math.floor(Math.log2(1 / scale)))) };
+}
+
+/**
+ * A tip's coverage (0–1) at offset (dx, dy) from a dab's centre (document px); `tip` null = round of
+ * `hardness`; `cos`/`sin` of the dab's angle; `aliased`: hard pixels only.
+ */
+export function tipCoverage(
+  dab: Dab,
+  tip: TipPyramid | null,
+  hardness: number,
+  aliased: boolean,
+  cos: number,
+  sin: number,
+  level: number,
+  scale: number,
+  dx: number,
+  dy: number,
+): number {
+  let u = dx * cos - dy * sin;
+  let v = dx * sin + dy * cos;
+  if (dab.flipX) u = -u;
+  if (dab.flipY) v = -v;
+  v /= dab.roundness;
+  if (!tip) {
+    const d = Math.hypot(u, v);
+    if (aliased) return d <= dab.size / 2 ? 1 : 0;
+    return dabCoverage(d, dab.size / 2, hardness);
+  }
+  // Document px → tip px at level 0, then at the chosen level.
+  const lv = tip.levels[level]!;
+  const f = 2 ** level;
+  const t0 = tip.levels[0]!;
+  const c = sampleLevel(lv, (u / scale + t0.w / 2) / f, (v / scale + t0.h / 2) / f);
+  return aliased ? (c >= 0.5 ? 1 : 0) : c;
 }
 
 export class StrokeRenderer {
@@ -315,22 +359,7 @@ export class StrokeRenderer {
     dx: number,
     dy: number,
   ): number {
-    let u = dx * cos - dy * sin;
-    let v = dx * sin + dy * cos;
-    if (dab.flipX) u = -u;
-    if (dab.flipY) v = -v;
-    v /= dab.roundness;
-    if (!tip) {
-      const d = Math.hypot(u, v);
-      if (this.#setup.aliased) return d <= dab.size / 2 ? 1 : 0;
-      return dabCoverage(d, dab.size / 2, hardness);
-    }
-    // Document px → tip px at level 0, then at the chosen level.
-    const lv = tip.levels[level]!;
-    const f = 2 ** level;
-    const t0 = tip.levels[0]!;
-    const c = sampleLevel(lv, (u / scale + t0.w / 2) / f, (v / scale + t0.h / 2) / f);
-    return this.#setup.aliased ? (c >= 0.5 ? 1 : 0) : c;
+    return tipCoverage(dab, tip, hardness, this.#setup.aliased === true, cos, sin, level, scale, dx, dy);
   }
 
   /** Paints dabs (document coordinates). Returns the keys of the tiles that changed. */
@@ -353,8 +382,7 @@ export class StrokeRenderer {
       const cos = Math.cos(a);
       const sin = Math.sin(a);
       // Sampled tips: document px per tip px, and the pyramid level that is about one tip px per document px.
-      const scale = tip ? dab.size / tip.side : 1;
-      const level = tip ? Math.min(tip.levels.length - 1, Math.max(0, Math.floor(Math.log2(1 / scale)))) : 0;
+      const { scale, level } = tipScale(dab, tip);
       // Wet Edges: the same dab shrunk by the rim on every side.
       const innerDab = s.wetEdges && !dual ? { ...dab, size: Math.max(0, dab.size * (1 - 2 * WET_RIM) - 2) } : null;
       const innerScale = tip && innerDab ? innerDab.size / tip.side : scale;
@@ -564,7 +592,8 @@ export class StrokeRenderer {
 /**
  * Whether a stroke stays within what the WebAssembly painter covers (pixel-ops `BrushStroke`):
  * Normal, Behind, Clear or erasing, without texture, dual brush, wet edges, noise, a pattern,
- * a history source, or colours and opacities that vary per dab. Others are painted by this renderer.
+ * a history source, or colours and opacities that vary per dab. Others are painted by this renderer
+ * (and Mixer Brush strokes by core/paint/mixer.ts).
  */
 export function wasmCanPaint(setup: StrokeSetup): boolean {
   return (
@@ -573,6 +602,7 @@ export function wasmCanPaint(setup: StrokeSetup): boolean {
     !setup.varyOpacity &&
     !setup.pattern &&
     !setup.history &&
+    !setup.mixer &&
     !setup.texture &&
     !setup.dual &&
     !setup.noise &&

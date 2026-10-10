@@ -1,13 +1,13 @@
 /**
- * Brush, Pencil, Eraser, Pattern Stamp, History Brush and Art History Brush strokes
- * as commands.
+ * Brush, Pencil, Eraser, Pattern Stamp, History Brush, Art History Brush and Mixer
+ * Brush strokes as commands.
  *
  * A stroke is painted live while the pointer moves (see app/paint-session.ts) and
  * then recorded with `preparedStroke`, which keeps the tile diff already made.
  * Its descriptor — the pointer samples, brush settings and colour — repaints the
  * same stroke when an Action replays it. Strokes that paint from the history (History
  * Brush, Art History Brush, Erase to History) use the document's History Brush source
- * when they are replayed.
+ * when they are replayed. Mixer Brush strokes record what the brush held as they began.
  */
 import type { ImageDocument } from '../../document/document';
 import { effectiveLocks, layerCapabilities, type PixelLayer } from '../../document/layers';
@@ -27,6 +27,8 @@ import { colorToSamples, type RGB } from '../../color/color';
 import type { PixelFormat } from '../../document/pixel-format';
 import { builtInPattern, patternGray, patternSamples, type Pattern, type PatternSource } from '../../pattern/pattern';
 import { parseSymmetry, type Symmetry } from '../../paint/symmetry';
+import { mixerBytes, parseMixerStroke, pickupSide, type MixerStroke } from '../../paint/mixer';
+import { planBelow } from '../../paint/sample';
 import { builtInTip } from '../../paint/builtin-tips';
 import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
 import {
@@ -42,7 +44,8 @@ import { CommandUnavailableError, type Command, type CommandContext, type JsonOb
 import type { CommandDefinition } from '../registry';
 import { LayerTileDiff } from '../tile-diff';
 
-export type PaintTool = 'brush' | 'pencil' | 'eraser' | 'pattern-stamp' | 'history-brush' | 'art-history-brush';
+export type PaintTool =
+  'brush' | 'pencil' | 'eraser' | 'pattern-stamp' | 'history-brush' | 'art-history-brush' | 'mixer-brush';
 
 const PAINT_TOOLS: readonly PaintTool[] = [
   'brush',
@@ -51,6 +54,7 @@ const PAINT_TOOLS: readonly PaintTool[] = [
   'pattern-stamp',
   'history-brush',
   'art-history-brush',
+  'mixer-brush',
 ];
 
 /** The Pattern Stamp's pattern: its id, where it starts repeating, and Impressionist. */
@@ -81,6 +85,8 @@ export interface StrokeParams {
   toHistory?: boolean;
   /** Art History Brush strokes: style, area and tolerance. */
   art?: ArtHistoryOptions;
+  /** Mixer Brush strokes: Wet, Load, Mix, Sample All Layers and what the brush held as the stroke began. */
+  mixer?: MixerStroke;
 }
 
 export const PAINT_LABELS: Record<PaintTool, string> = {
@@ -90,6 +96,7 @@ export const PAINT_LABELS: Record<PaintTool, string> = {
   'pattern-stamp': 'Pattern Stamp',
   'history-brush': 'History Brush',
   'art-history-brush': 'Art History Brush',
+  'mixer-brush': 'Mixer Brush',
 };
 
 /** Strokes that bring back the History Brush source's pixels (History Brush, Erase to History). */
@@ -133,6 +140,11 @@ export function paintTarget(doc: ImageDocument): PixelLayer | undefined {
   return layer?.kind === 'pixel' && layerCapabilities(layer).editPixels ? layer : undefined;
 }
 
+/** The Wet and Mix that Transfer varies per dab (Mixer Brush strokes; null for others). */
+export function mixerBase(params: Pick<StrokeParams, 'mixer'>): { wet: number; mix: number } | null {
+  return params.mixer ? { wet: params.mixer.wet, mix: params.mixer.mix } : null;
+}
+
 /** What a brush takes from the libraries: its sampled tip, the Dual Brush's tip and the Texture's pattern. */
 export interface BrushResources {
   tip: BrushTip | null;
@@ -156,6 +168,20 @@ export function brushStrokeSetup(
 ): Omit<StrokeSetup, 'lockAlpha' | 'offsetX' | 'offsetY' | 'selection'> {
   const d = brush.dynamics;
   const texture = d?.texture.enabled && res.pattern ? d.texture : null;
+  if (tool === 'mixer-brush')
+    // Its paint comes from the reservoir and the canvas: no colour, texture, dual tip or wet edges of the brush's.
+    return {
+      format,
+      color,
+      erase: false,
+      opacity: 1,
+      flow: brush.flow,
+      hardness: brush.hardness,
+      mode: 'normal',
+      tip: tipData(res.tip),
+      aliased: brush.aliased,
+      noise: !!d?.noise,
+    };
   return {
     format,
     color,
@@ -209,12 +235,25 @@ export function strokeSetup(
   params: Omit<StrokeParams, 'points' | 'stride'>,
   res: BrushResources,
 ): StrokeSetup {
+  const m = params.mixer;
   return {
     ...brushStrokeSetup(params.brush, params.tool, layer.buffer.format, params.color, res),
     lockAlpha: effectiveLocks(layer).transparency,
     offsetX: layer.offsetX,
     offsetY: layer.offsetY,
     selection: doc.selection ? { mask: doc.selection.data, canvas: doc.canvasRect } : null,
+    ...(m
+      ? {
+          mixer: {
+            ...m,
+            side: pickupSide(params.brush, res.tip !== null),
+            spacing: params.brush.spacingEnabled ? params.brush.spacing : 0.1,
+            // Sample All Layers: the image under the layer as it is now (the stroke paints only this layer).
+            below: m.sampleAllLayers ? planBelow(doc, layer) : null,
+            layerOpacity: layer.opacity * layer.fillOpacity,
+          },
+        }
+      : {}),
   };
 }
 
@@ -238,7 +277,8 @@ class PaintStrokeCommand implements Command {
   }
 
   get undoBytes(): number {
-    return this.#diff?.bytes ?? 0;
+    // Mixer Brush strokes also keep the paint the brush started with.
+    return (this.#diff?.bytes ?? 0) + (this.#params.mixer ? mixerBytes(this.#params.mixer) : 0);
   }
 
   async execute(): Promise<void> {
@@ -253,14 +293,14 @@ class PaintStrokeCommand implements Command {
       source = await this.#ctx.history.sourceLayer(layer.id);
     }
     const res: BrushResources = {
-      ...resolveBrushResources(p.brush, services.brushTips, services.patterns),
+      ...strokeResources(p.tool, p.brush, services.brushTips, services.patterns),
       stamp: resolveStamp(p.pattern, services.patterns),
     };
     // The Art History Brush reads the layer as it is now, before any of the stroke is painted.
     const dabber =
       p.tool === 'art-history-brush'
         ? new ArtHistoryDabber(p.brush, p.art ?? DEFAULT_ART_HISTORY, p.seed, artHistorySampler(source!, layer))
-        : new StrokeDabber(p.brush, p.seed, dynamicsColors(doc, p), p.symmetry ?? null);
+        : new StrokeDabber(p.brush, p.seed, dynamicsColors(doc, p), p.symmetry ?? null, mixerBase(p));
     const dabs = unpackPoints(p.points, p.stride).flatMap((q) => dabber.add(q));
     const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, res.tip !== null, res.dualTip !== null);
     if (source && paintsFromHistory(p))
@@ -334,6 +374,17 @@ function libraryTip(
   const tip = tips?.get(id) ?? builtInTip(id);
   if (!tip) throw new CommandUnavailableError(`The ${what} this stroke uses is not in the brush library`);
   return tip;
+}
+
+/** What a tool's stroke takes from the libraries: the Mixer Brush only its tip. */
+export function strokeResources(
+  tool: PaintTool,
+  brush: BrushSettings,
+  tips: { get(id: string): BrushTip | undefined } | undefined,
+  patterns: PatternSource | undefined,
+): BrushResources {
+  if (tool === 'mixer-brush') return { tip: resolveTip(brush, tips), dualTip: null, pattern: null };
+  return resolveBrushResources(brush, tips, patterns);
 }
 
 /** Everything the brush takes from the libraries (built-in patterns are always there). */
@@ -438,6 +489,7 @@ export const paintStrokeCommand: CommandDefinition = {
       ...(tool === 'pattern-stamp' ? { pattern: parseStampPattern(p['pattern']) } : {}),
       ...(tool === 'eraser' && p['toHistory'] === true ? { toHistory: true } : {}),
       ...(tool === 'art-history-brush' ? { art: parseArtHistory(p['art']) } : {}),
+      ...(tool === 'mixer-brush' ? { mixer: parseMixerStroke(p['mixer'], ctx.doc.colorChannels) } : {}),
     });
   },
 };

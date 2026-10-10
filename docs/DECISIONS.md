@@ -818,3 +818,50 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   options; Fill records `history: true`. Replayed in an Action, they paint from the History Brush source of the
   document they are replayed on.
 - History snapshots (New Snapshot) and non-linear history are left for the History panel item (PLAN B16).
+
+## D-049 — 2026-10-10 — Mixer Brush
+
+**Decision:**
+
+- The Mixer Brush (B, after the Pencil in the Brush group; Shift+B cycles Brush → Pencil → Mixer Brush) is a painting
+  tool of its own kind: a brush that holds paint. Its reservoir is filled with the foreground colour (choosing a
+  foreground colour anywhere, or Load Brush, loads it), or with Alt/Option-click with the image under the tip — the
+  active layer's own pixels, or what all visible layers show with Sample All Layers — averaged down to at most
+  256 × 256, or only its average colour with Load Solid Colors Only. Clean Brush empties the brush. Loading after each
+  stroke refills the reservoir with what it was last loaded with; cleaning after each stroke empties the reservoir and
+  what the brush took up. Both are on at first. A brush neither cleaned nor loaded carries its paint, colours taken
+  up from the canvas included, into the next stroke.
+- How wet paint mixes is our own model (FORMAT_NOTES §15), built to the reference app's description of the controls:
+  Wet = how much canvas paint the brush takes up and drags (0 %: it paints its reservoir like the Brush); Load = how
+  long the reservoir lasts (100 %: it never runs dry, so Dry at 100 % paints like the Brush); Mix = the share of
+  canvas paint in what is laid down (disabled at Wet 0 %, as in the reference app). What one dab adds is its share of
+  one pass of the whole tip over a pixel (by the distance it moved), so results hardly depend on the brush spacing;
+  the first dab counts as half a pass, so a click leaves a visible dab. Checked visually on colour stripes at 10 % and
+  25 % spacing; to be compared with real output.
+- The useful combinations are our own values in the reference app's arrangement: Dry, Moist, Wet and Very Wet (Wet 0,
+  10, 50 and 100 %), each plain (Load 50 %, Mix 50 %) and with a Light (5 %) or Heavy (100 %) Load, and the wet ones
+  with a Light (20 %) or Heavy (100 %) Mix. Our defaults (Wet 100 %, Load 50 %, Mix 50 %) match Very Wet; the menu shows
+  Custom for other values.
+- No blend mode and no opacity (the reference app has neither for this tool). Number keys set Wet, Shift+number Flow
+  and Alt/Option+Shift+number Mix, as the reference app's default shortcuts do; the blend-mode shortcuts do nothing.
+- The Mixer Brush starts with 5 % spacing: with wet paint each dab of a 25 % spaced round tip shows as a bead.
+- Brush Settings: Transfer gains Wetness Jitter and Mix Jitter (Mixer Brush only; Opacity Jitter is greyed for it);
+  .abr brushes keep theirs. Texture, Dual Brush, Color Dynamics and Wet Edges are greyed for the Mixer Brush: its paint
+  comes from the reservoir and the canvas, and these shape a whole stroke's coverage, which a brush that changes the
+  canvas dab by dab does not have. Noise applies.
+- Sample All Layers reads the visible layers under the active layer as they were when the stroke began, with the
+  active layer over them as it is being painted (Normal, at its opacity × fill). Layers above the active layer are
+  left out: they would hide the paint the brush takes up from the layer being painted.
+- With paint symmetry each mirror image has a brush of its own (a mirror image never drags the original's paint);
+  the stroke's own brush is the one carried into the next stroke.
+- A stroke records what the brush held as it began — reservoir paint, its level and the paint taken up earlier — as
+  16-bit samples (32-bit floats in 32-bit documents) in base64, so Actions replay it exactly; the live stroke starts
+  from the same decoded values. Paint taken up is kept as a square the size of the brush's largest dab; its bytes
+  count towards the History's memory. Paint from an image of another colour mode gives way to the foreground colour.
+- Mixer strokes are painted by the TypeScript renderer in the pixel worker (each dab changes what the next one takes
+  up, which the coverage-based WebAssembly painter does not do). Measured in Node: about 0.9 ms per 100 px dab and 19 ms
+  per 500 px soft dab at 5 % spacing, i.e. the brush keeps up with about 1,300 px of travel per second at 500 px;
+  moving it to WebAssembly is a later performance task.
+- Found while testing: a stroke begun while the stroke before it was still being finished could copy a tile the earlier
+  stroke was still painting, losing the end of that stroke. Every stroke on a document now waits for the one before
+  it to be recorded before touching tiles (all painting tools).

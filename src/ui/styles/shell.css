@@ -1298,6 +1298,20 @@
   min-width: 220px;
 }
 
+/* Mixer Brush: the brush load swatch (checks where the brush is clean) */
+.mixer-swatch {
+  display: block;
+  border-radius: 2px;
+  outline: 1px solid var(--border);
+  background-color: #fff;
+  background-image: conic-gradient(#ccc 25%, #fff 0 50%, #ccc 0 75%, #fff 0);
+  background-size: 8px 8px;
+}
+.mixer-load .gradient-picker-preview {
+  display: inline-flex;
+  align-items: center;
+}
+
 /* Paint symmetry menu (options bar) */
 .symmetry-menu {
   position: relative;

@@ -52,6 +52,9 @@ export function createWorkerPixelOps(worker: PixelWorkerClient): PixelOps {
     sampleColor(plan, rect) {
       return worker.sampleColor(plan, rect);
     },
+    mixerLoad(plan, rect, canvas, solid) {
+      return worker.mixerLoad(plan, rect, canvas, solid);
+    },
     maskBounds(mask, canvas) {
       return worker.maskBounds(mask, canvas);
     },

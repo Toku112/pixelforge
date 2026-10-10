@@ -19,8 +19,8 @@ import {
   dynamicsColors,
   paintTarget,
   paintsFromHistory,
-  resolveBrushResources,
   resolveStamp,
+  strokeResources,
   strokeSetup,
   usesColorDynamics,
   usesHistory,
@@ -30,6 +30,7 @@ import {
 } from '../core/commands/builtin/paint';
 import { HistorySourceError, sourcePixels, stateLayer } from '../core/history/history-source';
 import { ArtHistoryDabber, DEFAULT_ART_HISTORY } from '../core/paint/art-history';
+import { mixerStroke, type MixerLoad } from '../core/paint/mixer';
 import {
   DEFAULT_BRUSH,
   MAX_TIP_SIDE,
@@ -39,7 +40,7 @@ import {
   type BrushSettings,
   type StrokePoint,
 } from '../core/paint/brush';
-import { planFromDocument } from '../core/composite/flatten';
+import { planFromDocument, planNode, type FlattenPlan } from '../core/composite/flatten';
 import { DEFAULT_DYNAMICS } from '../core/paint/dynamics';
 import { applyPreset, presetFromBrush, type BrushBundle } from '../core/paint/presets';
 import { BRUSH_FILE_EXTENSION, readBrushFile, writeBrushFile } from '../io/brush-file';
@@ -55,7 +56,8 @@ import { PaintBucketTool } from '../tools/paint-bucket/paint-bucket-tool';
 import { PaintingTool } from '../tools/paint/paint-tool';
 import { SelectionTool } from '../tools/selection/selection-tool';
 import type { ColorHost, PaintBeginOptions, PaintHost, PaintStroke, Tool } from '../tools/types';
-import { PaintSession } from './paint-session';
+import { PaintSession, type PaintSessionOptions } from './paint-session';
+import { deferredStroke } from '../workers/stroke-client';
 import { ColorSwatches } from './colors';
 import {
   CommandCancelledError,
@@ -70,7 +72,7 @@ import { layerSource } from '../core/commands/builtin/geometry';
 import { transformTargets } from '../core/commands/builtin/transform';
 import type { Thumbnail } from '../core/composite/thumbnail';
 import { IDENTITY, invert } from '../core/geometry/transform';
-import { bytesPerSample, samplesPerPixel } from '../core/document/pixel-format';
+import { bytesPerSample, maxSampleValue, samplesPerPixel } from '../core/document/pixel-format';
 import {
   LAYER_BLEND_MODES,
   layerCapabilities,
@@ -217,7 +219,10 @@ export class AppController {
   readonly tools: ToolSet = createTools();
   readonly colors = new ColorSwatches();
   /** Starts brush/eraser strokes on the active document. */
-  readonly paintHost: PaintHost = { begin: (tool, brush, options) => this.#beginStroke(tool, brush, options) };
+  readonly paintHost: PaintHost = {
+    begin: (tool, brush, options) => this.#beginStroke(tool, brush, options),
+    loadMixer: (at, size, allLayers, solid) => this.#loadMixer(at, size, allLayers, solid),
+  };
   /** The colours, and sampling them off the active document (Eyedropper, Alt with the Brush). */
   readonly colorHost: ColorHost = {
     sample: (x, y, options) => this.#sampleColor(x, y, options),
@@ -226,7 +231,7 @@ export class AppController {
       which === 'foreground' ? this.colors.setForeground(color) : this.colors.setBackground(color),
     eyedropper: this.tools.eyedropper.options,
   };
-  #lastDigit: { digit: number; time: number; shift: boolean } | null = null;
+  #lastDigit: { digit: number; time: number; key: 'opacity' | 'flow' | 'mix' } | null = null;
   readonly keyboard: KeyboardService;
   readonly #ui: UiBridge;
   #canvas: CanvasView | null = null;
@@ -251,6 +256,14 @@ export class AppController {
     });
     this.#registerCommands();
     if (typeof window !== 'undefined') window.addEventListener('keydown', this.#onEscape, { capture: true });
+    // Choosing a foreground colour loads the Mixer Brush with it.
+    let foreground = this.colors.foreground;
+    this.colors.changes.on(() => {
+      if (this.colors.foreground === foreground) return;
+      foreground = this.colors.foreground;
+      this.tools.mixerBrush.loadForeground();
+    });
+    this.tools.mixerBrush.onMixerChange = () => this.#ui.toolOptionsChanged();
   }
 
   /** Esc while a long command runs cancels it (and does nothing else). */
@@ -304,6 +317,14 @@ export class AppController {
     else this.colors.setBackground(picked);
   }
 
+  /** The Mixer Brush's load swatch: picks a foreground colour and loads the brush with it. */
+  async pickMixerColor(): Promise<void> {
+    const picked = await this.#ui.pickColor('Color Picker (Foreground Color)', this.colors.foreground);
+    if (!picked) return;
+    this.colors.setForeground(picked);
+    this.tools.mixerBrush.loadForeground();
+  }
+
   /** The background colour as samples of a document (undefined where colours cannot be converted yet). */
   #backgroundSamples(): number[] | undefined {
     const doc = this.workspace.active?.doc;
@@ -327,6 +348,7 @@ export class AppController {
       'pattern-stamp': 'the Pattern Stamp',
       'history-brush': 'the History Brush',
       'art-history-brush': 'the Art History Brush',
+      'mixer-brush': 'the Mixer Brush',
     }[tool];
     const layer = paintTarget(doc);
     if (!layer) {
@@ -364,7 +386,7 @@ export class AppController {
     let res: BrushResources;
     try {
       res = {
-        ...resolveBrushResources(brush, this.services.brushes, this.services.patterns),
+        ...strokeResources(tool, brush, this.services.brushes, this.services.patterns),
         stamp: resolveStamp(options.pattern, this.services.patterns),
         history: restores ? sourcePixels(source!) : null,
       };
@@ -389,7 +411,21 @@ export class AppController {
       tool === 'art-history-brush'
         ? { buffer: layer.buffer.clone(), offsetX: layer.offsetX, offsetY: layer.offsetY }
         : null;
-    const live = this.services.strokes.begin(strokeSetup(doc, layer, params, res));
+    // The Mixer Brush starts once the stroke before it has handed on what the brush holds.
+    const mixerBegin = tool === 'mixer-brush' ? options.mixer : undefined;
+    let mixer: PaintSessionOptions['mixer'] = null;
+    let live;
+    if (mixerBegin) {
+      const max = maxSampleValue(doc.depth);
+      const foreground = color.map((v) => v / max);
+      const stroke = mixerBegin.state.then((state) => mixerStroke(state, mixerBegin.options, doc, foreground));
+      live = deferredStroke(
+        stroke.then((m) => this.services.strokes.begin(strokeSetup(doc, layer, { ...params, mixer: m }, res))),
+      );
+      mixer = { stroke, finish: (end) => mixerBegin.finish(end, doc.mode) };
+    } else {
+      live = this.services.strokes.begin(strokeSetup(doc, layer, params, res));
+    }
     const symmetry = doc.symmetry?.enabled && usesSymmetry(tool) ? doc.symmetry : null;
     // The source's tiles may have been moved to disk: they are read once back in memory.
     const resident = source ? session.history.sourceLayer(layer.id) : null;
@@ -410,6 +446,7 @@ export class AppController {
       toHistory: options.toHistory === true,
       source: restores ? resident : null,
       art,
+      mixer,
     });
     return {
       seed,
@@ -428,6 +465,30 @@ export class AppController {
     };
   }
 
+  /** Mixer Brush Alt-click: paint from the active document under a tip of `size` at `at` (see PaintHost.loadMixer). */
+  async #loadMixer(
+    at: { x: number; y: number },
+    size: number,
+    allLayers: boolean,
+    solid: boolean,
+  ): Promise<MixerLoad | null> {
+    const doc = this.workspace.active?.doc;
+    if (!doc || (doc.mode !== 'rgb' && doc.mode !== 'grayscale')) return null;
+    const side = Math.max(1, Math.ceil(size));
+    const rect = { x: Math.round(at.x - side / 2), y: Math.round(at.y - side / 2), w: side, h: side };
+    // The active layer's own pixels (as at full opacity), as the brush takes them up; or what all layers show.
+    const active = doc.activeLayer;
+    const plan: FlattenPlan =
+      allLayers || !active
+        ? planFromDocument(doc)
+        : {
+            ...planFromDocument(doc, []),
+            layers: [{ ...planNode(active), visible: true, opacity: 1, fillOpacity: 1, blendMode: 'normal' }],
+          };
+    const { paint, preview } = await this.services.pixelOps.mixerLoad(plan, rect, doc.canvasRect, solid);
+    return { kind: 'sample', mode: doc.mode, paint, preview };
+  }
+
   /** Whether a layer's pixel at a document point has these colour samples (and is not transparent). */
   #hasColorAt(layer: PixelLayer, at: { x: number; y: number }, color: readonly number[]): boolean {
     const x = Math.floor(at.x) - layer.offsetX;
@@ -439,6 +500,11 @@ export class AppController {
   }
 
   /** The active tool when it is the Brush or the Eraser. */
+  /** Every painting tool (brush presets may be chosen for any of them). */
+  #paintingTools(): PaintingTool[] {
+    return [...this.tools.byId.values()].filter((t): t is PaintingTool => t instanceof PaintingTool);
+  }
+
   #paintTool(): PaintingTool | null {
     const tool = this.tools.byId.get(this.#ui.activeToolId());
     return tool instanceof PaintingTool ? tool : null;
@@ -465,18 +531,31 @@ export class AppController {
    * opacity, or the opacity of the selected layers (Shift: fill) with other tools. 1 = 10 % … 0 = 100 %; two digits typed quickly
    * give a precise value ("4", "5" → 45 %; "0", "5" → 5 %).
    */
-  #numberKey(digit: number, shift: boolean): void {
+  /**
+   * Number keys: opacity (with Shift: flow) of the painting tool, the fill tools or the selected
+   * layers (Shift: fill). The Mixer Brush has Wet instead of opacity, and Mix with Alt+Shift.
+   */
+  #numberKey(digit: number, key: 'opacity' | 'flow' | 'mix'): void {
     const now = performance.now();
     const last = this.#lastDigit;
     let percent = digit === 0 ? 100 : digit * 10;
-    if (last && last.shift === shift && now - last.time < DIGIT_PAIR_MS) {
+    if (last && last.key === key && now - last.time < DIGIT_PAIR_MS) {
       percent = last.digit * 10 + digit;
       this.#lastDigit = null;
     } else {
-      this.#lastDigit = { digit, time: now, shift };
+      this.#lastDigit = { digit, time: now, key };
     }
     const value = percent / 100;
-    if (this.#paintTool()) this.#setPaintOptions(shift ? { flow: value } : { opacity: value });
+    const shift = key !== 'opacity';
+    const paint = this.#paintTool();
+    if (paint?.kind === 'mixer-brush') {
+      if (key === 'flow') this.#setPaintOptions({ flow: value });
+      else {
+        paint.setMixer(key === 'mix' ? { mix: value } : { wet: value });
+        this.#ui.toolOptionsChanged();
+      }
+    } else if (key === 'mix') return;
+    else if (paint) this.#setPaintOptions(shift ? { flow: value } : { opacity: value });
     else if (!shift && this.#fillTool()) this.#setFillToolOptions({ opacity: value });
     else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });
   }
@@ -826,7 +905,7 @@ export class AppController {
     });
     if (!ok) return;
     await this.services.brushes.removeGroup(group);
-    for (const t of [this.tools.brush, this.tools.pencil, this.tools.eraser])
+    for (const t of this.#paintingTools())
       if (t.presetId && !this.services.brushes.preset(t.presetId)) t.presetId = null;
     this.#ui.toolOptionsChanged();
   }
@@ -848,8 +927,7 @@ export class AppController {
     });
     if (!ok) return;
     await this.services.brushes.removePreset(preset.id);
-    for (const t of [this.tools.brush, this.tools.pencil, this.tools.eraser])
-      if (t.presetId === preset.id) t.presetId = null;
+    for (const t of this.#paintingTools()) if (t.presetId === preset.id) t.presetId = null;
     this.#ui.toolOptionsChanged();
   }
 
@@ -1911,13 +1989,19 @@ export class AppController {
         id: `paint.opacity${digit}`,
         label: `Opacity ${digit === 0 ? 100 : digit * 10}%`,
         enabled: () => paintTool() || ws.active !== null,
-        run: () => this.#numberKey(digit, false),
+        run: () => this.#numberKey(digit, 'opacity'),
       });
       add({
         id: `paint.flow${digit}`,
         label: `Flow ${digit === 0 ? 100 : digit * 10}%`,
         enabled: () => paintTool() || ws.active !== null,
-        run: () => this.#numberKey(digit, true),
+        run: () => this.#numberKey(digit, 'flow'),
+      });
+      add({
+        id: `paint.mix${digit}`,
+        label: `Mixer Brush Mix ${digit === 0 ? 100 : digit * 10}%`,
+        enabled: () => this.#paintTool()?.kind === 'mixer-brush',
+        run: () => this.#numberKey(digit, 'mix'),
       });
     }
 

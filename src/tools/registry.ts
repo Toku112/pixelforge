@@ -47,6 +47,7 @@ export function createTools() {
   const patternStamp = new PaintingTool('pattern-stamp');
   const historyBrush = new PaintingTool('history-brush');
   const artHistoryBrush = new PaintingTool('art-history-brush');
+  const mixerBrush = new PaintingTool('mixer-brush');
   const gradient = new GradientTool();
   const paintBucket = new PaintBucketTool();
   const groups: ToolGroup[] = [
@@ -59,7 +60,7 @@ export function createTools() {
     { id: 'lasso-group', tools: [lasso, polygonalLasso] },
     { id: 'crop-group', tools: [crop] },
     { id: 'eyedropper-group', tools: [eyedropper] },
-    { id: 'brush-group', tools: [brush, pencil] },
+    { id: 'brush-group', tools: [brush, pencil, mixerBrush] },
     { id: 'stamp-group', tools: [patternStamp] },
     { id: 'history-group', tools: [historyBrush, artHistoryBrush] },
     { id: 'eraser-group', tools: [eraser] },
@@ -91,6 +92,7 @@ export function createTools() {
     patternStamp,
     historyBrush,
     artHistoryBrush,
+    mixerBrush,
     gradient,
     paintBucket,
     groups,

@@ -279,6 +279,30 @@ const icons = {
       <path d="M3.5 8.5c0-2.8 1.7-5 3.8-5 1.6 0 2.6 1.1 2.6 2.4 0 1.1-.8 1.9-1.8 1.9-.9 0-1.5-.6-1.5-1.4" />
     </Svg>
   ),
+  mixerBrush: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M20 3.5 11.5 12" />
+      <path d="M11 11.5c1.4 1.2 1.7 3 .6 4.4-1.6 2.1-4.4 3.3-8.1 3.6 1.2-1.6 1.1-3.4 2-5 .9-1.8 3.7-4.4 5.5-3Z" />
+      <path d="M18 13.5c1.1 1.5 1.7 2.6 1.7 3.4a1.7 1.7 0 0 1-3.4 0c0-.8.6-1.9 1.7-3.4Z" />
+    </Svg>
+  ),
+  /** Load the brush after each stroke: a drop going into the brush. */
+  mixerLoad: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M14 13.5 7.5 20" />
+      <path d="M8 19.5c-1-1-1.2-2.4-.4-3.4 1.2-1.6 3.4-2.5 6.2-2.8-.9 1.2-.8 2.6-1.5 3.9-.7 1.4-2.9 3.4-4.3 2.3Z" />
+      <path d="M8 3c1.4 2 2.2 3.4 2.2 4.4a2.2 2.2 0 0 1-4.4 0C5.8 6.4 6.6 5 8 3Z" />
+      <path d="M17 4v5M14.5 6.5h5" />
+    </Svg>
+  ),
+  /** Clean the brush after each stroke: the brush in a jar of water. */
+  mixerClean: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M5 11h14l-1.4 8.2a1.6 1.6 0 0 1-1.6 1.3H8a1.6 1.6 0 0 1-1.6-1.3Z" />
+      <path d="M6 15c2 1 4-1 6 0s4 1 6 0" />
+      <path d="M14.5 3 12 13" />
+    </Svg>
+  ),
   eraser: (p: IconProps) => (
     <Svg {...p}>
       <path d="m4 15.5 9-9a2 2 0 0 1 2.8 0l3.7 3.7a2 2 0 0 1 0 2.8L13 19.5H8Z" />

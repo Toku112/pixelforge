@@ -89,6 +89,11 @@ export interface Dab {
   depth?: number;
   /** A Dual Brush dab: it masks the stroke instead of painting. */
   dual?: boolean;
+  /** Which paint symmetry copy painted the dab (absent: the stroke itself). */
+  copy?: number;
+  /** Mixer Brush: this dab's Wet and Mix (Transfer dynamics; default: the tool's). */
+  wet?: number;
+  mix?: number;
 }
 
 /** A dab where the spacer put it, with what dynamics need: the pen there, its number and the stroke direction. */

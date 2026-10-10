@@ -68,6 +68,28 @@ function upTo(nodes: readonly LayerNode[], target: LayerNode): FlattenNode[] | n
   return null;
 }
 
+/**
+ * The layers composited before `target` (bottom first): those under it, descending into the group
+ * that holds it; null when `target` is not among them.
+ */
+function before(nodes: readonly LayerNode[], target: LayerNode): FlattenNode[] | null {
+  const out: FlattenNode[] = [];
+  for (const node of nodes) {
+    if (node === target) return out;
+    if (node.kind === 'group') {
+      const inner = before(node.children, target);
+      if (inner) return [...out, { ...(planNode(node) as Extract<FlattenNode, { kind: 'group' }>), children: inner }];
+    }
+    out.push(planNode(node));
+  }
+  return null;
+}
+
+/** The visible image under a layer (what the layer is composited onto), as a flatten plan. */
+export function planBelow(doc: ImageDocument, target: LayerNode): FlattenPlan {
+  return { ...planFromDocument(doc, []), layers: before(doc.root.children, target) ?? [] };
+}
+
 /** What is sampled, as a flatten plan. */
 export function samplePlan(doc: ImageDocument, source: SampleSource): FlattenPlan {
   const active = doc.activeLayer;

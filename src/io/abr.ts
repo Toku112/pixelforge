@@ -5,7 +5,7 @@
  * codec worker.
  *
  * What we cannot paint yet is approximated and listed in `notes`: bristle and
- * erodible tips (a round tip of the same size), wetness and mix (Mixer Brush).
+ * erodible tips (a round tip of the same size).
  */
 import {
   readAbr,
@@ -188,9 +188,13 @@ function presetOf(b: AbrBrush, id: string, group: string, prefix: string, note: 
   }
   const tr = b.transfer;
   if (tr) {
-    d.transfer = { enabled: true, opacity: jitter(tr.opacityDynamics), flow: jitter(tr.flowDynamics) };
-    if (tr.wetnessDynamics.jitter > 0 || tr.mixDynamics.jitter > 0)
-      note('wetness and mix jitter wait for the Mixer Brush');
+    d.transfer = {
+      enabled: true,
+      opacity: jitter(tr.opacityDynamics),
+      flow: jitter(tr.flowDynamics),
+      wetness: jitter(tr.wetnessDynamics),
+      mix: jitter(tr.mixDynamics),
+    };
   }
   const bp = b.brushPose;
   if (bp) {

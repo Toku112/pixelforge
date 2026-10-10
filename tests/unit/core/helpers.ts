@@ -18,6 +18,7 @@ import { patternFromImage } from '../../../src/core/pattern/define-pattern';
 import { bucketMask } from '../../../src/core/selection/bucket';
 import { movePixels } from '../../../src/core/paint/move-pixels';
 import { StrokeRenderer } from '../../../src/core/paint/stroke';
+import { MixerRenderer, sampleMixerLoad } from '../../../src/core/paint/mixer';
 import { clearMasked, invertMasked } from '../../../src/core/selection/masked-edits';
 import { invertSelection, maskBounds, selectShape } from '../../../src/core/selection/mask-ops';
 import { maxSampleValue, type PixelFormat, type SampleArray } from '../../../src/core/document/pixel-format';
@@ -67,6 +68,9 @@ export const referencePixelOps: PixelOps = {
   sampleColor(plan, rect) {
     return Promise.resolve(sampleArea(plan, rect));
   },
+  mixerLoad(plan, rect, canvas, solid) {
+    return Promise.resolve(sampleMixerLoad(plan, rect, canvas, solid));
+  },
   brushTipFromImage(plan, rect, mask, canvas) {
     return Promise.resolve(tipFromImage(plan, rect, mask, canvas));
   },
@@ -99,7 +103,7 @@ export const referencePixelOps: PixelOps = {
     return Promise.resolve();
   },
   paintStroke(setup, tiles, coords, dabs) {
-    const renderer = new StrokeRenderer(setup);
+    const renderer = setup.mixer ? new MixerRenderer(setup) : new StrokeRenderer(setup);
     tiles.forEach((data, i) => renderer.addTile(coords[i]![0], coords[i]![1], data));
     renderer.applyDabs(dabs);
     return Promise.resolve();

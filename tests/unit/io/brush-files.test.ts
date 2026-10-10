@@ -139,7 +139,9 @@ describe('.abr brush files', () => {
     expect(db.transfer.flow.control).toBe('pressure');
     expect(db.transfer.opacity).toMatchObject({ jitter: 0.4, minimum: 0.1 });
     expect(result.notes.join(' ')).toMatch(/Paper/);
-    expect(result.notes.join(' ')).toMatch(/Mixer Brush/);
+    // Wetness and mix jitter are the Mixer Brush's.
+    expect(db.transfer.wetness.jitter).toBeCloseTo(0.3);
+    expect(db.transfer.mix.jitter).toBe(0);
   });
 
   it('refuses what it cannot read, saying why', () => {

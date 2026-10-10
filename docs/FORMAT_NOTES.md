@@ -521,3 +521,30 @@ are spaced into dabs by the brush (its tip, spacing and dynamics; build-up off).
 | Dab                          | 0 (one dab) | —    | —        | —             |
 | Tight Curl / Tight Curl Long | 3 / 6       | 0    | 3°       | 40            |
 | Loose Curl / Loose Curl Long | 4 / 8       | 0    | 12°      | 20            |
+
+## 15. Mixer Brush
+
+Our own model (D-049). Colours are premultiplied, 0–1 (colour may exceed 1 in 32-bit documents). Per dab: Wet w,
+Mix m (0 when w = 0), Flow f (× the dab's strength), reservoir level r (0 when empty), the dab's travel
+s = min(1, max(0.01, distance from the brush's previous dab / diameter)) — 0.5 for a stroke's first dab, the brush
+spacing for a dab that did not move.
+
+- Weights: reservoir wr = r · (1 − m) · Ra (Ra: the reservoir paint's alpha there), canvas paint wp = w · (r · m + 1 − r).
+- The brush's paint B = (wr · R̂ + wp · P) / (wr + wp), where R̂ is the reservoir colour at full alpha and P the canvas
+  paint the brush holds at that pixel of the tip; B's alpha = (wr + wp · Pa) / (wr + wp).
+- One pass lays down p = f · min(1, wr · (1 − w/2) + wp · 0.85); a dab of tip coverage c lays down
+  k = 1 − (1 − min(p, 0.999))^(c·s) (k = 1 where c = 1 and p ≥ 0.999), times the selection.
+- The pixel L (the active layer) becomes L + (B − L) · k; with locked transparency or no alpha its alpha is kept and
+  the colour is the mixed colour.
+- Taking up (w > 0): the canvas paint C (the layer, or with Sample All Layers the layer at opacity × fill over the image
+  below) after painting; P becomes P + (C − P) · (1 − 0.5^(c·s)). Where the brush holds nothing yet, P starts as C.
+- P is kept per pixel of a square centred on the tip (whole pixels: the dab's centre rounded down), which travels
+  with it: what was taken up here is laid down a step further on.
+- The reservoir runs dry with the distance painted: r becomes r · exp(−s · f · (1 − m) / D), D = 20 · Load /
+  (1.02 − Load) diameters (Load 100 %: never).
+- A reservoir loaded from the image spans the tip's diameter, read bilinearly, nothing outside it.
+
+**Recorded paint** (`mixer` in a paintStroke descriptor): Wet, Load, Mix, Sample All Layers, the level, the reservoir
+and the paint taken up, each `{ width, height, channels, encoding: 'u16' | 'f32', data, filled? }`: values per pixel
+(colour channels then alpha, premultiplied), as little-endian 16-bit values (v · 65535) or 32-bit floats, base64;
+`filled` (paint taken up) holds one byte per pixel, 1 where the brush holds paint. A 1 × 1 reservoir is one colour.

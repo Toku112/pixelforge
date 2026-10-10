@@ -3,23 +3,11 @@
  * sampled tips and patterns they use (base64). Built-in tips and patterns are left
  * out: every copy of the app has them.
  */
+import { base64ToBytes as fromBase64, bytesToBase64 as toBase64 } from '../core/base64';
 import { parsePreset, type BrushBundle } from '../core/paint/presets';
 
 export const BRUSH_FILE_FORMAT = 'pixelforge-brushes';
 export const BRUSH_FILE_EXTENSION = 'pfbrush';
-
-function toBase64(bytes: Uint8Array): string {
-  let text = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(text);
-}
-
-function fromBase64(text: string): Uint8Array {
-  const raw = atob(text);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
 
 export function writeBrushFile(bundle: BrushBundle): Uint8Array {
   const image = (i: { id: string; name: string; width: number; height: number; data: Uint8Array }) => ({

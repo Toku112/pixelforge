@@ -14,6 +14,7 @@ import { GradientTool } from '../../tools/gradient/gradient-tool';
 import { GradientOptionsBar } from './GradientOptions';
 import { PaintBucketTool } from '../../tools/paint-bucket/paint-bucket-tool';
 import { PaintBucketOptionsBar } from './PaintBucketOptions';
+import { MixerOptionsBar } from './MixerOptions';
 import { PatternPicker } from './PatternPicker';
 import { SAMPLE_SIZES, type SampleSize, type SampleSource } from '../../core/paint/sample';
 import { BrushPicker } from './BrushPicker';
@@ -424,8 +425,14 @@ const ART_HISTORY_MODES: readonly BrushMode[] = [
   'luminosity',
 ];
 
-/** Options of the Brush, Pencil, Eraser, Pattern Stamp, History Brush and Art History Brush. */
+/** Options of the painting tools (the Mixer Brush has its own bar). */
 function PaintOptions({ tool }: { tool: PaintingTool }) {
+  if (tool.kind === 'mixer-brush') return <MixerOptionsBar tool={tool} />;
+  return <BrushToolOptions tool={tool} />;
+}
+
+/** Options of the Brush, Pencil, Eraser, Pattern Stamp and the history brushes. */
+function BrushToolOptions({ tool }: { tool: PaintingTool }) {
   const controller = useController();
   const bump = useUi((s) => s.bumpToolOptions);
   useUi((s) => s.toolOptionsVersion);

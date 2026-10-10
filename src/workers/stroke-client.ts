@@ -7,6 +7,7 @@
  */
 import type { Dab } from '../core/paint/brush';
 import type { StrokeSetup } from '../core/paint/stroke';
+import type { MixerEnd } from '../core/paint/mixer';
 import { copySamples, type SampleArray } from '../core/document/pixel-format';
 import { tileKey } from '../core/document/tile';
 import type { PixelWorkerClient } from './pixel-client';
@@ -21,6 +22,8 @@ export interface LiveStroke {
     dabs: Dab[],
     sources?: { tx: number; ty: number; data: SampleArray }[],
   ): Promise<void>;
+  /** Mixer Brush strokes: what the brush holds after the dabs painted so far (null for other strokes). */
+  mixerEnd(): Promise<MixerEnd | null>;
   /** Frees the worker's state for the stroke. */
   end(): void;
 }
@@ -43,10 +46,32 @@ export function createStrokeEngine(worker: PixelWorkerClient): StrokeEngine {
           const edited = await worker.strokeDabs(id, tiles, dabs, sources);
           for (const e of edited) copySamples(arrays.get(tileKey(e.tx, e.ty))!, e.data);
         },
+        async mixerEnd() {
+          await started;
+          return worker.strokeMixerEnd(id);
+        },
         end() {
           void worker.strokeEnd(id);
         },
       };
+    },
+  };
+}
+
+/** A live stroke that begins in the worker once `started` settles (e.g. when its brush is ready). */
+export function deferredStroke(started: Promise<LiveStroke>): LiveStroke {
+  return {
+    async paint(tiles, dabs, sources) {
+      return (await started).paint(tiles, dabs, sources);
+    },
+    async mixerEnd() {
+      return (await started).mixerEnd();
+    },
+    end() {
+      void started.then(
+        (live) => live.end(),
+        () => undefined,
+      );
     },
   };
 }

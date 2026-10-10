@@ -75,3 +75,21 @@ export const BUCKET_CURSOR = iconCursor(
   20,
   20,
 );
+
+/** The Mixer Brush: the brush with a drop of paint beside it. */
+export const MIXER_CURSOR = iconCursor(
+  [
+    'M20 3.5 11.5 12',
+    'M11 11.5c1.4 1.2 1.7 3 .6 4.4-1.6 2.1-4.4 3.3-8.1 3.6 1.2-1.6 1.1-3.4 2-5 .9-1.8 3.7-4.4 5.5-3Z',
+    'M18 13.5c1.1 1.5 1.7 2.6 1.7 3.4a1.7 1.7 0 0 1-3.4 0c0-.8.6-1.9 1.7-3.4Z',
+  ],
+  3,
+  20,
+);
+
+/** Alt with the Mixer Brush: a target for loading the brush from the image; the hot spot is its centre. */
+export const MIXER_LOAD_CURSOR = iconCursor(
+  ['M12 4.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 1 0 0-15Z', 'M12 2v5M12 17v5M2 12h5M17 12h5'],
+  12,
+  12,
+);
