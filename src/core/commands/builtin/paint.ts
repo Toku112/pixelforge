@@ -1,6 +1,6 @@
 /**
  * Brush, Pencil, Eraser, Pattern Stamp, History Brush, Art History Brush, Mixer Brush,
- * Dodge, Burn and Sponge strokes as commands.
+ * Dodge, Burn, Sponge, Blur, Sharpen and Smudge strokes as commands.
  *
  * A stroke is painted live while the pointer moves (see app/paint-session.ts) and
  * then recorded with `preparedStroke`, which keeps the tile diff already made.
@@ -30,6 +30,7 @@ import { parseSymmetry, type Symmetry } from '../../paint/symmetry';
 import { mixerBytes, parseMixerStroke, pickupSide, type MixerStroke } from '../../paint/mixer';
 import { planBelow } from '../../paint/sample';
 import { parseTone, type ToneSetup } from '../../paint/tone';
+import { parseRetouch, retouchMargin, type RetouchKind, type RetouchStroke } from '../../paint/retouch';
 import { builtInTip } from '../../paint/builtin-tips';
 import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
 import {
@@ -55,7 +56,10 @@ export type PaintTool =
   | 'mixer-brush'
   | 'dodge'
   | 'burn'
-  | 'sponge';
+  | 'sponge'
+  | 'blur'
+  | 'sharpen'
+  | 'smudge';
 
 const PAINT_TOOLS: readonly PaintTool[] = [
   'brush',
@@ -68,6 +72,9 @@ const PAINT_TOOLS: readonly PaintTool[] = [
   'dodge',
   'burn',
   'sponge',
+  'blur',
+  'sharpen',
+  'smudge',
 ];
 
 /** The Pattern Stamp's pattern: its id, where it starts repeating, and Impressionist. */
@@ -102,6 +109,8 @@ export interface StrokeParams {
   mixer?: MixerStroke;
   /** Dodge, Burn and Sponge strokes: Range and Protect Tones, or Saturate and Vibrance (Exposure is the brush's Opacity). */
   tone?: ToneSetup;
+  /** Blur, Sharpen and Smudge strokes: Mode, Strength, Sample All Layers, Protect Detail or Finger Painting. */
+  retouch?: RetouchStroke;
 }
 
 export const PAINT_LABELS: Record<PaintTool, string> = {
@@ -115,7 +124,20 @@ export const PAINT_LABELS: Record<PaintTool, string> = {
   dodge: 'Dodge Tool',
   burn: 'Burn Tool',
   sponge: 'Sponge Tool',
+  blur: 'Blur Tool',
+  sharpen: 'Sharpen Tool',
+  smudge: 'Smudge Tool',
 };
+
+/** Tools that work on the pixels they pass over (Blur, Sharpen, Smudge). */
+export function isRetouchTool(tool: PaintTool): tool is RetouchKind {
+  return tool === 'blur' || tool === 'sharpen' || tool === 'smudge';
+}
+
+/** How far beyond its dabs a stroke reads the layer (px): Blur and Sharpen read around each pixel. */
+export function strokeMargin(tool: PaintTool, brush: BrushSettings): number {
+  return isRetouchTool(tool) ? retouchMargin(tool, brush) : 0;
+}
 
 /** Tools that change the tones of the pixels instead of painting (Dodge, Burn, Sponge). */
 export function isToneTool(tool: PaintTool): tool is 'dodge' | 'burn' | 'sponge' {
@@ -142,9 +164,9 @@ export function usesColorDynamics(tool: PaintTool): boolean {
   return tool === 'brush' || tool === 'pencil' || tool === 'pattern-stamp';
 }
 
-/** Tools that paint with the document's paint symmetry (not the history brushes or the tone tools). */
+/** Tools that paint with the document's paint symmetry (the painting brushes, not the history or retouching tools). */
 export function usesSymmetry(tool: PaintTool): boolean {
-  return tool !== 'history-brush' && tool !== 'art-history-brush' && !isToneTool(tool);
+  return tool !== 'history-brush' && tool !== 'art-history-brush' && !isToneTool(tool) && !isRetouchTool(tool);
 }
 
 /** What the Art History Brush reads: the source's version of the layer and the layer before the stroke. */
@@ -196,8 +218,8 @@ export function brushStrokeSetup(
 ): Omit<StrokeSetup, 'lockAlpha' | 'offsetX' | 'offsetY' | 'selection'> {
   const d = brush.dynamics;
   const texture = d?.texture.enabled && res.pattern ? d.texture : null;
-  if (tool === 'mixer-brush')
-    // Its paint comes from the reservoir and the canvas: no colour, texture, dual tip or wet edges of the brush's.
+  if (tool === 'mixer-brush' || isRetouchTool(tool))
+    // Paint from the reservoir and the canvas, or the canvas itself: no colour, texture, dual tip or wet edges.
     return {
       format,
       color,
@@ -267,10 +289,26 @@ export function strokeSetup(
   return {
     ...brushStrokeSetup(params.brush, params.tool, layer.buffer.format, params.color, res),
     ...(params.tone ? { tone: params.tone } : {}),
+    ...(params.retouch && isRetouchTool(params.tool)
+      ? {
+          retouch: {
+            ...params.retouch,
+            kind: params.tool,
+            fingerColor: params.retouch.finger
+              ? params.color.map((v) => v / maxSampleValue(layer.buffer.format.depth))
+              : null,
+            side: pickupSide(params.brush, res.tip !== null),
+            spacing: params.brush.spacingEnabled ? params.brush.spacing : 0.1,
+            below: params.retouch.sampleAllLayers ? planBelow(doc, layer) : null,
+            layerOpacity: layer.opacity * layer.fillOpacity,
+          },
+        }
+      : {}),
     lockAlpha: effectiveLocks(layer).transparency,
     offsetX: layer.offsetX,
     offsetY: layer.offsetY,
     selection: doc.selection ? { mask: doc.selection.data, canvas: doc.canvasRect } : null,
+    canvas: doc.canvasRect,
     ...(m
       ? {
           mixer: {
@@ -333,7 +371,14 @@ class PaintStrokeCommand implements Command {
         ? new ArtHistoryDabber(p.brush, p.art ?? DEFAULT_ART_HISTORY, p.seed, artHistorySampler(source!, layer))
         : new StrokeDabber(p.brush, p.seed, dynamicsColors(doc, p), p.symmetry ?? null, mixerBase(p));
     const dabs = unpackPoints(p.points, p.stride).flatMap((q) => dabber.add(q));
-    const coords = dabTiles(dabs, layer.offsetX, layer.offsetY, res.tip !== null, res.dualTip !== null);
+    const coords = dabTiles(
+      dabs,
+      layer.offsetX,
+      layer.offsetY,
+      res.tip !== null,
+      res.dualTip !== null,
+      strokeMargin(p.tool, p.brush),
+    );
     if (source && paintsFromHistory(p))
       res.history = sourcePixels(source, sourceTilesFor(source, coords, layer.offsetX, layer.offsetY));
     const diff = new LayerTileDiff(layer.id);
@@ -407,14 +452,15 @@ function libraryTip(
   return tip;
 }
 
-/** What a tool's stroke takes from the libraries: the Mixer Brush only its tip. */
+/** What a tool's stroke takes from the libraries: the Mixer Brush, Blur, Sharpen and Smudge only the tip. */
 export function strokeResources(
   tool: PaintTool,
   brush: BrushSettings,
   tips: { get(id: string): BrushTip | undefined } | undefined,
   patterns: PatternSource | undefined,
 ): BrushResources {
-  if (tool === 'mixer-brush') return { tip: resolveTip(brush, tips), dualTip: null, pattern: null };
+  if (tool === 'mixer-brush' || isRetouchTool(tool))
+    return { tip: resolveTip(brush, tips), dualTip: null, pattern: null };
   return resolveBrushResources(brush, tips, patterns);
 }
 
@@ -522,6 +568,7 @@ export const paintStrokeCommand: CommandDefinition = {
       ...(tool === 'art-history-brush' ? { art: parseArtHistory(p['art']) } : {}),
       ...(tool === 'mixer-brush' ? { mixer: parseMixerStroke(p['mixer'], ctx.doc.colorChannels) } : {}),
       ...(isToneTool(tool) ? { tone: parseTone(p['tone'], tool) } : {}),
+      ...(isRetouchTool(tool) ? { retouch: parseRetouch(p['retouch'], tool) } : {}),
     });
   },
 };

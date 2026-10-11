@@ -15,11 +15,12 @@
  * once the source state can be read. A Mixer Brush stroke records what the brush held
  * as it began and hands on what it holds at the end.
  */
-import { preparedStroke, type PaintTool, type StampPattern } from '../core/commands/builtin/paint';
+import { preparedStroke, strokeMargin, type PaintTool, type StampPattern } from '../core/commands/builtin/paint';
 import { sourceTilesFor } from '../core/history/history-source';
 import type { ArtHistoryDabber, ArtHistoryOptions } from '../core/paint/art-history';
 import type { MixerEnd, MixerStroke } from '../core/paint/mixer';
 import type { ToneSetup } from '../core/paint/tone';
+import type { RetouchStroke } from '../core/paint/retouch';
 import { LayerTileDiff } from '../core/commands/tile-diff';
 import type { ImageDocument } from '../core/document/document';
 import type { PixelLayer } from '../core/document/layers';
@@ -50,6 +51,8 @@ export interface PaintSessionOptions {
   mixer?: { stroke: Promise<MixerStroke>; finish(end: MixerEnd | null): void } | null;
   /** Dodge, Burn and Sponge: how the stroke changes tones. */
   tone?: ToneSetup | null;
+  /** Blur, Sharpen and Smudge: their settings. */
+  retouch?: RetouchStroke | null;
 }
 
 /** The stroke begun last on each document, settling once it has been recorded or cancelled. */
@@ -76,6 +79,7 @@ export class PaintSession implements PaintStroke {
   #artDabber: ArtHistoryDabber | null = null;
   readonly #mixer: PaintSessionOptions['mixer'];
   readonly #tone: ToneSetup | null;
+  readonly #retouch: RetouchStroke | null;
   /** What the Mixer Brush ended the recorded stroke with. */
   #mixerEnd: MixerEnd | null = null;
   /** Art History Brush pointer samples waiting for the dab placer. */
@@ -114,6 +118,7 @@ export class PaintSession implements PaintStroke {
     this.#art = options.art;
     this.#mixer = options.mixer ?? null;
     this.#tone = options.tone ?? null;
+    this.#retouch = options.retouch ?? null;
     this.#mixer?.stroke.catch((error: unknown) => (this.#failed ??= error));
     this.#art?.dabber.then(
       (dabber) => {
@@ -183,6 +188,7 @@ export class PaintSession implements PaintStroke {
       layer.offsetY,
       this.#brush.tip !== null,
       !!dual?.enabled && dual.tip !== null,
+      strokeMargin(this.#tool, this.#brush),
     );
     const fresh: { tx: number; ty: number; data: SampleArray }[] = [];
     for (const [tx, ty] of coords) {
@@ -257,6 +263,7 @@ export class PaintSession implements PaintStroke {
       ...(this.#art ? { art: { ...this.#art.options } } : {}),
       ...(this.#mixer ? { mixer: await this.#mixer.stroke } : {}),
       ...(this.#tone ? { tone: { ...this.#tone } } : {}),
+      ...(this.#retouch ? { retouch: { ...this.#retouch } } : {}),
     };
     const diff = this.#diff;
     await this.#workspace.executePrepared(this.#doc, (ctx) => preparedStroke(ctx, params, diff));

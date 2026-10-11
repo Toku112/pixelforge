@@ -303,6 +303,24 @@ const icons = {
       <path d="M14.5 3 12 13" />
     </Svg>
   ),
+  blur: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M12 3c3.3 4.2 5.5 7.3 5.5 10a5.5 5.5 0 0 1-11 0c0-2.7 2.2-5.8 5.5-10Z" />
+    </Svg>
+  ),
+  sharpen: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M12 21 6.5 6.5a5.5 2 0 0 1 11 0Z" />
+      <path d="M6.5 6.5a5.5 2 0 0 0 11 0" />
+    </Svg>
+  ),
+  smudge: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M5 4.5a1.4 1.4 0 0 1 2.4-1L14 10" />
+      <path d="M14 10l.5-1.2a1.5 1.5 0 0 1 2.7 1.1l-.4 1.5 1.4-.6a1.5 1.5 0 0 1 1.5 2.5L15 18.5a4 4 0 0 1-5.2.6L5.5 15" />
+      <path d="M10.5 12.5 6 8" />
+    </Svg>
+  ),
   dodge: (p: IconProps) => (
     <Svg {...p}>
       <circle cx="14" cy="8" r="5" />

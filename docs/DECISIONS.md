@@ -892,3 +892,36 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
   recorded stroke replayed on a 32-bit document is refused.
 - The strokes are painted by the TypeScript renderer in the pixel worker (the WebAssembly painter covers plain colours
   only).
+
+## D-051 — 2026-10-11 — Blur, Sharpen and Smudge
+
+**Decision:**
+
+- Blur, Sharpen and Smudge are painting tools in a toolbar group of their own after the Gradient's, with no letter
+  (none by default in the reference app either). Every dab works on what the dabs before it left, as the Mixer
+  Brush's do; their painter shares a base with it (core/paint/dab-painter.ts: tiles, selection, Sample All Layers,
+  reading and writing pixels, the tip's shape).
+- Our own model (FORMAT_NOTES §17). Blur pulls each covered pixel towards a Gaussian blur of its surroundings, whose
+  radius grows with the brush (1 px up to 6 px at 240 px and more); Sharpen pushes it away from that blur (unsharp
+  masking). Strength is the change of one dab a quarter of a diameter from the last, and dabs closer together change
+  as much per distance painted, so spacing hardly matters and painting over an area again blurs or sharpens it more.
+  Protect Detail (on at first) sharpens the luminance only, less where the difference is as small as noise, and never
+  past the brightest or darkest of the pixel's neighbours, so noise, colour fringes and halos stay down. Smudge carries
+  colour under each pixel of its tip: moving one diameter, it lays down Strength of what it carries and takes up the
+  rest from the canvas — at 100 % the colour where the stroke began is dragged all the way. Finger Painting starts
+  the stroke carrying the foreground colour. Checked visually on noisy colour stripes; to be compared with real
+  output.
+- Mode (Normal, Darken, Lighten, Hue, Saturation, Color, Luminosity; the last four in colour images only) blends the
+  result over the pixel like a layer blend mode before it is laid down, so Darken only darkens.
+- Sample All Layers reads the image under the active layer with the layer over it (as for the Mixer Brush) and puts
+  the result on the active layer.
+- Alt/Option held when a stroke starts paints it with the other of Blur and Sharpen (recorded as that tool), or with
+  Finger Painting switched, as the reference app does. Number keys set Strength. The Smudge starts with 10 % spacing:
+  it lays down whole dabs, whose edges show at wider spacing.
+- These and the Mixer Brush work only inside the canvas: pixels a layer has beyond its edge (the Background's tiles
+  reach past it, white) are neither read nor changed — otherwise they were smeared in from the edge. Blur and
+  Sharpen use the nearest canvas pixel for surroundings beyond the edge. Strokes read a margin around their dabs, so
+  those tiles are captured too.
+- Texture, Dual Brush, Color Dynamics and Wet Edges are greyed for them (as for the Mixer Brush); no paint symmetry.
+  Measured in Node (16-bit): Blur and Sharpen about 2 ms per 100 px dab and 40 ms per 500 px dab (keeping up with
+  about 3,000 px of travel per second at 25 % spacing), Smudge 0.6 and 11 ms (about 4,500 px/s at 10 % spacing).

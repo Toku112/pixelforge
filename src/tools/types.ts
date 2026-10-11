@@ -10,6 +10,7 @@ import type { BrushSettings, Dab, StrokePoint } from '../core/paint/brush';
 import type { ArtHistoryOptions } from '../core/paint/art-history';
 import type { MixerBrushState, MixerEnd, MixerLoad, MixerOptions } from '../core/paint/mixer';
 import type { ToneSetup } from '../core/paint/tone';
+import type { RetouchStroke } from '../core/paint/retouch';
 import type { ColorMode } from '../core/document/pixel-format';
 import type { DynamicsColors } from '../core/paint/dynamics';
 import type { Symmetry } from '../core/paint/symmetry';
@@ -214,6 +215,8 @@ export interface PaintBeginOptions {
   mixer?: MixerBegin;
   /** Dodge, Burn and Sponge: how the stroke changes tones. */
   tone?: ToneSetup;
+  /** Blur, Sharpen and Smudge: their settings. */
+  retouch?: RetouchStroke;
 }
 
 /**

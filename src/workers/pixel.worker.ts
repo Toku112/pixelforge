@@ -42,6 +42,7 @@ import { gradientTiles, type GradientFillSpec } from '../core/paint/gradient-fil
 import { movePixels, type MovePixelsSetup } from '../core/paint/move-pixels';
 import { StrokeRenderer, wasmCanPaint, type StrokeSetup } from '../core/paint/stroke';
 import { MixerRenderer, sampleMixerLoad, type MixerEnd } from '../core/paint/mixer';
+import { RetouchRenderer } from '../core/paint/retouch';
 import { WasmStrokeRenderer, type StrokePainter } from './wasm-stroke';
 import { selectionOutline } from '../core/selection/outline';
 import type { MaskData } from '../core/selection/selection';
@@ -149,6 +150,7 @@ const strokes = new Map<number, StrokePainter>();
 /** The WebAssembly painter where it covers the stroke, otherwise the TypeScript renderer. */
 async function strokePainter(setup: StrokeSetup): Promise<StrokePainter> {
   if (setup.mixer) return new MixerRenderer(setup);
+  if (setup.retouch) return new RetouchRenderer(setup);
   if (!wasmCanPaint(setup)) return new StrokeRenderer(setup);
   const { ops, memory } = await ready;
   return new WasmStrokeRenderer(ops.BrushStroke, setup, memory);

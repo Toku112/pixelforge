@@ -111,3 +111,24 @@ const SPONGE_PATHS = [
   'M9 10.5h.01M14 11.5h.01M11 14h.01M16 14.5h.01M8 13.5h.01',
 ];
 export const SPONGE_CURSOR = iconCursor(SPONGE_PATHS, 12, 12);
+
+/** Blur: a drop; the hot spot is its centre. */
+export const BLUR_CURSOR = iconCursor(
+  ['M12 3c3.3 4.2 5.5 7.3 5.5 10a5.5 5.5 0 0 1-11 0c0-2.7 2.2-5.8 5.5-10Z'],
+  12,
+  13,
+);
+
+/** Sharpen: a cone pointing down; the hot spot is its tip. */
+export const SHARPEN_CURSOR = iconCursor(['M12 21 6.5 6.5a5.5 2 0 0 1 11 0Z', 'M6.5 6.5a5.5 2 0 0 0 11 0'], 12, 21);
+
+/** Smudge: a pointing finger; the hot spot is its tip. */
+export const SMUDGE_CURSOR = iconCursor(
+  [
+    'M5 4.5a1.4 1.4 0 0 1 2.4-1L14 10',
+    'M14 10l.5-1.2a1.5 1.5 0 0 1 2.7 1.1l-.4 1.5 1.4-.6a1.5 1.5 0 0 1 1.5 2.5L15 18.5a4 4 0 0 1-5.2.6L5.5 15',
+    'M10.5 12.5 6 8',
+  ],
+  5,
+  4,
+);

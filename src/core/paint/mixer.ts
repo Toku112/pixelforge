@@ -37,18 +37,12 @@
 import { base64ToBytes, bytesToBase64 } from '../base64';
 import { flatten, type FlattenPlan } from '../composite/flatten';
 import type { Rect } from '../document/geometry';
-import {
-  maxSampleValue,
-  samplesPerPixel,
-  type BitDepth,
-  type ColorMode,
-  type SampleArray,
-} from '../document/pixel-format';
+import type { BitDepth, ColorMode } from '../document/pixel-format';
 import { TILE_SIZE, tileIndex, tileKey } from '../document/tile';
-import { MaskReader } from '../selection/mask-ops';
 import { averageColor, sampledToRgb } from './sample';
-import { dabBounds, dabCoverage, type BrushSettings, type Dab } from './brush';
-import { buildPyramid, tipCoverage, tipScale, type StrokeSetup, type TipPyramid } from './stroke';
+import { dabBounds, type BrushSettings, type Dab } from './brush';
+import { DabPainter } from './dab-painter';
+import type { StrokeSetup } from './stroke';
 import { addNoise } from './texture';
 
 export interface MixerOptions {
@@ -330,15 +324,6 @@ export function afterStroke(
 // Rendering (in the pixel worker)
 // ---------------------------------------------------------------------------
 
-interface MixerTile {
-  tx: number;
-  ty: number;
-  data: SampleArray;
-  selection: Uint8Array | 0 | 255;
-  /** Sample All Layers: the image under the layer at this tile (premultiplied, colour + alpha per pixel). */
-  below: Float32Array | null;
-}
-
 /** The paint one brush (the stroke's, or a mirror image's) holds. */
 interface HeldPaint {
   level: number;
@@ -358,17 +343,8 @@ const PICKUP = 0.5;
 /** How much of a pass a stroke's first dab counts as (a click lays down a dab you can see). */
 const FIRST_DAB = 0.5;
 
-export class MixerRenderer {
-  readonly #setup: StrokeSetup;
+export class MixerRenderer extends DabPainter {
   readonly #m: MixerSetup;
-  readonly #tiles = new Map<number, MixerTile>();
-  readonly #reader: MaskReader | null;
-  readonly #tip: TipPyramid | null;
-  readonly #cc: number;
-  readonly #n: number;
-  readonly #spp: number;
-  readonly #max: number;
-  readonly #q: (v: number) => number;
   readonly #reservoir: PaintPicture | null;
   readonly #start: PaintPicture | null;
   readonly #side: number;
@@ -383,17 +359,9 @@ export class MixerRenderer {
   constructor(setup: StrokeSetup) {
     const m = setup.mixer;
     if (!m) throw new Error('Mixer Brush: the stroke has no mixer settings');
-    this.#setup = setup;
+    super(setup, m.below, m.layerOpacity);
     this.#m = m;
-    this.#cc = setup.format.colorChannels;
-    this.#n = this.#cc + 1;
-    this.#spp = samplesPerPixel(setup.format);
-    this.#max = maxSampleValue(setup.format.depth);
-    const max = this.#max;
-    this.#q = setup.format.depth === 32 ? (v) => v : (v) => Math.round(Math.min(max, Math.max(0, v)));
-    this.#reader = setup.selection ? new MaskReader(setup.selection.mask) : null;
-    this.#tip = setup.tip ? buildPyramid(setup.tip) : null;
-    const fits = (p: PaintPicture) => p.channels === this.#n;
+    const fits = (p: PaintPicture) => p.channels === this.n;
     const reservoir = m.reservoir ? decodePaint(m.reservoir) : null;
     if (reservoir && !fits(reservoir)) throw new Error('Mixer Brush: the paint does not fit the layer');
     this.#reservoir = reservoir;
@@ -403,37 +371,10 @@ export class MixerRenderer {
     this.#start = start;
     this.#side = Math.max(1, m.side | 1);
     this.#half = (this.#side - 1) / 2;
-    this.#layer = new Float32Array(this.#n);
-    this.#canvas = new Float32Array(this.#n);
-    this.#res = new Float32Array(this.#n);
-    this.#out = new Float32Array(this.#n);
-  }
-
-  hasTile(tx: number, ty: number): boolean {
-    return this.#tiles.has(tileKey(tx, ty));
-  }
-
-  /** Adds a layer tile (layer tile coordinates) the stroke may paint into; `data` is written in place. */
-  addTile(tx: number, ty: number, data: SampleArray): void {
-    const key = tileKey(tx, ty);
-    if (this.#tiles.has(key)) return;
-    const s = this.#setup;
-    const below = this.#m.below;
-    this.#tiles.set(key, {
-      tx,
-      ty,
-      data,
-      selection: this.#reader ? this.#reader.layerTile(s.selection!.canvas, s.offsetX, s.offsetY, tx, ty) : 255,
-      below: below
-        ? flatten(below, { x: tx * TILE_SIZE + s.offsetX, y: ty * TILE_SIZE + s.offsetY, w: TILE_SIZE, h: TILE_SIZE })
-            .data
-        : null,
-    });
-  }
-
-  tile(key: number): { tx: number; ty: number; data: SampleArray } | undefined {
-    const t = this.#tiles.get(key);
-    return t && { tx: t.tx, ty: t.ty, data: t.data };
+    this.#layer = new Float32Array(this.n);
+    this.#canvas = new Float32Array(this.n);
+    this.#res = new Float32Array(this.n);
+    this.#out = new Float32Array(this.n);
   }
 
   /** The paint a brush holds (made from what the stroke started with). */
@@ -441,7 +382,7 @@ export class MixerRenderer {
     let held = this.#held.get(copy);
     if (held) return held;
     const side = this.#side;
-    const n = this.#n;
+    const n = this.n;
     const pickup = new Float32Array(side * side * n);
     const filled = new Uint8Array(side * side);
     const start = this.#start;
@@ -466,30 +407,10 @@ export class MixerRenderer {
     return held;
   }
 
-  /** The layer pixel `i` of `data`, premultiplied 0–1, into `out`. */
-  #read(data: SampleArray, i: number, out: Float32Array): void {
-    const cc = this.#cc;
-    const a = this.#setup.format.hasAlpha ? data[i + cc]! / this.#max : 1;
-    for (let c = 0; c < cc; c++) out[c] = (data[i + c]! / this.#max) * a;
-    out[cc] = a;
-  }
-
-  /** The canvas paint at a pixel: the layer, or with Sample All Layers the layer over the image under it. */
-  #canvasAt(layer: Float32Array, below: Float32Array | null, p: number, out: Float32Array): void {
-    const n = this.#n;
-    if (!below) {
-      out.set(layer);
-      return;
-    }
-    const op = this.#m.layerOpacity;
-    const keep = 1 - layer[n - 1]! * op;
-    for (let c = 0; c < n; c++) out[c] = layer[c]! * op + below[p * n + c]! * keep;
-  }
-
   /** The reservoir's paint at offset (dx, dy) from a dab's centre (document px), premultiplied, into `out`. */
   #reservoirAt(dab: Dab, dx: number, dy: number, out: Float32Array): void {
     const r = this.#reservoir!;
-    const n = this.#n;
+    const n = this.n;
     if (r.width === 1 && r.height === 1) {
       for (let c = 0; c < n; c++) out[c] = r.data[c]!;
       return;
@@ -513,33 +434,16 @@ export class MixerRenderer {
     add(x0 + 1, y0 + 1, fx * fy);
   }
 
-  /** Writes premultiplied paint `px` to layer pixel `i` (alpha kept where it may not change). */
-  #write(tile: MixerTile, i: number, px: Float32Array, alphaBefore: number): void {
-    const s = this.#setup;
-    const cc = this.#cc;
-    const max = this.#max;
-    const q = this.#q;
-    const out = tile.data;
-    const a = px[cc]!;
-    if (a <= 1e-7) {
-      if (s.format.hasAlpha && !s.lockAlpha) out[i + cc] = 0;
-      return;
-    }
-    for (let c = 0; c < cc; c++) out[i + c] = q((px[c]! / a) * max);
-    if (s.format.hasAlpha && !s.lockAlpha) out[i + cc] = q(a * max);
-    else if (s.format.hasAlpha) out[i + cc] = q(alphaBefore * max);
-  }
-
   /** Paints dabs (document coordinates) in order. Returns the keys of the tiles that changed. */
   applyDabs(dabs: readonly Dab[]): Set<number> {
     const changed = new Set<number>();
-    const s = this.#setup;
+    const s = this.setup;
     const m = this.#m;
-    const n = this.#n;
-    const cc = this.#cc;
+    const n = this.n;
+    const cc = this.cc;
     const side = this.#side;
     const half = this.#half;
-    const tip = this.#tip;
+    const tip = this.tip;
     const L = this.#layer;
     const C = this.#canvas;
     const R = this.#res;
@@ -571,20 +475,15 @@ export class MixerRenderer {
       let lastCov = -1;
       let covK = 0;
       let covRate = 0;
-      const radius = dab.size / 2;
-      const reach = (radius + 0.5) ** 2;
+      const shape = this.shape(dab);
       const cx = Math.floor(dab.x);
       const cy = Math.floor(dab.y);
       const b = dabBounds(dab, tip !== null);
       const lx0 = b.x - s.offsetX;
       const ly0 = b.y - s.offsetY;
-      const a = (dab.angle * Math.PI) / 180;
-      const cos = Math.cos(a);
-      const sin = Math.sin(a);
-      const { scale, level: tipLevel } = tipScale(dab, tip);
       for (let ty = tileIndex(ly0); ty <= tileIndex(ly0 + b.h - 1); ty++) {
         for (let tx = tileIndex(lx0); tx <= tileIndex(lx0 + b.w - 1); tx++) {
-          const tile = this.#tiles.get(tileKey(tx, ty));
+          const tile = this.tiles.get(tileKey(tx, ty));
           if (!tile) continue;
           const x0 = Math.max(lx0, tx * TILE_SIZE);
           const y0 = Math.max(ly0, ty * TILE_SIZE);
@@ -598,25 +497,14 @@ export class MixerRenderer {
             for (let lx = x0; lx < x1; lx++) {
               const x = lx + s.offsetX;
               const dx = x + 0.5 - dab.x;
-              let cov: number;
-              if (tip) {
-                cov = tipCoverage(dab, tip, s.hardness, s.aliased === true, cos, sin, tipLevel, scale, dx, dy);
-              } else {
-                // The round (or elliptical) tip, worked out here: most pixels of its square are quick to skip.
-                const u = dx * cos - dy * sin;
-                const v = (dx * sin + dy * cos) / dab.roundness;
-                const d2 = u * u + v * v;
-                if (d2 >= reach) continue;
-                const d = Math.sqrt(d2);
-                cov = s.aliased ? (d <= radius ? 1 : 0) : dabCoverage(d, radius, s.hardness);
-              }
-              if (cov <= 0) continue;
+              let cov = shape.at(dx, dy);
+              if (cov <= 0 || !this.inCanvas(x, y)) continue;
               if (s.noise) cov = addNoise(cov, x, y);
               if (cov <= 0) continue;
               const p = (ly - ty * TILE_SIZE) * TILE_SIZE + (lx - tx * TILE_SIZE);
-              const i = p * this.#spp;
-              this.#read(tile.data, i, L);
-              this.#canvasAt(L, tile.below, p, C);
+              const i = p * this.spp;
+              this.read(tile.data, i, L);
+              this.canvasAt(L, tile.below, p, C);
               const gx = x - cx + half;
               const g = gx >= 0 && gx < side && gy >= 0 && gy < side ? gy * side + gx : -1;
               // The canvas paint the brush holds here (taken up now where it holds none yet).
@@ -633,7 +521,7 @@ export class MixerRenderer {
                 P = held.pickup;
                 po = g * n;
               }
-              const sel = tile.selection === 255 ? 1 : tile.selection === 0 ? 0 : tile.selection[p]! / 255;
+              const sel = this.selected(tile, p);
               if (cov !== lastCov) {
                 lastCov = cov;
                 covK = solid || wr <= 0 ? dabShare(solidPass, cov, step) : 0;
@@ -661,14 +549,14 @@ export class MixerRenderer {
                 }
                 const paintAlpha = (wrPx + wp * P[po + cc]!) / total;
                 O[cc] = L[cc]! + (paintAlpha - L[cc]!) * k;
-                this.#write(tile, i, O, alphaBefore);
+                this.write(tile, i, O, alphaBefore);
                 any = true;
               }
               if (wet > 0 && g >= 0) {
                 // Taking up the canvas as it is now.
                 if (k > 0) {
-                  this.#read(tile.data, i, L);
-                  this.#canvasAt(L, tile.below, p, C);
+                  this.read(tile.data, i, L);
+                  this.canvasAt(L, tile.below, p, C);
                 }
                 const rate = covRate;
                 const o = g * n;
@@ -698,8 +586,8 @@ export class MixerRenderer {
       level: held.level,
       pickup: any
         ? encodePaint(
-            { width: this.#side, height: this.#side, channels: this.#n, data: held.pickup, filled: held.filled },
-            paintEncoding(this.#setup.format.depth),
+            { width: this.#side, height: this.#side, channels: this.n, data: held.pickup, filled: held.filled },
+            paintEncoding(this.setup.format.depth),
           )
         : null,
     };

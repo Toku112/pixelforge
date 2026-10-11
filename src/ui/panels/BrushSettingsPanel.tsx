@@ -243,9 +243,11 @@ export function BrushSettingsPanel() {
   // The Mixer Brush's paint comes from its reservoir and the canvas: no colour, texture, dual tip or wet edges.
   const mixer = painting.kind === 'mixer-brush';
   const tone = painting.kind === 'dodge' || painting.kind === 'burn' || painting.kind === 'sponge';
+  // Blur, Sharpen and Smudge change the canvas dab by dab, like the Mixer Brush.
+  const dabByDab = mixer || painting.kind === 'blur' || painting.kind === 'sharpen' || painting.kind === 'smudge';
   const unavailable = (s: Section | Flag) =>
-    (s === 'color' && (painting.kind === 'eraser' || mixer || tone)) ||
-    (mixer && (s === 'texture' || s === 'dual' || s === 'wetEdges'));
+    (s === 'color' && (painting.kind === 'eraser' || dabByDab || tone)) ||
+    (dabByDab && (s === 'texture' || s === 'dual' || s === 'wetEdges'));
   const tips = controller.services.brushes.list();
   const currentTip = o.tip ? (controller.services.brushes.get(o.tip) ?? null) : null;
   const tex = dyn.texture;

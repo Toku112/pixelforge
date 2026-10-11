@@ -40,6 +40,9 @@
  *   their Range by Exposure; Alt/Option held when a stroke starts switches between them for
  *   that stroke. The Sponge saturates or desaturates (core/paint/tone.ts). None paints with
  *   paint symmetry.
+ * - Blur, Sharpen and Smudge (no letter; the group after the Gradient's) work on the pixels
+ *   they pass over (core/paint/retouch.ts). Alt/Option held when a stroke starts switches
+ *   between Blur and Sharpen, or Finger Painting on or off for the Smudge, for that stroke.
  * - The Mixer Brush mixes its paint with the canvas (core/paint/mixer.ts). Alt/Option-click
  *   loads it with the image under the tip; choosing a foreground colour loads that colour.
  *   What it holds carries from stroke to stroke unless it is cleaned and loaded after each.
@@ -47,6 +50,7 @@
 import { usesSymmetry, type PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_PATTERN_ID } from '../../core/pattern/pattern';
 import { DEFAULT_ART_HISTORY, type ArtHistoryOptions } from '../../core/paint/art-history';
+import { DEFAULT_RETOUCH, RETOUCH_MODES, type RetouchOptions } from '../../core/paint/retouch';
 import {
   DEFAULT_DODGE,
   DEFAULT_SPONGE,
@@ -84,15 +88,18 @@ import {
 } from '../types';
 import {
   ART_HISTORY_CURSOR,
+  BLUR_CURSOR,
   BRUSH_CURSOR,
-  ERASER_CURSOR,
-  EYEDROPPER_CURSOR,
   BURN_CURSOR,
   DODGE_CURSOR,
+  ERASER_CURSOR,
+  EYEDROPPER_CURSOR,
   HISTORY_BRUSH_CURSOR,
   MIXER_CURSOR,
-  SPONGE_CURSOR,
   MIXER_LOAD_CURSOR,
+  SHARPEN_CURSOR,
+  SMUDGE_CURSOR,
+  SPONGE_CURSOR,
   STAMP_CURSOR,
 } from './cursors';
 import { ColorSampler } from '../eyedropper/sampler';
@@ -127,6 +134,9 @@ const TOOL_NAMES: Record<PaintTool, string> = {
   dodge: 'Dodge Tool',
   burn: 'Burn Tool',
   sponge: 'Sponge Tool',
+  blur: 'Blur Tool',
+  sharpen: 'Sharpen Tool',
+  smudge: 'Smudge Tool',
 };
 
 const TOOL_KEYS: Record<PaintTool, string> = {
@@ -140,6 +150,10 @@ const TOOL_KEYS: Record<PaintTool, string> = {
   dodge: 'O',
   burn: 'O',
   sponge: 'O',
+  // No letter by default.
+  blur: '',
+  sharpen: '',
+  smudge: '',
 };
 
 const STANDARD_CURSORS: Record<PaintTool, string> = {
@@ -153,6 +167,9 @@ const STANDARD_CURSORS: Record<PaintTool, string> = {
   dodge: DODGE_CURSOR,
   burn: BURN_CURSOR,
   sponge: SPONGE_CURSOR,
+  blur: BLUR_CURSOR,
+  sharpen: SHARPEN_CURSOR,
+  smudge: SMUDGE_CURSOR,
 };
 
 export class PaintingTool implements Tool {
@@ -181,6 +198,8 @@ export class PaintingTool implements Tool {
   readonly tone: DodgeOptions = { ...DEFAULT_DODGE };
   /** Sponge: Saturate or Desaturate, and Vibrance (its Flow is the brush's). */
   readonly sponge: SpongeOptions = { ...DEFAULT_SPONGE };
+  /** Blur, Sharpen and Smudge: Mode, Strength, Sample All Layers, Protect Detail, Finger Painting. */
+  readonly retouch: RetouchOptions = { ...DEFAULT_RETOUCH };
   /** Mixer Brush: Wet, Load, Mix, Sample All Layers, loading and cleaning after each stroke. */
   readonly mixer: MixerOptions = { ...DEFAULT_MIXER };
   /** Mixer Brush: what the brush holds (it may lag behind a stroke still finishing). */
@@ -220,6 +239,8 @@ export class PaintingTool implements Tool {
       ...(kind === 'mixer-brush' ? { spacing: 0.05 } : {}),
       // The Sponge works at half flow at first.
       ...(kind === 'sponge' ? { flow: 0.5 } : {}),
+      // The Smudge lays down whole dabs: closely spaced, their edges do not show.
+      ...(kind === 'smudge' ? { spacing: 0.1 } : {}),
       aliased: kind === 'pencil',
       dynamics: structuredClone(DEFAULT_DYNAMICS),
     };
@@ -259,11 +280,20 @@ export class PaintingTool implements Tool {
     Object.assign(this.sponge, changes);
   }
 
-  /** The tool a stroke paints as: Alt/Option switches between Dodge and Burn. */
+  setRetouch(changes: Partial<RetouchOptions>): void {
+    Object.assign(this.retouch, changes);
+  }
+
+  /** The tool a stroke paints as: Alt/Option switches between Dodge and Burn, and between Blur and Sharpen. */
   #strokeKind(altKey: boolean): PaintTool {
-    if (altKey && this.kind === 'dodge') return 'burn';
-    if (altKey && this.kind === 'burn') return 'dodge';
-    return this.kind;
+    if (!altKey) return this.kind;
+    const other: Partial<Record<PaintTool, PaintTool>> = {
+      dodge: 'burn',
+      burn: 'dodge',
+      blur: 'sharpen',
+      sharpen: 'blur',
+    };
+    return other[this.kind] ?? this.kind;
   }
 
   /** Changes what the Mixer Brush holds, after any stroke still finishing has handed it on. */
@@ -379,6 +409,7 @@ export class PaintingTool implements Tool {
         mixer: this.mixer,
         tone: this.tone,
         sponge: this.sponge,
+        retouch: this.retouch,
       }),
     );
   }
@@ -397,6 +428,7 @@ export class PaintingTool implements Tool {
       mixer?: Partial<MixerOptions>;
       tone?: Partial<DodgeOptions>;
       sponge?: Partial<SpongeOptions>;
+      retouch?: Partial<RetouchOptions>;
     };
     if (o.brush) this.setOptions(JSON.parse(JSON.stringify(o.brush)) as Partial<BrushSettings>);
     if (o.smoothing) this.setSmoothing(o.smoothing);
@@ -436,6 +468,13 @@ export class PaintingTool implements Tool {
     if (o.sponge) {
       if (typeof o.sponge.saturate === 'boolean') this.sponge.saturate = o.sponge.saturate;
       if (typeof o.sponge.vibrance === 'boolean') this.sponge.vibrance = o.sponge.vibrance;
+    }
+    if (o.retouch) {
+      const r = o.retouch;
+      if (RETOUCH_MODES.some(([m]) => m === r.mode)) this.retouch.mode = r.mode!;
+      if (typeof r.strength === 'number') this.retouch.strength = Math.min(1, Math.max(0.01, r.strength));
+      for (const key of ['sampleAllLayers', 'protectDetail', 'fingerPainting'] as const)
+        if (typeof r[key] === 'boolean') this.retouch[key] = r[key];
     }
     this.presetId = null;
   }
@@ -659,6 +698,20 @@ export class PaintingTool implements Tool {
         };
       case 'sponge':
         return { tone: { kind: 'sponge', saturate: this.sponge.saturate, vibrance: this.sponge.vibrance } };
+      case 'blur':
+      case 'sharpen':
+      case 'smudge': {
+        const r = this.retouch;
+        return {
+          retouch: {
+            mode: r.mode,
+            strength: r.strength,
+            sampleAllLayers: r.sampleAllLayers,
+            ...(kind === 'sharpen' ? { protectDetail: r.protectDetail } : {}),
+            ...(kind === 'smudge' ? { finger: r.fingerPainting !== altKey } : {}),
+          },
+        };
+      }
       case 'pencil':
         return this.autoErase ? { autoEraseAt: at } : undefined;
       case 'eraser':

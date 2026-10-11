@@ -37,6 +37,7 @@ import type { PatternPixels } from '../pattern/pattern';
 import type { SourcePixels } from '../history/history-source';
 import type { MixerSetup } from './mixer';
 import { applyTone, type ToneSetup } from './tone';
+import type { RetouchSetup } from './retouch';
 import { dabBounds, dabCoverage, type BrushMode, type Dab } from './brush';
 import {
   WET_RIM,
@@ -97,6 +98,8 @@ export interface StrokeSetup {
   mixer?: MixerSetup | null;
   /** Dodge, Burn and Sponge strokes: how they change tones (the stroke's Opacity is their Exposure). */
   tone?: ToneSetup | null;
+  /** Blur, Sharpen and Smudge strokes (core/paint/retouch.ts). */
+  retouch?: RetouchSetup | null;
   /** Transparency of the layer is locked: alpha never changes. */
   lockAlpha: boolean;
   /** The layer's position in the document. */
@@ -104,6 +107,8 @@ export interface StrokeSetup {
   offsetY: number;
   /** Painting is limited to the selection, when there is one. */
   selection: { mask: MaskData; canvas: Rect } | null;
+  /** The document's canvas: painters that take paint up from the layer work only inside it (absent: anywhere). */
+  canvas?: Rect;
 }
 
 /** The Pattern Stamp's pattern. */
@@ -611,7 +616,7 @@ export class StrokeRenderer {
  * Whether a stroke stays within what the WebAssembly painter covers (pixel-ops `BrushStroke`):
  * Normal, Behind, Clear or erasing, without texture, dual brush, wet edges, noise, a pattern,
  * a history source, or colours and opacities that vary per dab. Others are painted by this renderer
- * (and Mixer Brush strokes by core/paint/mixer.ts).
+ * (and Mixer Brush strokes by core/paint/mixer.ts, Blur, Sharpen and Smudge by retouch.ts).
  */
 export function wasmCanPaint(setup: StrokeSetup): boolean {
   return (
@@ -622,6 +627,7 @@ export function wasmCanPaint(setup: StrokeSetup): boolean {
     !setup.history &&
     !setup.mixer &&
     !setup.tone &&
+    !setup.retouch &&
     !setup.texture &&
     !setup.dual &&
     !setup.noise &&
@@ -630,21 +636,27 @@ export function wasmCanPaint(setup: StrokeSetup): boolean {
   );
 }
 
-/** Layer tiles (layer tile coordinates) the dabs touch (`sampled` / `dualSampled`: the tips are images). */
+/**
+ * Layer tiles (layer tile coordinates) the dabs touch (`sampled` / `dualSampled`: the tips are images;
+ * `margin`: px around each dab that the stroke reads too).
+ */
 export function dabTiles(
   dabs: readonly Dab[],
   offsetX: number,
   offsetY: number,
   sampled = false,
   dualSampled = false,
+  margin = 0,
 ): [number, number][] {
   const out = new Map<number, [number, number]>();
   for (const dab of dabs) {
     const b = dabBounds(dab, dab.dual ? dualSampled : sampled);
-    const x0 = b.x - offsetX;
-    const y0 = b.y - offsetY;
-    for (let ty = tileIndex(y0); ty <= tileIndex(y0 + b.h - 1); ty++)
-      for (let tx = tileIndex(x0); tx <= tileIndex(x0 + b.w - 1); tx++) out.set(tileKey(tx, ty), [tx, ty]);
+    const x0 = b.x - offsetX - margin;
+    const y0 = b.y - offsetY - margin;
+    const w = b.w + 2 * margin;
+    const h = b.h + 2 * margin;
+    for (let ty = tileIndex(y0); ty <= tileIndex(y0 + h - 1); ty++)
+      for (let tx = tileIndex(x0); tx <= tileIndex(x0 + w - 1); tx++) out.set(tileKey(tx, ty), [tx, ty]);
   }
   return [...out.values()];
 }

@@ -568,3 +568,26 @@ colour samples as they were before the stroke, 0–1; alpha does not change.
 
 **Recorded** (`tone` in a paintStroke descriptor): Dodge and Burn `{ range, protect }`, the Sponge
 `{ saturate, vibrance }`; the brush's `opacity` is the Exposure (Dodge, Burn), its `flow` the Sponge's Flow.
+
+## 17. Blur, Sharpen and Smudge
+
+Our own model (D-051). Premultiplied values 0–1; every dab works on the layer as the dabs before it left it. The
+canvas C at a pixel is the layer, or with Sample All Layers the layer at its opacity × fill over the image under it.
+A dab's travel s is the distance from the previous dab in diameters (0.25 for the first; the spacing for a dab that
+did not move; at most 1). Only canvas pixels change.
+
+- Blur and Sharpen, Strength S, coverage c: k = 1 − (1 − S)^(c · s / 0.25) (S ≥ 0.999 and c = 1: k = 1), times the
+  selection. B is C blurred by a separable Gaussian of radius r = clamp(round(D / 40), 1, 6) (D: dab diameter),
+  σ = max(0.7, r / 1.5), from the canvas around the dab before it (beyond the canvas edge: the nearest canvas pixel).
+- Blur's target T = B. Sharpen's T = C + (C − B) per channel (alpha too), clamped to 0–alpha (no upper clamp in 32-bit).
+  With Protect Detail: d = the luminance (0.3, 0.59, 0.11; one channel: itself) of the straight colour difference
+  C/a − B/b; m = (|d|/0.02)² when |d| < 0.02, else 1; every colour channel T = clamp(C + d · a · m, min, max of the
+  pixel's 3 × 3 neighbours in that channel); alpha stays.
+- Smudge, Strength S: the colour A carried under each pixel of the tip starts as the canvas there (or the foreground
+  colour, opaque, with Finger Painting); at every later dab A becomes A + (C − A) · (1 − S^(c · s)) before it is laid
+  down with k = 1 − (1 − S)^(c · s) (S ≥ 0.999 and c = 1: k = 1), T = A.
+- Mode: T's straight colour is blended over the pixel's like a layer of that mode (§3); its alpha is T's.
+- The pixel L becomes L + (T − L) · k; with locked transparency or no alpha its alpha is kept.
+
+**Recorded** (`retouch` in a paintStroke descriptor): `{ mode, strength, sampleAllLayers, protectDetail? (Sharpen),
+finger? (Smudge) }`; Finger Painting's colour is the stroke's `color`.

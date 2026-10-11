@@ -16,6 +16,7 @@ import { PaintBucketTool } from '../../tools/paint-bucket/paint-bucket-tool';
 import { PaintBucketOptionsBar } from './PaintBucketOptions';
 import { MixerOptionsBar } from './MixerOptions';
 import { DodgeOptionsBar, SpongeOptionsBar } from './ToneOptions';
+import { RetouchOptionsBar } from './RetouchOptions';
 import { PatternPicker } from './PatternPicker';
 import { SAMPLE_SIZES, type SampleSize, type SampleSource } from '../../core/paint/sample';
 import { BrushPicker } from './BrushPicker';
@@ -431,6 +432,8 @@ function PaintOptions({ tool }: { tool: PaintingTool }) {
   if (tool.kind === 'mixer-brush') return <MixerOptionsBar tool={tool} />;
   if (tool.kind === 'dodge' || tool.kind === 'burn') return <DodgeOptionsBar tool={tool} />;
   if (tool.kind === 'sponge') return <SpongeOptionsBar tool={tool} />;
+  if (tool.kind === 'blur' || tool.kind === 'sharpen' || tool.kind === 'smudge')
+    return <RetouchOptionsBar tool={tool} />;
   return <BrushToolOptions tool={tool} />;
 }
 
