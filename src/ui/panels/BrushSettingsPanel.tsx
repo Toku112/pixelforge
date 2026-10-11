@@ -242,8 +242,9 @@ export function BrushSettingsPanel() {
   const enabled = (s: Section) => s !== 'tip' && dyn[s].enabled;
   // The Mixer Brush's paint comes from its reservoir and the canvas: no colour, texture, dual tip or wet edges.
   const mixer = painting.kind === 'mixer-brush';
+  const tone = painting.kind === 'dodge' || painting.kind === 'burn' || painting.kind === 'sponge';
   const unavailable = (s: Section | Flag) =>
-    (s === 'color' && (painting.kind === 'eraser' || mixer)) ||
+    (s === 'color' && (painting.kind === 'eraser' || mixer || tone)) ||
     (mixer && (s === 'texture' || s === 'dual' || s === 'wetEdges'));
   const tips = controller.services.brushes.list();
   const currentTip = o.tip ? (controller.services.brushes.get(o.tip) ?? null) : null;

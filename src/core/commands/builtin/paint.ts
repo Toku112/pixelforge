@@ -1,6 +1,6 @@
 /**
- * Brush, Pencil, Eraser, Pattern Stamp, History Brush, Art History Brush and Mixer
- * Brush strokes as commands.
+ * Brush, Pencil, Eraser, Pattern Stamp, History Brush, Art History Brush, Mixer Brush,
+ * Dodge, Burn and Sponge strokes as commands.
  *
  * A stroke is painted live while the pointer moves (see app/paint-session.ts) and
  * then recorded with `preparedStroke`, which keeps the tile diff already made.
@@ -29,6 +29,7 @@ import { builtInPattern, patternGray, patternSamples, type Pattern, type Pattern
 import { parseSymmetry, type Symmetry } from '../../paint/symmetry';
 import { mixerBytes, parseMixerStroke, pickupSide, type MixerStroke } from '../../paint/mixer';
 import { planBelow } from '../../paint/sample';
+import { parseTone, type ToneSetup } from '../../paint/tone';
 import { builtInTip } from '../../paint/builtin-tips';
 import { StrokeDabber, parseDynamics, type DynamicsColors } from '../../paint/dynamics';
 import {
@@ -45,7 +46,16 @@ import type { CommandDefinition } from '../registry';
 import { LayerTileDiff } from '../tile-diff';
 
 export type PaintTool =
-  'brush' | 'pencil' | 'eraser' | 'pattern-stamp' | 'history-brush' | 'art-history-brush' | 'mixer-brush';
+  | 'brush'
+  | 'pencil'
+  | 'eraser'
+  | 'pattern-stamp'
+  | 'history-brush'
+  | 'art-history-brush'
+  | 'mixer-brush'
+  | 'dodge'
+  | 'burn'
+  | 'sponge';
 
 const PAINT_TOOLS: readonly PaintTool[] = [
   'brush',
@@ -55,6 +65,9 @@ const PAINT_TOOLS: readonly PaintTool[] = [
   'history-brush',
   'art-history-brush',
   'mixer-brush',
+  'dodge',
+  'burn',
+  'sponge',
 ];
 
 /** The Pattern Stamp's pattern: its id, where it starts repeating, and Impressionist. */
@@ -87,6 +100,8 @@ export interface StrokeParams {
   art?: ArtHistoryOptions;
   /** Mixer Brush strokes: Wet, Load, Mix, Sample All Layers and what the brush held as the stroke began. */
   mixer?: MixerStroke;
+  /** Dodge, Burn and Sponge strokes: Range and Protect Tones, or Saturate and Vibrance (Exposure is the brush's Opacity). */
+  tone?: ToneSetup;
 }
 
 export const PAINT_LABELS: Record<PaintTool, string> = {
@@ -97,7 +112,20 @@ export const PAINT_LABELS: Record<PaintTool, string> = {
   'history-brush': 'History Brush',
   'art-history-brush': 'Art History Brush',
   'mixer-brush': 'Mixer Brush',
+  dodge: 'Dodge Tool',
+  burn: 'Burn Tool',
+  sponge: 'Sponge Tool',
 };
+
+/** Tools that change the tones of the pixels instead of painting (Dodge, Burn, Sponge). */
+export function isToneTool(tool: PaintTool): tool is 'dodge' | 'burn' | 'sponge' {
+  return tool === 'dodge' || tool === 'burn' || tool === 'sponge';
+}
+
+/** Why a tool cannot paint a document, or null when it can (Dodge, Burn and Sponge do not work on 32-bit images). */
+export function paintToolUnavailable(tool: PaintTool, doc: Pick<ImageDocument, 'depth'>): string | null {
+  return isToneTool(tool) && doc.depth === 32 ? 'It does not work on 32-bit images.' : null;
+}
 
 /** Strokes that bring back the History Brush source's pixels (History Brush, Erase to History). */
 export function paintsFromHistory(params: { tool: PaintTool; toHistory?: boolean }): boolean {
@@ -114,9 +142,9 @@ export function usesColorDynamics(tool: PaintTool): boolean {
   return tool === 'brush' || tool === 'pencil' || tool === 'pattern-stamp';
 }
 
-/** Tools that paint with the document's paint symmetry (not the history brushes). */
+/** Tools that paint with the document's paint symmetry (not the history brushes or the tone tools). */
 export function usesSymmetry(tool: PaintTool): boolean {
-  return tool !== 'history-brush' && tool !== 'art-history-brush';
+  return tool !== 'history-brush' && tool !== 'art-history-brush' && !isToneTool(tool);
 }
 
 /** What the Art History Brush reads: the source's version of the layer and the layer before the stroke. */
@@ -238,6 +266,7 @@ export function strokeSetup(
   const m = params.mixer;
   return {
     ...brushStrokeSetup(params.brush, params.tool, layer.buffer.format, params.color, res),
+    ...(params.tone ? { tone: params.tone } : {}),
     lockAlpha: effectiveLocks(layer).transparency,
     offsetX: layer.offsetX,
     offsetY: layer.offsetY,
@@ -287,6 +316,8 @@ class PaintStrokeCommand implements Command {
     const layer = paintTarget(doc);
     if (!layer) throw new CommandUnavailableError('Painting needs an editable pixel layer');
     const p = this.#params;
+    const unavailable = paintToolUnavailable(p.tool, doc);
+    if (unavailable) throw new CommandUnavailableError(`${PAINT_LABELS[p.tool]}: ${unavailable}`);
     let source: PixelLayer | null = null;
     if (usesHistory(p)) {
       if (!this.#ctx.history) throw new CommandUnavailableError('There is no history to paint from');
@@ -490,6 +521,7 @@ export const paintStrokeCommand: CommandDefinition = {
       ...(tool === 'eraser' && p['toHistory'] === true ? { toHistory: true } : {}),
       ...(tool === 'art-history-brush' ? { art: parseArtHistory(p['art']) } : {}),
       ...(tool === 'mixer-brush' ? { mixer: parseMixerStroke(p['mixer'], ctx.doc.colorChannels) } : {}),
+      ...(isToneTool(tool) ? { tone: parseTone(p['tone'], tool) } : {}),
     });
   },
 };

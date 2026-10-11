@@ -865,3 +865,30 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
 - Found while testing: a stroke begun while the stroke before it was still being finished could copy a tile the earlier
   stroke was still painting, losing the end of that stroke. Every stroke on a document now waits for the one before
   it to be recorded before touching tiles (all painting tools).
+
+## D-050 — 2026-10-11 — Dodge, Burn and Sponge
+
+**Decision:**
+
+- Dodge, Burn and Sponge (O; Shift+O cycles) are painting tools whose strokes change the tones of the pixels instead
+  of painting a colour. They use the brush engine's coverage model: a stroke's amount at a pixel is Exposure (Dodge,
+  Burn) or 100 % (Sponge) times the stroke's coverage there, built up dab by dab with Flow, and the pixel is recomputed
+  from its value before the stroke. So one stroke never goes past its Exposure however often it crosses itself, and a
+  new stroke builds on the last — as a brush's Opacity behaves. Texture, Dual Brush, Wet Edges, Noise, Transfer,
+  build-up and smoothing all apply; Color Dynamics is greyed. No paint symmetry (the reference app offers it for the
+  painting brushes only).
+- The tone curves are our own (FORMAT_NOTES §16): each range weights tones (shadows (1 − v)², midtones 4v(1 − v),
+  highlights v²) and Dodge moves a tone towards white, Burn towards black, by half that weight at full amount.
+  Protect Tones changes the luminance only and keeps the colour's hue without clipping (Dodge scales the distance to
+  white, Burn the distance to black, of every channel alike); without it each channel is changed by its own tone, so
+  hues shift. Sponge moves colours away from (Saturate) or towards (Desaturate) their gray, by up to 75 % at full
+  amount; Vibrance gives saturated colours less saturation and nearly gray ones less desaturation, and keeps
+  saturating colours from clipping. In Grayscale the Sponge raises or lowers contrast around middle gray. To be compared
+  with real output.
+- Alt/Option held when a stroke starts paints that stroke as the other of Dodge and Burn, with the tool's own Range
+  and Exposure; it is recorded as that tool ("Burn Tool"). Number keys set Exposure (Dodge, Burn) or Flow (Sponge).
+- Defaults: Midtones, Exposure 50 %, Protect Tones on; Sponge Desaturate, Flow 50 %, Vibrance on.
+- They do not work on 32-bit images (as in the reference app): the tool explains this instead of painting, and a
+  recorded stroke replayed on a 32-bit document is refused.
+- The strokes are painted by the TypeScript renderer in the pixel worker (the WebAssembly painter covers plain colours
+  only).

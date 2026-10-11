@@ -15,6 +15,7 @@ import { GradientOptionsBar } from './GradientOptions';
 import { PaintBucketTool } from '../../tools/paint-bucket/paint-bucket-tool';
 import { PaintBucketOptionsBar } from './PaintBucketOptions';
 import { MixerOptionsBar } from './MixerOptions';
+import { DodgeOptionsBar, SpongeOptionsBar } from './ToneOptions';
 import { PatternPicker } from './PatternPicker';
 import { SAMPLE_SIZES, type SampleSize, type SampleSource } from '../../core/paint/sample';
 import { BrushPicker } from './BrushPicker';
@@ -428,6 +429,8 @@ const ART_HISTORY_MODES: readonly BrushMode[] = [
 /** Options of the painting tools (the Mixer Brush has its own bar). */
 function PaintOptions({ tool }: { tool: PaintingTool }) {
   if (tool.kind === 'mixer-brush') return <MixerOptionsBar tool={tool} />;
+  if (tool.kind === 'dodge' || tool.kind === 'burn') return <DodgeOptionsBar tool={tool} />;
+  if (tool.kind === 'sponge') return <SpongeOptionsBar tool={tool} />;
   return <BrushToolOptions tool={tool} />;
 }
 

@@ -18,6 +18,7 @@ import {
   artHistorySampler,
   dynamicsColors,
   paintTarget,
+  paintToolUnavailable,
   paintsFromHistory,
   resolveStamp,
   strokeResources,
@@ -209,6 +210,7 @@ const GROUP_COMMANDS: Record<string, string> = {
   'tool.gradient': 'gradient-group',
   'tool.stamp': 'stamp-group',
   'tool.historyBrush': 'history-group',
+  'tool.dodge': 'dodge-group',
 };
 
 export class AppController {
@@ -349,7 +351,15 @@ export class AppController {
       'history-brush': 'the History Brush',
       'art-history-brush': 'the Art History Brush',
       'mixer-brush': 'the Mixer Brush',
+      dodge: 'the Dodge Tool',
+      burn: 'the Burn Tool',
+      sponge: 'the Sponge Tool',
     }[tool];
+    const unavailable = paintToolUnavailable(tool, doc);
+    if (unavailable) {
+      void this.#ui.alert(`Could not use ${what}`, unavailable);
+      return null;
+    }
     const layer = paintTarget(doc);
     if (!layer) {
       const active = doc.activeLayer;
@@ -405,6 +415,7 @@ export class AppController {
       seed,
       ...(colors ? { colors } : {}),
       ...(options.pattern ? { pattern: options.pattern } : {}),
+      ...(options.tone ? { tone: options.tone } : {}),
     };
     // The Art History Brush reads the layer as it is before the stroke paints into it.
     const before =
@@ -447,6 +458,7 @@ export class AppController {
       source: restores ? resident : null,
       art,
       mixer,
+      tone: options.tone ?? null,
     });
     return {
       seed,
@@ -533,7 +545,8 @@ export class AppController {
    */
   /**
    * Number keys: opacity (with Shift: flow) of the painting tool, the fill tools or the selected
-   * layers (Shift: fill). The Mixer Brush has Wet instead of opacity, and Mix with Alt+Shift.
+   * layers (Shift: fill). The Mixer Brush has Wet instead of opacity, and Mix with Alt+Shift; Dodge
+   * and Burn have Exposure, the Sponge only Flow.
    */
   #numberKey(digit: number, key: 'opacity' | 'flow' | 'mix'): void {
     const now = performance.now();
@@ -555,6 +568,11 @@ export class AppController {
         this.#ui.toolOptionsChanged();
       }
     } else if (key === 'mix') return;
+    else if (paint?.kind === 'dodge' || paint?.kind === 'burn') {
+      if (shift) return; // no flow
+      paint.setTone({ exposure: value });
+      this.#ui.toolOptionsChanged();
+    } else if (paint?.kind === 'sponge') this.#setPaintOptions({ flow: value });
     else if (paint) this.#setPaintOptions(shift ? { flow: value } : { opacity: value });
     else if (!shift && this.#fillTool()) this.#setFillToolOptions({ opacity: value });
     else void this.setSelectedLayerProps(shift ? { fillOpacity: value } : { opacity: value });

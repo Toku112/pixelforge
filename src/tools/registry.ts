@@ -48,6 +48,9 @@ export function createTools() {
   const historyBrush = new PaintingTool('history-brush');
   const artHistoryBrush = new PaintingTool('art-history-brush');
   const mixerBrush = new PaintingTool('mixer-brush');
+  const dodge = new PaintingTool('dodge');
+  const burn = new PaintingTool('burn');
+  const sponge = new PaintingTool('sponge');
   const gradient = new GradientTool();
   const paintBucket = new PaintBucketTool();
   const groups: ToolGroup[] = [
@@ -65,6 +68,7 @@ export function createTools() {
     { id: 'history-group', tools: [historyBrush, artHistoryBrush] },
     { id: 'eraser-group', tools: [eraser] },
     { id: 'gradient-group', tools: [gradient, paintBucket] },
+    { id: 'dodge-group', tools: [dodge, burn, sponge] },
     { id: 'hand-group', tools: [hand, rotateView] },
     { id: 'zoom-group', tools: [zoom] },
   ];
@@ -93,6 +97,9 @@ export function createTools() {
     historyBrush,
     artHistoryBrush,
     mixerBrush,
+    dodge,
+    burn,
+    sponge,
     gradient,
     paintBucket,
     groups,

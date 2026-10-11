@@ -21,9 +21,8 @@ _Update this section at the end of every session._
   with painting cursors, smoothing, symmetry, Brushes panel, presets, brush files, Tool Presets, WebAssembly dabs,
   Eyedropper, Color and Swatches panels, Pencil and Eraser modes, Gradient tool and editor, patterns and the Pattern
   Stamp, Paint Bucket); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 16 (brush-based retouching painters rely on: Smudge with finger painting, Blur and Sharpen
-  with protect detail, Dodge, Burn and Sponge). The Mixer Brush's renderer (core/paint/mixer.ts) already drags paint
-  dab by dab, which the Smudge tool can build on.
+- In progress: Part E item 16 — Dodge, Burn and Sponge done (D-050); next Smudge (finger painting), Blur and Sharpen
+  (protect detail), painted dab by dab like the Mixer Brush (core/paint/mixer.ts).
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -124,9 +123,11 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [x] Art History Brush: style, area, tolerance
   ↳ note: all ten styles; the strokes are our own design (FORMAT_NOTES §14, D-048).
 - [ ] Blur tool, Sharpen tool (protect detail), Smudge tool (finger painting)
-- [ ] Dodge (O): range shadows/midtones/highlights, exposure, protect tones
-- [ ] Burn
-- [ ] Sponge: saturate/desaturate, vibrance
+- [x] Dodge (O): range shadows/midtones/highlights, exposure, protect tones
+  ↳ note: our own tone curves; Alt switches to Burn for a stroke; not on 32-bit images (D-050, FORMAT_NOTES §16).
+- [x] Burn
+- [x] Sponge: saturate/desaturate, vibrance
+  ↳ note: in Grayscale it changes contrast (D-050).
 
 ### Painting
 - [ ] Brush tool (B): see B9 Brush engine
@@ -690,4 +691,5 @@ engine first, then its controls, then the tools built on it.
 - [x] Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers, presets
   ↳ note: our own model of wet paint (reservoir + paint taken up, per pass so spacing hardly matters), checked visually, to be compared with real output; strokes record what the brush held, so Actions replay them exactly; Sample All Layers reads the layers below plus the painted layer; mirror images have their own brush; Texture, Dual Brush, Color Dynamics and Wet Edges are greyed for it; painted by the TypeScript renderer (~1,300 px/s of travel with a 500 px brush). Also fixed: a stroke begun while the previous one was still finishing could lose the end of that stroke (D-049, FORMAT_NOTES §15).
 - [ ] Brush-based retouching that painters rely on: Smudge (finger painting), Blur and Sharpen (protect detail), Dodge, Burn and Sponge
+  ↳ partial: Dodge, Burn and Sponge (D-050); Smudge, Blur and Sharpen to come.
 - [ ] Phase 2 exit test: a scripted painting session (pressure strokes, dynamics, symmetry, gradient, pattern, history brush, mixer brush) round-trips through PSD, plus the owner painting a small illustration with a tablet

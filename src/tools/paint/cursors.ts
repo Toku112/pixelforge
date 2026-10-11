@@ -93,3 +93,21 @@ export const MIXER_LOAD_CURSOR = iconCursor(
   12,
   12,
 );
+
+/** Dodge: a round paddle on a handle; the hot spot is the paddle's centre. */
+const DODGE_PATHS = ['M14 3a5 5 0 1 0 0 10 5 5 0 1 0 0-10Z', 'm10.5 11.5-7 9'];
+export const DODGE_CURSOR = iconCursor(DODGE_PATHS, 14, 8);
+
+/** Burn: a flame; the hot spot is its tip. */
+const BURN_PATHS = [
+  'M12 2.5c3.5 4 6 6.8 6 10.5a6 6 0 0 1-12 0c0-2.3 1.2-4.1 2.6-5.6.1 1.6.8 2.8 2 3.4-.3-3 .4-5.6 1.4-8.3Z',
+  'M12 20.5a2.6 2.6 0 0 1-2.6-2.6c0-1.6 1.2-2.6 2.6-4.2 1.4 1.6 2.6 2.6 2.6 4.2a2.6 2.6 0 0 1-2.6 2.6Z',
+];
+export const BURN_CURSOR = iconCursor(BURN_PATHS, 12, 3);
+
+/** Sponge: a sponge with pores; the hot spot is its centre. */
+const SPONGE_PATHS = [
+  'M5 7.5c2-1.5 4-1.5 7 0s5 1.5 7 0v9c-2 1.5-4 1.5-7 0s-5-1.5-7 0Z',
+  'M9 10.5h.01M14 11.5h.01M11 14h.01M16 14.5h.01M8 13.5h.01',
+];
+export const SPONGE_CURSOR = iconCursor(SPONGE_PATHS, 12, 12);

@@ -36,6 +36,10 @@
  *   painting while the pointer rests. Neither uses paint symmetry.
  * - The Eraser's Erase to History brings back the source instead of erasing; holding
  *   Alt/Option when a stroke starts turns it on (or off) for that stroke.
+ * - Dodge and Burn (O, Shift+O cycles with the Sponge) lighten or darken the tones in
+ *   their Range by Exposure; Alt/Option held when a stroke starts switches between them for
+ *   that stroke. The Sponge saturates or desaturates (core/paint/tone.ts). None paints with
+ *   paint symmetry.
  * - The Mixer Brush mixes its paint with the canvas (core/paint/mixer.ts). Alt/Option-click
  *   loads it with the image under the tip; choosing a foreground colour loads that colour.
  *   What it holds carries from stroke to stroke unless it is cleaned and loaded after each.
@@ -43,6 +47,13 @@
 import { usesSymmetry, type PaintTool } from '../../core/commands/builtin/paint';
 import { DEFAULT_PATTERN_ID } from '../../core/pattern/pattern';
 import { DEFAULT_ART_HISTORY, type ArtHistoryOptions } from '../../core/paint/art-history';
+import {
+  DEFAULT_DODGE,
+  DEFAULT_SPONGE,
+  TONE_RANGES,
+  type DodgeOptions,
+  type SpongeOptions,
+} from '../../core/paint/tone';
 import {
   DEFAULT_MIXER,
   INITIAL_MIXER,
@@ -76,8 +87,11 @@ import {
   BRUSH_CURSOR,
   ERASER_CURSOR,
   EYEDROPPER_CURSOR,
+  BURN_CURSOR,
+  DODGE_CURSOR,
   HISTORY_BRUSH_CURSOR,
   MIXER_CURSOR,
+  SPONGE_CURSOR,
   MIXER_LOAD_CURSOR,
   STAMP_CURSOR,
 } from './cursors';
@@ -110,6 +124,9 @@ const TOOL_NAMES: Record<PaintTool, string> = {
   'history-brush': 'History Brush Tool',
   'art-history-brush': 'Art History Brush Tool',
   'mixer-brush': 'Mixer Brush Tool',
+  dodge: 'Dodge Tool',
+  burn: 'Burn Tool',
+  sponge: 'Sponge Tool',
 };
 
 const TOOL_KEYS: Record<PaintTool, string> = {
@@ -120,6 +137,9 @@ const TOOL_KEYS: Record<PaintTool, string> = {
   'history-brush': 'Y',
   'art-history-brush': 'Y',
   'mixer-brush': 'B',
+  dodge: 'O',
+  burn: 'O',
+  sponge: 'O',
 };
 
 const STANDARD_CURSORS: Record<PaintTool, string> = {
@@ -130,6 +150,9 @@ const STANDARD_CURSORS: Record<PaintTool, string> = {
   'history-brush': HISTORY_BRUSH_CURSOR,
   'art-history-brush': ART_HISTORY_CURSOR,
   'mixer-brush': MIXER_CURSOR,
+  dodge: DODGE_CURSOR,
+  burn: BURN_CURSOR,
+  sponge: SPONGE_CURSOR,
 };
 
 export class PaintingTool implements Tool {
@@ -154,6 +177,10 @@ export class PaintingTool implements Tool {
   eraseToHistory = false;
   /** Art History Brush: style, area and tolerance. */
   readonly art: ArtHistoryOptions = { ...DEFAULT_ART_HISTORY };
+  /** Dodge and Burn: Range, Exposure and Protect Tones. */
+  readonly tone: DodgeOptions = { ...DEFAULT_DODGE };
+  /** Sponge: Saturate or Desaturate, and Vibrance (its Flow is the brush's). */
+  readonly sponge: SpongeOptions = { ...DEFAULT_SPONGE };
   /** Mixer Brush: Wet, Load, Mix, Sample All Layers, loading and cleaning after each stroke. */
   readonly mixer: MixerOptions = { ...DEFAULT_MIXER };
   /** Mixer Brush: what the brush holds (it may lag behind a stroke still finishing). */
@@ -191,6 +218,8 @@ export class PaintingTool implements Tool {
       size,
       // Wet paint shows each dab of a widely spaced brush: the Mixer Brush starts closely spaced.
       ...(kind === 'mixer-brush' ? { spacing: 0.05 } : {}),
+      // The Sponge works at half flow at first.
+      ...(kind === 'sponge' ? { flow: 0.5 } : {}),
       aliased: kind === 'pencil',
       dynamics: structuredClone(DEFAULT_DYNAMICS),
     };
@@ -220,6 +249,21 @@ export class PaintingTool implements Tool {
 
   setMixer(changes: Partial<MixerOptions>): void {
     Object.assign(this.mixer, changes);
+  }
+
+  setTone(changes: Partial<DodgeOptions>): void {
+    Object.assign(this.tone, changes);
+  }
+
+  setSponge(changes: Partial<SpongeOptions>): void {
+    Object.assign(this.sponge, changes);
+  }
+
+  /** The tool a stroke paints as: Alt/Option switches between Dodge and Burn. */
+  #strokeKind(altKey: boolean): PaintTool {
+    if (altKey && this.kind === 'dodge') return 'burn';
+    if (altKey && this.kind === 'burn') return 'dodge';
+    return this.kind;
   }
 
   /** Changes what the Mixer Brush holds, after any stroke still finishing has handed it on. */
@@ -294,6 +338,9 @@ export class PaintingTool implements Tool {
    * pixels, and for Block mode a full-strength square of 16 screen pixels.
    */
   #strokeBrush(ctx: ToolContext): BrushSettings {
+    // Dodge and Burn: Exposure is the stroke's opacity; the Sponge has only Flow.
+    if (this.kind === 'dodge' || this.kind === 'burn') return { ...this.options, opacity: this.tone.exposure, flow: 1 };
+    if (this.kind === 'sponge') return { ...this.options, opacity: 1 };
     if (this.kind !== 'eraser' || this.eraserMode === 'brush') return this.options;
     if (this.eraserMode === 'pencil') return { ...this.options, aliased: true };
     return {
@@ -330,6 +377,8 @@ export class PaintingTool implements Tool {
         eraseToHistory: this.eraseToHistory,
         art: this.art,
         mixer: this.mixer,
+        tone: this.tone,
+        sponge: this.sponge,
       }),
     );
   }
@@ -346,6 +395,8 @@ export class PaintingTool implements Tool {
       eraseToHistory?: boolean;
       art?: Partial<ArtHistoryOptions>;
       mixer?: Partial<MixerOptions>;
+      tone?: Partial<DodgeOptions>;
+      sponge?: Partial<SpongeOptions>;
     };
     if (o.brush) this.setOptions(JSON.parse(JSON.stringify(o.brush)) as Partial<BrushSettings>);
     if (o.smoothing) this.setSmoothing(o.smoothing);
@@ -376,6 +427,16 @@ export class PaintingTool implements Tool {
       for (const key of ['sampleAllLayers', 'loadAfterStroke', 'cleanAfterStroke', 'solidOnly'] as const)
         if (typeof m[key] === 'boolean') this.mixer[key] = m[key];
     }
+    if (o.tone) {
+      const t = o.tone;
+      if (TONE_RANGES.some(([r]) => r === t.range)) this.tone.range = t.range!;
+      if (typeof t.exposure === 'number') this.tone.exposure = Math.min(1, Math.max(0.01, t.exposure));
+      if (typeof t.protectTones === 'boolean') this.tone.protectTones = t.protectTones;
+    }
+    if (o.sponge) {
+      if (typeof o.sponge.saturate === 'boolean') this.sponge.saturate = o.sponge.saturate;
+      if (typeof o.sponge.vibrance === 'boolean') this.sponge.vibrance = o.sponge.vibrance;
+    }
     this.presetId = null;
   }
 
@@ -384,7 +445,7 @@ export class PaintingTool implements Tool {
     if (this.kind === 'mixer-brush' && state.altKey) return MIXER_LOAD_CURSOR;
     switch (state.paintCursor ?? 'precise') {
       case 'standard':
-        return STANDARD_CURSORS[this.kind];
+        return STANDARD_CURSORS[this.#strokeKind(state.altKey === true)];
       case 'precise':
         return 'crosshair';
       default:
@@ -554,10 +615,11 @@ export class PaintingTool implements Tool {
     const brush = this.#strokeBrush(ctx);
     const startAt = ctx.viewport.viewToDoc({ x: e.x, y: e.y });
     const mixer = this.kind === 'mixer-brush' ? this.#mixerStart() : null;
+    const kind = this.#strokeKind(e.altKey);
     const session = ctx.paint.begin(
-      this.kind,
+      kind,
       brush,
-      mixer ? { mixer: mixer.begin } : this.#beginOptions(startAt, e.altKey),
+      mixer ? { mixer: mixer.begin } : this.#beginOptions(startAt, e.altKey, kind),
     );
     if (!session) {
       mixer?.settle();
@@ -588,8 +650,15 @@ export class PaintingTool implements Tool {
   }
 
   /** What a stroke starting at `at` takes beyond the brush; Alt turns the Eraser's Erase to History on or off. */
-  #beginOptions(at: { x: number; y: number }, altKey: boolean): PaintBeginOptions | undefined {
+  #beginOptions(at: { x: number; y: number }, altKey: boolean, kind: PaintTool): PaintBeginOptions | undefined {
     switch (this.kind) {
+      case 'dodge':
+      case 'burn':
+        return {
+          tone: { kind: kind === 'burn' ? 'burn' : 'dodge', range: this.tone.range, protect: this.tone.protectTones },
+        };
+      case 'sponge':
+        return { tone: { kind: 'sponge', saturate: this.sponge.saturate, vibrance: this.sponge.vibrance } };
       case 'pencil':
         return this.autoErase ? { autoEraseAt: at } : undefined;
       case 'eraser':

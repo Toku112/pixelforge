@@ -18,6 +18,8 @@
  *   from a history state — in Normal mode (and erasing) the pixel moves towards the
  *   source pixel, transparency included; other modes paint the source's colours
  *   like paint of their own.
+ * - Dodge, Burn and Sponge (`tone`): the pixel's own tones change by the stroke's
+ *   amount (core/paint/tone.ts); alpha stays.
  * - Tips: the computed round/elliptical tip, or a sampled tip read bilinearly from
  *   a pyramid of halved copies (so small dabs of a large tip stay smooth).
  * - Texture, Dual Brush, Noise and Wet Edges (texture.ts): Noise and Texture Each
@@ -34,6 +36,7 @@ import type { MaskData } from '../selection/selection';
 import type { PatternPixels } from '../pattern/pattern';
 import type { SourcePixels } from '../history/history-source';
 import type { MixerSetup } from './mixer';
+import { applyTone, type ToneSetup } from './tone';
 import { dabBounds, dabCoverage, type BrushMode, type Dab } from './brush';
 import {
   WET_RIM,
@@ -92,6 +95,8 @@ export interface StrokeSetup {
   varyOpacity?: boolean;
   /** Mixer Brush strokes: how the paint mixes, and what the brush holds as the stroke starts (core/paint/mixer.ts). */
   mixer?: MixerSetup | null;
+  /** Dodge, Burn and Sponge strokes: how they change tones (the stroke's Opacity is their Exposure). */
+  tone?: ToneSetup | null;
   /** Transparency of the layer is locked: alpha never changes. */
   lockAlpha: boolean;
   /** The layer's position in the document. */
@@ -241,6 +246,8 @@ export class StrokeRenderer {
   readonly #hdr: boolean;
   /** Scratch: the blended paint colour of the pixel being shaded. */
   readonly #blended = [0, 0, 0, 0];
+  /** Scratch: the tones of the pixel being changed (Dodge, Burn, Sponge). */
+  readonly #tones: number[] = [];
   readonly #paintScratch = [0, 0, 0, 0];
   /** The Pattern Stamp's pattern in sample values (alpha 0–1), or null. */
   readonly #pattern: Float32Array | null;
@@ -456,6 +463,17 @@ export class StrokeRenderer {
     }
     let e = (tile.cap ? tile.cap[p]! : s.opacity) * cover * sel;
     const cc = s.format.colorChannels;
+    if (s.tone) {
+      // The pixel's own tones change from what they were before the stroke; alpha stays.
+      const t = this.#tones;
+      const max = this.#max;
+      const src = tile.original;
+      const at = p * this.#spp;
+      for (let c = 0; c < cc; c++) t[c] = src[at + c]! / max;
+      applyTone(s.tone, t, cc, Math.min(1, e));
+      for (let c = 0; c < cc; c++) tile.data[at + c] = this.#q(t[c]! * max);
+      return;
+    }
     let color = tile.paint ? this.#paintColor(tile.paint, p, cc) : s.color;
     if (this.#pattern && !s.pattern!.impressionist) {
       // The pattern under the pixel, its transparency lowering the paint.
@@ -603,6 +621,7 @@ export function wasmCanPaint(setup: StrokeSetup): boolean {
     !setup.pattern &&
     !setup.history &&
     !setup.mixer &&
+    !setup.tone &&
     !setup.texture &&
     !setup.dual &&
     !setup.noise &&

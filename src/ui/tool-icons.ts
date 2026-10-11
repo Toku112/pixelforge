@@ -23,6 +23,9 @@ export const TOOL_ICONS: Readonly<Record<string, IconName>> = {
   'history-brush': 'historyBrush',
   'art-history-brush': 'artHistoryBrush',
   'mixer-brush': 'mixerBrush',
+  dodge: 'dodge',
+  burn: 'burn',
+  sponge: 'sponge',
   gradient: 'gradient',
   'paint-bucket': 'paintBucket',
 };

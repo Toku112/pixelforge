@@ -548,3 +548,23 @@ spacing for a dab that did not move.
 and the paint taken up, each `{ width, height, channels, encoding: 'u16' | 'f32', data, filled? }`: values per pixel
 (colour channels then alpha, premultiplied), as little-endian 16-bit values (v · 65535) or 32-bit floats, base64;
 `filled` (paint taken up) holds one byte per pixel, 1 where the brush holds paint. A 1 × 1 reservoir is one colour.
+
+## 16. Dodge, Burn and Sponge
+
+Our own model (D-050). A stroke's amount a (0–1) at a pixel is the stroke's opacity (Exposure; 100 % for the Sponge)
+× its coverage there (built up by the dabs with Flow, as for a brush, §8) × the selection. Values are the pixel's
+colour samples as they were before the stroke, 0–1; alpha does not change.
+
+- Range weight of a tone v: Shadows (1 − v)², Midtones 4 · v · (1 − v), Highlights v².
+- Dodge: v' = v + (1 − v) · w(v) · a / 2. Burn: v' = v − v · w(v) · a / 2.
+- Without Protect Tones (and in Grayscale) each channel is changed by its own value. With it (RGB), the luminance
+  L = 0.3 R + 0.59 G + 0.11 B is changed to L' and every channel c becomes 1 − (1 − c) · (1 − L')/(1 − L) (Dodge) or
+  c · L'/L (Burn).
+- Sponge (RGB), with g = L, s = (max − min)/max and t = 0.75 · a: Desaturate c' = c + (g − c) · t · (Vibrance: √s);
+  Saturate c' = g + (c − g) · f with f = 1 + t (Vibrance: 1 + t · (1 − s), at most the factor that takes a channel to
+  0 or 1), clamped to 0–1.
+- Sponge (Grayscale), d = v − 0.5 and room = 1 − 2|d| with Vibrance (else 1): Saturate v' = 0.5 + d · (1 + t · room),
+  Desaturate v' = v − d · t · room.
+
+**Recorded** (`tone` in a paintStroke descriptor): Dodge and Burn `{ range, protect }`, the Sponge
+`{ saturate, vibrance }`; the brush's `opacity` is the Exposure (Dodge, Burn), its `flow` the Sponge's Flow.
