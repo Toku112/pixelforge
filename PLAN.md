@@ -13,18 +13,14 @@ _Update this section at the end of every session._
 - Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
   Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
   when it arrives.
-- Last completed: Part E item 16 (Dodge, Burn and Sponge on O; Blur, Sharpen and Smudge in their own group);
-  item 15 (Mixer Brush: reservoir and paint taken up, Wet/Load/Mix/Flow, load and clean after
-  each stroke, Alt-click loading, Load Solid Colors Only, Sample All Layers, useful combinations, Wetness and Mix
-  Jitter); item 14 (History Brush Y and Art History Brush Shift+Y, the History panel's source column,
-  the Eraser's Erase to History, History contents in Edit > Fill and Ctrl/Cmd+Alt+Backspace); items 1–13 (pen input,
-  tips, dynamics, texture, dual brush, wet edges, build-up, Brush Settings panel, options bar, brush HUD, Preferences
-  with painting cursors, smoothing, symmetry, Brushes panel, presets, brush files, Tool Presets, WebAssembly dabs,
-  Eyedropper, Color and Swatches panels, Pencil and Eraser modes, Gradient tool and editor, patterns and the Pattern
-  Stamp, Paint Bucket); Phase 1 Part D items 1–12 and the automated part of item 13
-- Next up: Part E item 17, the Phase 2 exit test: a scripted painting session (pressure strokes, dynamics, symmetry,
-  gradient, pattern, history brush, mixer brush) that round-trips through PSD, plus the owner painting a small
-  illustration with a tablet (that part needs the owner).
+- Last completed: File > New (New Document dialog with presets, Recent and Saved, D-052) and the automated part of
+  Part E item 17, the Phase 2 exit test (`tests/e2e/phase2-exit.spec.ts`, D-053); before that Part E items 1–16
+  (the whole brush engine and every painting tool); Phase 1 Part D items 1–12 and the automated part of item 13.
+- Waiting for the owner: the Phase 1 check (`docs/phase1-check/README.md`) and the Phase 2 check — painting a small
+  picture with a tablet and opening our painting in Photoshop (`docs/phase2-check/README.md`). Item 17 ticks, and
+  Phase 2 ends, once the owner's findings are in and fixed.
+- Next up: fixes from the owner's checks when they arrive. Otherwise Phase 3 (Selections & masks) starts only when
+  the owner says so (CLAUDE.md §4: no phase jumps); its task list has to be written first, as Part F.
 - Blockers: none. CI needs a GitHub remote to run.
 
 ---
@@ -697,3 +693,4 @@ engine first, then its controls, then the tools built on it.
 - [x] Brush-based retouching that painters rely on: Smudge (finger painting), Blur and Sharpen (protect detail), Dodge, Burn and Sponge
   ↳ note: Dodge, Burn and Sponge use the brush engine's coverage (one stroke never goes past its Exposure) with our own tone curves, not on 32-bit images (D-050); Blur, Sharpen and Smudge work dab by dab like the Mixer Brush, sharing its painter base, Strength per distance painted so spacing hardly matters (D-051); these and the Mixer Brush work only inside the canvas; all checked visually, to be compared with real output.
 - [ ] Phase 2 exit test: a scripted painting session (pressure strokes, dynamics, symmetry, gradient, pattern, history brush, mixer brush) round-trips through PSD, plus the owner painting a small illustration with a tablet
+  ↳ partial: the automated part passes in Chromium, Firefox and WebKit (`tests/e2e/phase2-exit.spec.ts`: File > New, gradient sky, wet Mixer Brush, History Brush from an earlier state, pen-pressure strokes with shape and colour dynamics, radial symmetry, Define Pattern and the Pattern Stamp on a Multiply layer — the same layers, layer pixels and image after saving as PSD and reopening, and the same image when its History steps are replayed on a new document). File > New was built first for it (D-052, D-053). Waiting for the owner's tablet painting and Photoshop check (`docs/phase2-check/README.md`).

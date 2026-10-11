@@ -953,3 +953,20 @@ exit test.
   the suggested name. The first History state of a new document is "New" (an opened file's is "Open").
 - The start screen offers New… beside Open…. Ctrl/Cmd+N is kept by the browser in a normal tab (KNOWN_GAPS:
   browser-reserved shortcuts); the menu and the start screen always work.
+
+## D-053 — 2026-10-11 — Phase 2 exit test
+
+**Decision:**
+
+- The exit test paints through the tools and panels, as a painter would (`tests/e2e/phase2-exit.spec.ts`): pen
+  strokes are real pointer events with pressure, tools are chosen by their keys, settings come from Brush Settings,
+  the options bar, the New Layer and Radial Symmetry dialogs and Edit > Define Pattern. It then checks three things:
+  the layer tree, every layer's pixels (colour under full transparency excepted, which PSD does not keep) and the
+  composite survive saving as PSD and reopening; a second save gives the same layers; and replaying the History
+  steps' descriptors on a new document of the same size gives the same pixels exactly.
+- Two choices made during painting are not History steps yet, so the replay makes them itself at the same point:
+  the active layer (every stroke here paints the newest layer, so none is needed) and the History Brush source (set
+  to the same state before the History Brush step). Actions (Phase 11) will record both, as the reference app
+  records selecting a layer or a history state.
+- The painting's dynamics seeds differ between runs, so `docs/phase2-check/painting.psd` is one example run (made
+  with PF_PHASE2_CHECK_DIR); the test compares each run with itself, not with that file.
