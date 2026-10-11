@@ -925,3 +925,31 @@ pure-Rust lossy WebP encoder; building libjpeg-turbo/libwebp needs a C toolchain
 - Texture, Dual Brush, Color Dynamics and Wet Edges are greyed for them (as for the Mixer Brush); no paint symmetry.
   Measured in Node (16-bit): Blur and Sharpen about 2 ms per 100 px dab and 40 ms per 500 px dab (keeping up with
   about 3,000 px of travel per second at 25 % spacing), Smudge 0.6 and 11 ms (about 4,500 px/s at 10 % spacing).
+
+## D-052 — 2026-10-11 — File > New
+
+**Context:** no phase's task list had File > New, so a painter could only start by opening an image. Phase 2's goal (a
+painter paints a full illustration) and its exit test with the owner need a blank canvas, so it was built before the
+exit test.
+
+**Decision:**
+
+- A New Document dialog as in the reference app: categories across the top (Recent, Saved, Photo, Print, Art &
+  Illustration, Web, Mobile, Film & Video), the presets on the left, Preset Details on the right (name, width and
+  height in one unit, orientation, resolution in pixels/inch or pixels/centimetre, colour mode and bit depth,
+  Background Contents with a colour chip), Create and Close. The presets are our own list of common paper, photo,
+  screen and video sizes; the first-time size is 7 × 5 in at 300 ppi (2100 × 1500 px), RGB, 8-bit, white.
+- The size is kept in its unit, not in pixels (core/document/new-document.ts), so A4 stays 210 × 297 mm while the
+  resolution changes and pixel sizes stay as typed; another unit only changes how the same size is shown.
+- Background Contents: White, Black, Background Color, Transparent and Custom… (the Color Picker). Transparent is in
+  the list directly (the reference app shows it only with its advanced options open). An opaque background is a
+  locked Background layer holding one colour (no pixels stored until painted); Transparent is an empty "Layer 1".
+- Colour modes RGB and Grayscale only; Bitmap, CMYK and Lab join the list with colour management (Phase 7), as do the
+  colour profile and pixel aspect ratio. Artboards come with artboards (Phase 6).
+- Saved presets (the Save button names one; one of the same name is replaced; Delete removes a saved one) and the
+  last 20 documents' settings (Recent, newest first, the same settings not repeated) are kept in IndexedDB. The
+  dialog opens with the last document's settings. Double-clicking a preset creates its document at once.
+- Documents are named Untitled-1, Untitled-2, … for the session; a number is used up only by a document that keeps
+  the suggested name. The first History state of a new document is "New" (an opened file's is "Open").
+- The start screen offers New… beside Open…. Ctrl/Cmd+N is kept by the browser in a normal tab (KNOWN_GAPS:
+  browser-reserved shortcuts); the menu and the start screen always work.

@@ -17,6 +17,7 @@ import { JpegOptionsDialog } from './JpegOptionsDialog';
 import { SaveAsDialog } from './SaveAsDialog';
 import { WebpOptionsDialog } from './WebpOptionsDialog';
 import { CanvasSizeDialog, ImageSizeDialog } from './SizeDialogs';
+import { NewDocumentDialog } from './NewDocumentDialog';
 import { remember, useUi, type DialogRequest } from '../state/ui-store';
 
 function LayerOptionsDialog({ dialog }: { dialog: Extract<DialogRequest, { kind: 'layer-options' }> }) {
@@ -182,6 +183,8 @@ function DialogView({ dialog }: { dialog: DialogRequest }) {
       return <ImageSizeDialog dialog={dialog} />;
     case 'canvas-size':
       return <CanvasSizeDialog dialog={dialog} />;
+    case 'new-document':
+      return <NewDocumentDialog dialog={dialog} />;
     case 'save-as':
       return <SaveAsDialog dialog={dialog} />;
     case 'jpeg-options':

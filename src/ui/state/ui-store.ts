@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import type { RGB } from '../../core/color/color';
 import type { Gradient, GradientMethod } from '../../core/paint/gradient';
 import type { BlendMode, LayerBlendMode } from '../../core/document/layers';
+import type { DocumentPreset, NewDocumentSettings } from '../../core/document/new-document';
 import type { ResampleMethod } from '../../core/geometry/layer-geometry';
 import type { JpegSaveOptions } from '../../io/jpeg-options';
 import type { WebpSaveOptions } from '../../io/webp-options';
@@ -75,6 +76,7 @@ export type DialogRequest =
   | ({ kind: 'fill'; resolve: (result: FillResult | null) => void } & FillRequest)
   | ({ kind: 'image-size'; resolve: (result: ImageSizeResult | null) => void } & SizeRequest)
   | ({ kind: 'canvas-size'; resolve: (result: CanvasSizeResult | null) => void } & CanvasSizeRequest)
+  | ({ kind: 'new-document'; resolve: (result: NewDocumentResult | null) => void } & NewDocumentRequest)
   | ({ kind: 'save-as'; resolve: (result: SaveAsResult | null) => void } & SaveAsRequest)
   | ({ kind: 'jpeg-options'; resolve: (result: JpegSaveOptions | null) => void } & JpegOptionsRequest)
   | ({ kind: 'webp-options'; resolve: (result: WebpSaveOptions | null) => void } & WebpOptionsRequest)
@@ -171,6 +173,28 @@ export interface CanvasSizeResult {
   /** Where the image stays: 0 = left/top, 0.5 = centre, 1 = right/bottom. */
   anchor: [number, number];
   color: RGB;
+}
+
+/** File > New: the starting values and the preset lists. */
+export interface NewDocumentRequest {
+  /** The suggested document name ("Untitled-1"). */
+  name: string;
+  settings: NewDocumentSettings;
+  recent: readonly DocumentPreset[];
+  saved: readonly DocumentPreset[];
+  /** The background colour (Background Contents: Background Color). */
+  background: RGB;
+  /** Saves a preset; the saved presets afterwards. */
+  savePreset: (preset: DocumentPreset) => Promise<readonly DocumentPreset[]>;
+  /** Deletes a saved preset; the saved presets afterwards. */
+  deletePreset: (id: string) => Promise<readonly DocumentPreset[]>;
+}
+
+export interface NewDocumentResult {
+  name: string;
+  /** The preset the settings came from, or "Custom" when they were changed. */
+  presetName: string;
+  settings: NewDocumentSettings;
 }
 
 export type FillContents = 'foreground' | 'background' | 'color' | 'pattern' | 'history' | 'black' | 'gray' | 'white';

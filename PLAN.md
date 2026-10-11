@@ -164,6 +164,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 ## B3. File menu
 
 - [ ] New (dialog with category presets: Photo, Print, Art & Illustration, Web, Mobile, Film & Video; saved presets; artboards checkbox; colour mode, bit depth, profile, pixel aspect ratio, background contents)
+  ↳ partial: the New Document dialog works with our presets in all six categories, Recent and Saved presets, units, orientation, resolution, RGB/Grayscale at 8/16/32 bits and all Background Contents (D-052). Missing: Bitmap/CMYK/Lab, colour profile and pixel aspect ratio (Phase 7), the artboards checkbox (Phase 6).
 - [ ] Open, Open As, Open as Smart Object, Open Recent, Browse (web-alt: file picker + drag-and-drop + recent list)
 - [ ] Close, Close All, Close Others, Close and Go to Home
 - [ ] Save, Save As, Save a Copy, Revert (File System Access API for save-in-place; download fallback)

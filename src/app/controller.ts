@@ -104,6 +104,8 @@ import type {
   LayerOptionsRequest,
   JpegOptionsRequest,
   LayerOptionsResult,
+  NewDocumentRequest,
+  NewDocumentResult,
   SaveAsRequest,
   SaveAsResult,
   WebpOptionsRequest,
@@ -119,6 +121,7 @@ import {
 } from '../io/formats';
 import { pickFiles, saveFileAs, writeToHandle, type PickedFile } from '../io/file-access';
 import { openImage } from '../io/open-image';
+import { DEFAULT_DOCUMENT_PRESET, createNewDocument } from '../core/document/new-document';
 import { encodeDocumentAsPng } from '../io/save-png';
 import { encodeDocumentAsPsd } from '../io/psd';
 import { DEFAULT_JPEG_OPTIONS, type JpegSaveOptions } from '../io/jpeg-options';
@@ -157,6 +160,8 @@ export interface UiBridge {
   imageSize(request: SizeRequest): Promise<ImageSizeResult | null>;
   /** The Canvas Size dialog; null when cancelled. */
   canvasSize(request: CanvasSizeRequest): Promise<CanvasSizeResult | null>;
+  /** File > New; null when closed. */
+  newDocument(request: NewDocumentRequest): Promise<NewDocumentResult | null>;
   /** The Save As dialog (name and format); null when cancelled. */
   saveAs(request: SaveAsRequest): Promise<SaveAsResult | null>;
   /** The JPEG Options dialog; null when cancelled. */
@@ -1511,6 +1516,36 @@ export class AppController {
 
   // --- Files ----------------------------------------------------------------
 
+  /** Numbers new documents get ("Untitled-1", "Untitled-2", …). */
+  #untitled = 1;
+
+  /** File > New: the New Document dialog, then a new document with its settings. */
+  async newDocumentWithDialog(): Promise<void> {
+    const library = this.services.documentPresets;
+    await library.ready;
+    const name = `Untitled-${this.#untitled}`;
+    const result = await this.#ui.newDocument({
+      name,
+      settings: library.last() ?? DEFAULT_DOCUMENT_PRESET.settings,
+      recent: library.recent(),
+      saved: library.saved(),
+      background: this.colors.background,
+      savePreset: async (preset) => (await library.save(preset), library.saved()),
+      deletePreset: async (id) => (await library.deleteSaved(id), library.saved()),
+    });
+    if (!result) return;
+    let doc: ImageDocument;
+    try {
+      doc = createNewDocument(result.settings, result.name, this.colors.background, this.services.tileStore);
+    } catch (error) {
+      await this.#ui.alert('Could not make the document', error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (result.name === name) this.#untitled++;
+    this.workspace.add(doc, null, 'New');
+    void library.addRecent({ id: newId(), name: result.presetName, settings: result.settings });
+  }
+
   async openWithDialog(): Promise<void> {
     await this.openFiles(await pickFiles(openAcceptTypes()));
   }
@@ -1795,6 +1830,7 @@ export class AppController {
     const add = this.commands.register.bind(this.commands);
 
     // File
+    add({ id: 'file.new', label: 'New…', enabled: () => !toolBusy(), run: () => this.newDocumentWithDialog() });
     add({ id: 'file.open', label: 'Open…', run: () => this.openWithDialog() });
     add({
       id: 'file.close',

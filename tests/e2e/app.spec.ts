@@ -143,6 +143,7 @@ test('menu bar: all top-level menus, only working items, keyboard navigation', a
   await bar.getByRole('menuitem', { name: 'File' }).click();
   const file = page.getByRole('menu', { name: 'File' });
   await expect(file.getByRole('menuitem')).toHaveText([
+    /^New…/,
     /^Open…/,
     /^Close/,
     /^Close All/,

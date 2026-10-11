@@ -308,6 +308,10 @@
 .empty-state button {
   pointer-events: auto;
 }
+.empty-state-buttons {
+  display: flex;
+  gap: 8px;
+}
 .drop-highlight {
   position: absolute;
   inset: 8px;
@@ -1748,4 +1752,128 @@
 .pattern-picker .gradient-picker-preview:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* File > New */
+.modal.new-document {
+  width: min(720px, calc(100vw - 32px));
+}
+.new-document-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.new-document-tabs button {
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.new-document-tabs button.active {
+  border-bottom-color: var(--accent);
+  color: var(--fg-strong);
+}
+.new-document-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 12px;
+  min-height: 300px;
+}
+.new-document-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-content: start;
+  gap: 6px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.new-document-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  cursor: default;
+}
+.new-document-preset:hover {
+  background: var(--bg-hover);
+}
+.new-document-preset.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.new-document-preset-size {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+.new-document-details {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  min-width: 0;
+}
+.new-document-details legend {
+  padding: 0 4px;
+}
+.new-document-details .number-field-label {
+  min-width: 72px;
+}
+.new-document-name {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.new-document-name input {
+  flex: 1;
+  min-width: 0;
+}
+.new-document-orientation {
+  display: flex;
+  gap: 2px;
+}
+.new-document-orientation button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+}
+.new-document-orientation button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.orientation-icon {
+  display: block;
+  border: 1.5px solid currentcolor;
+  border-radius: 1px;
+}
+.orientation-icon.portrait {
+  width: 9px;
+  height: 13px;
+}
+.orientation-icon.landscape {
+  width: 13px;
+  height: 9px;
+}
+button.color-chip {
+  padding: 0;
+  flex: none;
+}
+.transparent-chip {
+  background: repeating-conic-gradient(#bbb 0 25%, #fff 0 50%) 0 0 / 8px 8px;
+}
+.new-document-readout {
+  margin-top: 8px;
+  color: var(--fg-dim);
+}
+@media (max-width: 600px) {
+  .new-document-body {
+    grid-template-columns: 1fr;
+  }
 }

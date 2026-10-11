@@ -48,6 +48,7 @@ const bridge: UiBridge = {
   fill: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'fill', ...request, resolve })),
   imageSize: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'image-size', ...request, resolve })),
   canvasSize: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'canvas-size', ...request, resolve })),
+  newDocument: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'new-document', ...request, resolve })),
   saveAs: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'save-as', ...request, resolve })),
   jpegOptions: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'jpeg-options', ...request, resolve })),
   webpOptions: (request) => new Promise((resolve) => ui().pushDialog({ kind: 'webp-options', ...request, resolve })),

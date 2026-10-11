@@ -101,10 +101,15 @@ export function CanvasArea() {
       <div ref={overlayRef} className="zoom-marquee" />
       {!activeId && (
         <div className="empty-state">
-          <p>Open an image to start.</p>
-          <button type="button" className="primary-button" onClick={() => controller.commands.run('file.open')}>
-            <Icon name="open" size={16} /> Open…
-          </button>
+          <p>Start a new image, or open one.</p>
+          <div className="empty-state-buttons">
+            <button type="button" className="primary-button" onClick={() => controller.commands.run('file.new')}>
+              <Icon name="newFile" size={16} /> New…
+            </button>
+            <button type="button" className="primary-button" onClick={() => controller.commands.run('file.open')}>
+              <Icon name="open" size={16} /> Open…
+            </button>
+          </div>
           <p className="hint">You can also drop PNG, JPEG or WebP files here.</p>
         </div>
       )}

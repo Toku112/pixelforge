@@ -12,6 +12,7 @@ import { Preferences } from './preferences';
 import { ToolPresetLibrary } from './tool-presets';
 import { SwatchLibrary } from './swatch-library';
 import { GradientLibrary } from './gradient-library';
+import { DocumentPresetLibrary } from './document-presets';
 import type { Thumbnail, ThumbnailSource } from '../core/composite/thumbnail';
 import type { Rect } from '../core/document/geometry';
 import { CommandRegistry } from '../core/commands/registry';
@@ -63,6 +64,8 @@ export interface AppServices {
   /** The Swatches panel's colours. */
   swatches: SwatchLibrary;
   gradients: GradientLibrary;
+  /** File > New's saved presets and recent documents. */
+  documentPresets: DocumentPresetLibrary;
 }
 
 export async function createServices(): Promise<AppServices> {
@@ -97,5 +100,6 @@ export async function createServices(): Promise<AppServices> {
     toolPresets: new ToolPresetLibrary(),
     swatches: new SwatchLibrary(),
     gradients: new GradientLibrary(),
+    documentPresets: new DocumentPresetLibrary(),
   };
 }
