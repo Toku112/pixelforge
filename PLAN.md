@@ -31,7 +31,10 @@ _Update this section at the end of every session._
   the first push, owner's choice).
 - Done: item 5 (2026-10-12) — the float image core (`src/core/image`, FORMAT_NOTES §19, D-073); tile size 256 × 256
   chosen by measurement (`spikes/tile-size`).
-- Next up: item 6 (engine services: scheduler, cancellation, memory budget, tile pool).
+- Done: item 6 (2026-10-12) — engine services (`src/engine`, D-074): job scheduler with viewer > caching > render
+  priorities, cancellation, progress, memory budget with LRU caches, tile pool (measured in `spikes/tile-alloc`).
+- Next up: item 7 (node graph core: nodes, ports, parameters, keyframes, pull evaluation, node result cache; first
+  nodes Read, Viewer, Shuffle, Exposure).
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15).
 
 ---
@@ -747,9 +750,19 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   every straight 8-bit pixel round-trips), debug (ASan/UBSan) and release; tidy, format and licence checks clean.
   FORMAT_NOTES §19, D-073. DoD (D-006): OCIO/sequence/document/selection/history/shortcut/panel/persistence items
   N/A for the data type; performance measured in the spike, conversion loops measured with EXR reading (item 9).
-- [ ] 6. **Engine services (`engine/`):** oneTBB-based scheduler with priorities (viewer > caching > render), cancellation
+- [x] 6. **Engine services (`engine/`):** oneTBB-based scheduler with priorities (viewer > caching > render), cancellation
   tokens, progress reporting to the UI; memory budget (Preferences value, default 60% of RAM) shared by caches; LRU
   eviction; statistics for the status bar.
+  ↳ note (2026-10-12): `pf_engine` library, `src/engine/` — jobs on three oneTBB arenas by priority with results,
+  progress, a job list for the UI and run-time thread rules (the UI thread and jobs never wait for jobs);
+  `parallelFor` keeps a job's priority and stops when cancelled; chainable cancellation tokens; memory budget measured
+  as real tile memory, least-recently-used eviction across `LruCache`s; a tile pool (measured in `spikes/tile-alloc`:
+  4K grade ~1.2 ms instead of ~1.5–1.9 ms, memory really returned to the system) installed into `core/image` through
+  a `std::pmr::memory_resource`; `Engine::stats()` for the status bar (shown from item 13 on); the app creates the
+  engine at startup. 62 engine + 2 core unit tests, debug (ASan/UBSan) and release, engine tests repeated 600× under
+  load; tidy, format and licence checks clean; CI green on macOS, Windows and Linux. D-074. DoD (D-006): float/OCIO/
+  document/selection/history/shortcut/panel/persistence items N/A for engine services; the Preferences > Performance
+  control is PLAN Part B (Preferences), the engine takes the value.
 - [ ] 7. **Node graph core (`core/graph`, `core/anim`):** nodes, typed ports and parameters, DAG with cycle checks,
   pull evaluation per (frame, ROI, channels, proxy scale), ROI propagation, hashing for cache keys, node result cache,
   keyframe data model with interpolation (constant, linear, smooth, Bézier) and its unit tests. First nodes: Read,
@@ -791,6 +804,8 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   (`docs/phase0-check/README.md`): play it on the Mac, scrub, switch AOVs; the Windows build runs the same steps.
 - [ ] 16. **Developer packaging:** a double-clickable macOS `.app` (Qt deployed, ad-hoc signed) and a Windows zip build
   for the owner's checks; real signing/notarizing and installers come in Phase 15.
+  ↳ note: the Windows zip must also ship vcpkg's DLLs (oneTBB's `tbb12.dll` and `tbbmalloc.dll` since item 6;
+  windeployqt copies only Qt's).
 
 ---
 
