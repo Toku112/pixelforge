@@ -9,6 +9,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace pf::image {
@@ -24,8 +25,18 @@ std::span<std::byte> writableBytesOf(std::vector<T>& v) {
     return std::as_writable_bytes(std::span(v));
 }
 
+// A layout with every field set: GCC warns (as an error here) about initializers that leave fields out.
+InterleavedLayout layoutOf(SampleType type, std::vector<std::string> channels, std::string alpha = {},
+                           AlphaMode mode = AlphaMode::Premultiplied, std::size_t rowStride = 0) {
+    return {.type = type,
+            .channels = std::move(channels),
+            .alpha = std::move(alpha),
+            .alphaMode = mode,
+            .rowStride = rowStride};
+}
+
 InterleavedLayout rgba(SampleType type, AlphaMode mode) {
-    return {.type = type, .channels = {"R", "G", "B", "A"}, .alpha = "A", .alphaMode = mode, .rowStride = 0};
+    return layoutOf(type, {"R", "G", "B", "A"}, "A", mode);
 }
 
 TEST(Interleaved, LayoutSizes) {
@@ -95,8 +106,7 @@ TEST(Interleaved, StraightUInt16PixelsRoundTrip) {
     in[1] = 1;
     in[2] = 65535;
     in[3] = 65535;
-    const InterleavedLayout layout{
-        .type = SampleType::UInt16, .channels = {"Y", "A"}, .alpha = "A", .alphaMode = AlphaMode::Straight};
+    const InterleavedLayout layout = layoutOf(SampleType::UInt16, {"Y", "A"}, "A", AlphaMode::Straight);
     Image image(region, region, {"Y", "A"});
     importInterleaved(image, region, bytesOf(in), layout);
     std::vector<std::uint16_t> out(in.size());
@@ -110,7 +120,7 @@ TEST(Interleaved, FloatAndHalfKeepEveryValue) {
     for (std::size_t i = 0; i < in.size(); ++i) {
         in[i] = (static_cast<float>(i) * 0.37F) - 5.0F; // negative and above 1
     }
-    const InterleavedLayout floats{.type = SampleType::Float32, .channels = {"N.X", "N.Y", "N.Z"}};
+    const InterleavedLayout floats = layoutOf(SampleType::Float32, {"N.X", "N.Y", "N.Z"});
     Image image(region, region, {"N.X", "N.Y", "N.Z"});
     importInterleaved(image, region, bytesOf(in), floats);
     EXPECT_EQ(image.sample("N.Y", -3, 250), in[1]);
@@ -145,11 +155,8 @@ TEST(Interleaved, ChannelOrderAndRowPadding) {
             p[3] = 255;                              // A
         }
     }
-    const InterleavedLayout layout{.type = SampleType::UInt8,
-                                   .channels = {"B", "G", "R", "A"},
-                                   .alpha = "A",
-                                   .alphaMode = AlphaMode::Straight,
-                                   .rowStride = stride};
+    const InterleavedLayout layout =
+        layoutOf(SampleType::UInt8, {"B", "G", "R", "A"}, "A", AlphaMode::Straight, stride);
     Image image(region, region, {"R", "G", "B", "A"});
     importInterleaved(image, region, bytesOf(bgra), layout);
     EXPECT_EQ(image.sample("R", 12, 21), fromUInt8(3));
@@ -165,7 +172,7 @@ TEST(Interleaved, PixelsOutsideTheDataWindow) {
     const Rect region = Rect::fromSize(-1, 0, 4, 1); // one pixel left of the data window, one right
     Image image(data, data, {"R"});
     const std::vector<float> in{1.0F, 2.0F, 3.0F, 4.0F};
-    const InterleavedLayout layout{.type = SampleType::Float32, .channels = {"R"}};
+    const InterleavedLayout layout = layoutOf(SampleType::Float32, {"R"});
     importInterleaved(image, region, bytesOf(in), layout); // only the two pixels inside are stored
     EXPECT_EQ(image.sample("R", 0, 0), 2.0F);
     EXPECT_EQ(image.sample("R", 1, 0), 3.0F);
@@ -185,8 +192,7 @@ TEST(Interleaved, IntegerExportClampsAfterUnpremultiplying) {
     image.setSample("R", 2, 0, -0.1F);
     image.setSample("A", 2, 0, 1.0F);
     std::vector<std::uint8_t> out(6);
-    const InterleavedLayout layout{
-        .type = SampleType::UInt8, .channels = {"R", "A"}, .alpha = "A", .alphaMode = AlphaMode::Straight};
+    const InterleavedLayout layout = layoutOf(SampleType::UInt8, {"R", "A"}, "A", AlphaMode::Straight);
     exportInterleaved(image, region, writableBytesOf(out), layout);
     EXPECT_EQ(out, (std::vector<std::uint8_t>{255, 255, 128, 128, 0, 255}));
 }
@@ -212,20 +218,21 @@ std::string errorOf(bool import, const InterleavedLayout& layout, std::size_t bu
 }
 
 TEST(Interleaved, BadLayoutsAreRefused) {
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {}}, 8), "invalid_argument");
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {"R", "R"}}, 8), "invalid_argument");
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {"R", "G"}, .alpha = "A"}, 8), "invalid_argument");
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {"R", "B"}}, 8), "out_of_range"); // the image has no B
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {"R", "G"}}, 8), "none");
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {}), 8), "invalid_argument");
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {"R", "R"}), 8), "invalid_argument");
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {"R", "G"}, "A"), 8), "invalid_argument");
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {"R", "B"}), 8), "out_of_range"); // the image has no B
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {"R", "G"}), 8), "none");
 }
 
 TEST(Interleaved, BuffersThatAreTooSmallAreRefused) {
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {"R", "G", "A"}}, 11), "invalid_argument");
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {"R", "G", "A"}}, 12), "none");
-    EXPECT_EQ(errorOf(false, InterleavedLayout{.channels = {"R", "G"}}, 7), "invalid_argument");
-    EXPECT_EQ(errorOf(false, InterleavedLayout{.channels = {"R", "G"}}, 8), "none");
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {"R", "G", "A"}), 11), "invalid_argument");
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {"R", "G", "A"}), 12), "none");
+    EXPECT_EQ(errorOf(false, layoutOf(SampleType::Float32, {"R", "G"}), 7), "invalid_argument");
+    EXPECT_EQ(errorOf(false, layoutOf(SampleType::Float32, {"R", "G"}), 8), "none");
     // A row stride shorter than a row of pixels.
-    EXPECT_EQ(errorOf(true, InterleavedLayout{.channels = {"R"}, .rowStride = 4}, 8), "invalid_argument");
+    EXPECT_EQ(errorOf(true, layoutOf(SampleType::Float32, {"R"}, {}, AlphaMode::Premultiplied, 4), 8),
+              "invalid_argument");
 }
 
 } // namespace
