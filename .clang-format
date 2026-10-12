@@ -1,0 +1,38 @@
+# Code style (CLAUDE.md §2). Checked with clang-format 21 (cmake/PfDevTargets.cmake pins the version);
+# build the 'format' target to apply it.
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+ColumnLimit: 120
+IndentWidth: 4
+AccessModifierOffset: -4
+PointerAlignment: Left
+DerivePointerAlignment: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortLambdasOnASingleLine: All
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: CurrentLine
+FixNamespaceComments: true
+NamespaceIndentation: None
+InsertNewlineAtEOF: true
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  # 1. our headers ("core/image/Image.h"), 2. third-party libraries (<Imath/...>, <OpenEXR/...>),
+  # 3. Qt (<QWidget>), 4. the C++ standard library (<vector>).
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<Q[A-Za-z]*>$|^<Qt[A-Za-z]*/'
+    Priority: 3
+  - Regex: '^<[a-z_0-9]+>$'
+    Priority: 4
+  - Regex: '^<'
+    Priority: 2
+---
+Language: ObjC
+BasedOnStyle: LLVM
+ColumnLimit: 120
+IndentWidth: 4

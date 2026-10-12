@@ -56,7 +56,8 @@ Functional compatibility is the goal. Copying protected expression is not. There
 - Do not include Pantone or other licensed colour libraries. Support importing ASE/ACO swatch files instead.
 - **Licences.** Check the licence of every dependency, every ML model and every bundled OCIO config, LUT or profile
   before adding it, and record it in `docs/THIRD_PARTY.md`.
-  - Allowed by default: MIT, BSD-2/3-Clause, Apache-2.0, ISC, Zlib, BSL-1.0, MPL-2.0 (as a separate module).
+  - Allowed by default: MIT, BSD-2/3-Clause, Apache-2.0, ISC, Zlib, BSL-1.0, MPL-2.0 (as a separate module), and the
+    public-domain-style CC0-1.0 and 0BSD (D-071).
   - LGPL (2.1 or 3): only **dynamically linked**, unmodified or with our modifications published, and only for
     components the owner approved (Qt 6 and an LGPL build of FFmpeg are approved — see `docs/DECISIONS.md`). Ask
     before adding any other LGPL component.
@@ -361,8 +362,9 @@ Ship a default keymap matching Photoshop's default set on macOS (Cmd/Option) and
 
 ## 9. Commands to know
 
-Created in Phase 0 (until then they do not exist). Preset names per platform: `macos-debug`, `macos-release`,
-`windows-debug`, `windows-release`, `linux-debug`, `linux-release`.
+Preset names per platform: `macos-debug`, `macos-release`, `windows-debug`, `windows-release`, `linux-debug`,
+`linux-release`. `VCPKG_ROOT` must point at the vcpkg clone; Qt is found in `~/Qt/6.11.3/<platform>` (override with
+`PF_QT_ROOT`). Debug presets build with AddressSanitizer + UndefinedBehaviorSanitizer.
 
 ```
 cmake --preset macos-debug                 # configure (vcpkg installs dependencies on first run)
@@ -371,7 +373,9 @@ ctest --preset macos-debug                 # all tests (unit + golden + integrat
 ctest --preset macos-debug -L golden       # golden-image tests only
 cmake --build --preset macos-debug --target run          # build and start the app
 cmake --build --preset macos-debug --target check-licenses
-cmake --build --preset macos-debug --target format       # clang-format
+cmake --build --preset macos-debug --target update-third-party   # rewrite the vcpkg table in docs/THIRD_PARTY.md
+cmake --build --preset macos-debug --target format       # clang-format (format-check: verify only)
+cmake --build --preset macos-debug --target tidy         # clang-tidy on our sources
 cmake --build --preset macos-release --target package    # app bundle / installer
 ```
 

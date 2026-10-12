@@ -1176,3 +1176,45 @@ its advantage is ~4× faster CPU↔GPU frame transfers with reused mapped buffer
   behind `gpu::`.
 - Windows/NVIDIA (D3D12 and Vulkan) is verified with the spike's RHI programs when that machine is set up in Phase 0
   (Part C item 1); Dawn stays the documented fallback if a blocking problem shows up there.
+
+## D-070 — 2026-10-12 — Build system and code rules (PLAN Part C item 3)
+
+- **Generator:** Ninja on all three platforms (on Windows from a Visual Studio developer prompt, as CI does), so every
+  build writes `compile_commands.json` for clang-tidy and behaves the same.
+- **vcpkg triplets of our own** (`cmake/triplets`): `arm64-osx-pf` builds the libraries for macOS 14 (D-067);
+  `x64-windows-pf` (DLLs) and `x64-linux-pf` (static) copy vcpkg's defaults. A target triplet that differs from the
+  host triplet keeps vcpkg's build tools out of the shipped set, so the licence check sees only what ships. All
+  presets share one `build/vcpkg_installed` folder.
+- **Dependency features:** default features are controlled only by our `vcpkg.json`. minizip-ng (pulled in by
+  OpenColorIO) is limited to zlib — its defaults would add bzip2 (bzip2 licence), liblzma and crypto libraries we do
+  not need; oneTBB is built without hwloc, so the dependency set is the same on every platform.
+- **Warnings as errors** on our targets: `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wdouble-promotion
+  -Wold-style-cast -Wnon-virtual-dtor -Woverloaded-virtual -Wcast-align -Wformat=2 -Wimplicit-fallthrough` (+ GCC's
+  duplicated-branch/logical-op checks; MSVC `/W4 /permissive-`). `-Wconversion` catches silent float/int narrowing;
+  sign conversions are not flagged (`-Wno-sign-conversion`): too noisy for container indexing.
+- **Sanitizers:** debug presets compile everything we build with AddressSanitizer + UndefinedBehaviorSanitizer
+  (Windows: AddressSanitizer only, MSVC has no UBSan).
+- **LLVM tools pinned to major version 21:** Xcode 26.6 ships clang-format 21; clang-tidy 21 comes from Homebrew
+  `llvm@21` (Mac) and the same major in CI, so formatting and lint results match everywhere. The `format`, `tidy`
+  targets refuse other versions.
+- **Naming** (enforced by clang-tidy): types and enum values `CamelCase`, functions, methods, parameters and locals
+  `camelBack`, private/protected members `m_camelBack`, namespaces `lower_case`; `APP_NAME` keeps CLAUDE.md's
+  spelling. 120 columns, 4-space indent.
+- **Licence check:** reads the SPDX licence vcpkg records for every installed port (`share/<port>/vcpkg.spdx.json`,
+  from the port's declared licence) and its licence text (`copyright`); `A OR B` passes when one side is allowed.
+  `docs/THIRD_PARTY.md` holds a generated table that must match; Qt modules are checked against a list of LGPL
+  modules. The package copies every shipped port's licence text into the app.
+- **Layering:** a CTest test (`layering`) scans includes for the rules of CLAUDE.md §3.1 (core without Qt/OS/other
+  layers; nodes and tools without Qt or ui; ui only from ui and app; app only from app, except `app/Brand.h`).
+- **Brand:** CMake reads `APP_NAME` and `APP_BUNDLE_ID` from `src/app/Brand.h`, so the name stays in one place; the
+  CMake project, targets and folders use the neutral internal name `pixelforge`/`pf_`.
+- **Packaging:** CPack (macOS .dmg, Windows .zip, Linux .tar.gz) with Qt's own deployment script; on macOS the
+  bundle is re-signed ad hoc after deployment (Apple Silicon refuses unsigned code). Real signing comes later.
+
+## D-071 — 2026-10-12 — CC0-1.0 and 0BSD allowed (owner decision)
+
+**Context:** OpenColorIO requires expat; one expat file (`siphash.h`) is under CC0-1.0, which was not on the allowed
+list (D-064), so `check-licenses` stopped. **Decision (owner):** allow CC0-1.0 and 0BSD, both public-domain-style
+licences with no conditions, for anything we ship. GPL, AGPL, LGPL (other than Qt and FFmpeg), non-commercial and
+unknown licences still need the owner first. **Consequences:** `cmake/LicensePolicy.cmake`, CLAUDE.md §1.2 and
+`docs/THIRD_PARTY.md` updated; expat passes the check.

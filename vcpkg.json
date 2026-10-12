@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "pixelforge",
+  "version": "0.1.0",
+  "description": "Node-based compositor for render passes with a full image-editing toolset",
+  "builtin-baseline": "e456309491fd875487bf02b8a0dca76c1b1b00cc",
+  "dependencies": [
+    "gtest",
+    "imath",
+    {
+      "$comment": "Not used directly: OpenColorIO needs only its zlib feature. Only this file can turn off vcpkg's default features (bzip2, lzma, crypto).",
+      "name": "minizip-ng",
+      "default-features": false,
+      "features": ["zlib"]
+    },
+    {
+      "name": "opencolorio",
+      "version>=": "2.5.0"
+    },
+    {
+      "name": "openexr",
+      "version>=": "3.4.14"
+    },
+    {
+      "$comment": "Without hwloc (NUMA/hybrid-core binding, default on Windows/Linux): not needed, keeps the dependency set the same on every platform.",
+      "name": "tbb",
+      "default-features": false
+    }
+  ]
+}

@@ -23,7 +23,9 @@ _Update this section at the end of every session._
   GoogleTest and Dawn; Open Image Denoise has no port (official prebuilt releases or an overlay port, Phase 2).
 - Done: item 2, the GPU-layer spike (`docs/specs/gpu-spike.md`). The owner chose **Qt RHI** (D-069). The Windows
   check of that choice is part of item 1's Windows half.
-- Next up: item 3 (repository skeleton: CMake presets, vcpkg manifest, folder layout, Brand.h, tooling targets).
+- In progress: item 3, repository skeleton — done except running clang-tidy (the owner installs `llvm@21`). Licence
+  policy now also allows CC0-1.0 and 0BSD (owner, D-071).
+- Next up: finish item 3 (run `tidy`, fix findings, tick), then item 4 (tests and CI).
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15); a
   GitHub remote for CI (item 4).
 
@@ -708,6 +710,10 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   errors, ASan/UBSan in debug, clang-format and clang-tidy configs, the `run`, `format`, `check-licenses` and `package`
   targets (CLAUDE.md §9). A licence check that reads vcpkg's installed copyright files and fails on anything not
   allowed by CLAUDE.md §1.2. `docs/THIRD_PARTY.md` filled from it.
+  ↳ partial (2026-10-12): all of it exists and works on the Mac (debug with ASan/UBSan, release, `run`, `format`,
+  `format-check`, `check-licenses`, `update-third-party`, `package` → a self-contained, ad-hoc-signed .dmg; tests
+  `layering` and `license_policy`). Decisions D-070, D-071. Missing: the `tidy` target has not run yet — clang-tidy 21
+  needs installing (`brew install llvm@21`); Windows and Linux presets are untested until CI (item 4).
 - [ ] 4. **Tests and CI:** GoogleTest wired into CTest with labels (unit, golden, integration); the float golden-image
   harness (EXR in, EXR expected, per-channel absolute/relative tolerance, NaN/Inf checks, ΔE2000 mode for display-
   referred 8/16-bit results, a difference image written on failure, an update command for reviewed changes); GitHub
