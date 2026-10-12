@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.28)
 
+# Static libraries appear once on link lines where the linker does not need repeats (Apple's linker warns about
+# duplicates, e.g. GoogleTest pulled in by a test and by a test-support library). New in CMake 3.29.
+if(POLICY CMP0156)
+    cmake_policy(SET CMP0156 NEW)
+endif()
+
 # How to build: README.md and CLAUDE.md §9 (presets: macos-debug, macos-release, windows-*, linux-*).
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -20,10 +26,14 @@ option(PF_BUILD_TESTS "Build the tests" ON)
 include(PfCompileOptions)
 include(PfQt)
 
+if(PF_BUILD_TESTS)
+    enable_testing()
+    include(PfTesting) # before src/, whose layers will add their own tests
+endif()
+
 add_subdirectory(src)
 
 if(PF_BUILD_TESTS)
-    enable_testing()
     add_subdirectory(tests)
 endif()
 

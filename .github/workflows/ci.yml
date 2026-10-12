@@ -1,0 +1,194 @@
+# Continuous integration (CLAUDE.md §4 step 5, PLAN Part C item 4): every push and pull request is built and tested
+# on macOS (Apple Silicon), Windows and Linux, in debug (with sanitizers) and release, with the same presets as on a
+# developer machine. macOS also checks formatting and clang-tidy; every platform runs the licence check.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned like the developer machines (README.md): Qt (D-068), the vcpkg ports baseline (vcpkg.json), CMake, Ninja.
+  QT_VERSION: 6.11.3
+  AQTINSTALL_VERSION: 3.3.0
+  VCPKG_COMMIT: e456309491fd875487bf02b8a0dca76c1b1b00cc
+  CMAKE_VERSION: 4.4.4
+  NINJA_VERSION: 1.13.2
+  LLVM_TOOLS_MAJOR: 21
+  VCPKG_DISABLE_METRICS: 1
+  # Test programs started by Qt run without a display.
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple Silicon)
+            os: macos-26 # Xcode 26.6, as on the reference Mac
+            platform: macos
+            qt-host: mac
+            qt-arch: clang_64
+            qt-folder: macos
+          - name: Windows (x64)
+            os: windows-2022 # Visual Studio 2022
+            platform: windows
+            qt-host: windows
+            qt-arch: win64_msvc2022_64
+            qt-folder: msvc2022_64
+          - name: Linux (x64)
+            os: ubuntu-24.04
+            platform: linux
+            qt-host: linux
+            qt-arch: linux_gcc_64
+            qt-folder: gcc_64
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Set up paths
+        id: paths
+        run: |
+          temp="$RUNNER_TEMP"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then temp="$(cygpath -m "$RUNNER_TEMP")"; fi
+          {
+            echo "VCPKG_ROOT=$temp/vcpkg"
+            echo "PF_QT_ROOT=$temp/Qt/$QT_VERSION/${{ matrix.qt-folder }}"
+            echo "VCPKG_BINARY_SOURCES=clear;files,$temp/vcpkg-binary-cache,readwrite"
+          } >> "$GITHUB_ENV"
+          echo "temp=$temp" >> "$GITHUB_OUTPUT"
+          # The runner image version is part of the dependency cache key: a new compiler means new binaries.
+          echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl-dev libegl-dev libvulkan-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev libdbus-1-dev
+
+      - name: Install CMake and Ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+          ninjaVersion: ${{ env.NINJA_VERSION }}
+
+      - name: Set up the Visual Studio environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install LLVM tools (clang-format, clang-tidy)
+        if: runner.os == 'macOS'
+        run: brew install "llvm@$LLVM_TOOLS_MAJOR"
+
+      - name: Restore Qt
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.paths.outputs.temp }}/Qt
+          key: qt-${{ matrix.qt-host }}-${{ env.QT_VERSION }}-${{ matrix.qt-arch }}-shadertools
+
+      # A Python of our own: the runners' system Pythons refuse pip installs (PEP 668).
+      - name: Set up Python
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --disable-pip-version-check "aqtinstall==$AQTINSTALL_VERSION"
+          python -m aqt install-qt ${{ matrix.qt-host }} desktop "$QT_VERSION" ${{ matrix.qt-arch }} \
+            -m qtshadertools -O "${{ steps.paths.outputs.temp }}/Qt"
+          test -f "$PF_QT_ROOT/lib/cmake/Qt6/Qt6Config.cmake"
+
+      # The full history is needed: vcpkg reads port versions from it (builtin-baseline in vcpkg.json).
+      - name: Install vcpkg
+        run: |
+          git clone --quiet https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout --quiet "$VCPKG_COMMIT"
+
+      - name: Bootstrap vcpkg
+        if: runner.os != 'Windows'
+        run: '"$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics'
+
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '& "$env:VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics'
+
+      - name: Restore built dependencies
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.paths.outputs.temp }}/vcpkg-binary-cache
+          key: vcpkg-${{ matrix.platform }}-${{ steps.paths.outputs.image }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/**') }}
+          restore-keys: |
+            vcpkg-${{ matrix.platform }}-${{ steps.paths.outputs.image }}-
+            vcpkg-${{ matrix.platform }}-
+
+      # Configuring installs the dependencies (vcpkg manifest mode); both presets share build/vcpkg_installed.
+      - name: Configure (debug)
+        run: cmake --preset ${{ matrix.platform }}-debug
+
+      - name: Save built dependencies
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.paths.outputs.temp }}/vcpkg-binary-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Build (debug)
+        run: cmake --build --preset ${{ matrix.platform }}-debug
+
+      - name: Test (debug, sanitizers)
+        run: ctest --preset ${{ matrix.platform }}-debug
+
+      - name: Configure (release)
+        run: cmake --preset ${{ matrix.platform }}-release
+
+      - name: Build (release)
+        run: cmake --build --preset ${{ matrix.platform }}-release
+
+      - name: Test (release)
+        run: ctest --preset ${{ matrix.platform }}-release
+
+      - name: Licence check
+        run: cmake --build --preset ${{ matrix.platform }}-release --target check-licenses
+
+      - name: Formatting check
+        if: runner.os == 'macOS'
+        run: cmake --build --preset macos-debug --target format-check
+
+      - name: clang-tidy
+        if: runner.os == 'macOS'
+        run: cmake --build --preset macos-debug --target tidy
+
+      - name: Upload golden-test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-output-${{ matrix.platform }}
+          path: build/*/golden-output/
+          if-no-files-found: ignore

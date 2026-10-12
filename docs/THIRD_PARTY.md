@@ -54,6 +54,8 @@ Where a port offers a choice of licences (`A OR B`), we use it under the allowed
 |---|---|---|---|---|
 | Qt 6 | 6.11.3 (D-068) | LGPL-3.0 | UI, windows, GPU layer (Qt RHI, D-069); official binaries, dynamically linked | Linked modules: Core, Gui, Widgets (`check-licenses` keeps this list to LGPL modules); Qt's deployment tool also ships DBus and Svg (LGPL-3.0) for its plugins. The package must still add Qt's licence texts (and those of the libraries bundled inside Qt) and a relinking notice — PLAN Part C item 16 |
 | LLVM clang-format / clang-tidy | 21 | Apache-2.0 WITH LLVM-exception | Developer tools only (formatting, static analysis) | Not shipped |
+| aqtinstall | 3.3.0 | MIT | Installs the official Qt binaries (developer machines, CI) | Not shipped |
+| GitHub Actions: `actions/checkout`, `actions/cache`, `actions/setup-python`, `actions/upload-artifact`, `lukka/get-cmake`, `ilammy/msvc-dev-cmd` | version tags in `.github/workflows/ci.yml` | MIT | CI only (D-072) | Not shipped |
 
 ## Planned (not yet added — each licence is verified again when it is added)
 

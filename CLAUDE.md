@@ -371,6 +371,7 @@ cmake --preset macos-debug                 # configure (vcpkg installs dependenc
 cmake --build --preset macos-debug         # build
 ctest --preset macos-debug                 # all tests (unit + golden + integration)
 ctest --preset macos-debug -L golden       # golden-image tests only
+cmake --build --preset macos-debug --target update-golden   # after review: rewrite failing/missing expected images
 cmake --build --preset macos-debug --target run          # build and start the app
 cmake --build --preset macos-debug --target check-licenses
 cmake --build --preset macos-debug --target update-third-party   # rewrite the vcpkg table in docs/THIRD_PARTY.md

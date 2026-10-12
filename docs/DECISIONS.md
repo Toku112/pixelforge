@@ -1221,3 +1221,40 @@ list (D-064), so `check-licenses` stopped. **Decision (owner):** allow CC0-1.0 a
 licences with no conditions, for anything we ship. GPL, AGPL, LGPL (other than Qt and FFmpeg), non-commercial and
 unknown licences still need the owner first. **Consequences:** `cmake/LicensePolicy.cmake`, CLAUDE.md §1.2 and
 `docs/THIRD_PARTY.md` updated; expat passes the check.
+
+## D-072 — 2026-10-12 — Tests, golden-image harness and CI (PLAN Part C item 4)
+
+- **GoogleTest programs** are added with `pf_add_gtest()` (`cmake/PfTesting.cmake`), one label each (`unit`,
+  `golden`, `integration`). Tests are listed when CTest runs (`DISCOVERY_MODE PRE_TEST`), never during the build, so
+  the build does not start test programs (DLL lookup on Windows, sanitizer output in the wrong place). Each test is
+  named `<program>.<Suite>.<Test>`.
+- **The golden harness has its own image type and reads/writes EXR with OpenEXR directly**, not through our `io/`
+  layer: a bug in the code under test must not be able to hide in the code that checks it. Expected images are EXR
+  only (float32, ZIP), one file per case in `tests/golden/<feature>/<case>.expected.exr`. Display-referred 8/16-bit
+  results are stored as float code values / max; PNG/TIFF references (e.g. image-editor exports from the owner) get a
+  reader when the first one arrives.
+- **Comparison rules** (FORMAT_NOTES §18): the CLAUDE.md §4 tolerances as `max(absolute, relative · |e|)`; NaN and
+  infinity fail by default (they are almost always bugs), with a per-channel opt-in for matching ones; ΔE mode keeps
+  the prototype's method (FORMAT_NOTES §2.4: composite over black and white, larger ΔE00), so colour under zero alpha
+  is ignored and alpha differences are caught. The D50 white is the matrix's exact row sums (the prototype rounded
+  them to 0.96422/0.82521); the difference is below 1e-7 and makes white exactly neutral.
+- **Failure output goes to the build folder** (`build/<preset>/golden-output/`), not into `tests/` as in the prototype:
+  presets do not overwrite each other and the source tree stays clean. Output of a test is deleted when it passes.
+- **Update mode** (`update-golden` target, or `PF_GOLDEN_UPDATE=1`) rewrites only expected images that fail or are
+  missing, so float noise inside the tolerance never causes churn; `git status` shows what changed for review.
+- **App startup test:** a hidden `--smoke-test` option makes the app start normally, show its window and quit when
+  the event loop runs; `app_startup` (label `integration`) runs it with Qt's offscreen platform. It catches startup
+  crashes, missing libraries and sanitizer reports on all three platforms until the headless workflow driver arrives
+  (Part C item 15).
+- **CMake policy CMP0156 on:** static libraries are listed once on link lines where the linker does not need
+  repeats; Apple's linker otherwise warns about GoogleTest appearing twice.
+- **CI (GitHub Actions, `.github/workflows/ci.yml`):** one job per platform — `macos-26` (Apple Silicon, Xcode 26.6,
+  as the reference Mac), `windows-2022` (Visual Studio 2022, as planned for the owner's PC; `windows-2025` moved to
+  Visual Studio 2026 in June 2026) and `ubuntu-24.04` (GCC). Each builds and tests debug (sanitizers) and release
+  with the developer presets and runs `check-licenses`; macOS also runs `format-check` and `tidy` (LLVM 21 from
+  Homebrew, as on the reference Mac). Qt comes from aqtinstall like on the developer machines and is cached. vcpkg is
+  cloned at the ports baseline; built dependencies are cached with vcpkg's `files` binary cache in an Actions cache
+  saved right after configuring (vcpkg's own GitHub cache backend was removed), keyed on the runner image version so
+  a compiler update rebuilds them. A failing run uploads the golden output. Third-party actions (all MIT:
+  `actions/*`, `lukka/get-cmake`, `ilammy/msvc-dev-cmd`) are pinned by version tag for now; pinning by commit hash can
+  follow once the workflow is stable. CI tools and their output never ship (THIRD_PARTY "Other components").

@@ -10,7 +10,6 @@ vcpkg_installed/
 .cache/
 
 # test output
-tests/golden/__output__/
 Testing/
 
 # OS / editor

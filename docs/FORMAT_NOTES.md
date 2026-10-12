@@ -597,3 +597,30 @@ did not move; at most 1). Only canvas pixels change.
 
 **Recorded** (`retouch` in a paintStroke descriptor): `{ mode, strength, sampleAllLayers, protectDetail? (Sharpen),
 finger? (Smudge) }`; Finger Painting's colour is the stroke's `color`.
+
+## 18. Golden-image comparison (native test harness)
+
+Test code: `tests/support/golden/` (D-072). Images are named float channels over a data window inside a display
+window, as in EXR; expected images are single-part EXR files, float32, ZIP-compressed (lossless).
+
+**Structure first.** Display window, data window and the set of channel names must be identical; otherwise no pixel
+is compared and every difference is listed.
+
+**Float mode** (scene-linear data, the default). For each channel and sample, with `a` the actual and `e` the
+expected value: the sample passes when `|a − e| ≤ max(absolute, relative · |e|)`, defaults `absolute = relative =
+1e-4` (CLAUDE.md §4: 1e-4 absolute up to 1, 1e-4 relative above). Differences are computed in double precision.
+NaN and ±infinity fail in either image by default; a channel may instead require them to match (NaN where the
+expected image has NaN, the same infinity where it has one). The report names the sample furthest over its
+allowance (largest `|a − e| / allowance`), the largest and mean difference over finite samples, and the count of
+failing samples.
+
+**ΔE mode** (display-referred results, e.g. 8/16-bit documents). R, G, B are sRGB-encoded by default (§2.1, values
+outside 0–1 mirrored) or linear with sRGB primaries; A is straight alpha clamped to 0–1, and an image without A is
+opaque. Each pixel is composited in linear light over black and over white, converted to L\*a\*b\* D50 (§2.2, the
+reference white being the exact row sums of the matrix) and compared with CIEDE2000 (§2.3); the pixel's difference
+is the larger of the two values (§2.4). Passes when the average over the image is ≤ 1.0 and the maximum ≤ 3.0; any
+NaN or infinity in R, G, B or A fails. Channels other than R, G, B and A are compared in float mode.
+
+**Difference image** (written on failure, same windows as the expected image): `|a − e|` per float-compared channel
+(infinity where NaN or infinity made a sample fail, 0 where they matched as allowed), `golden.deltaE` in ΔE mode, and
+`golden.failed` = 1 on pixels where any channel failed.

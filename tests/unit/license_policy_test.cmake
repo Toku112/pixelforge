@@ -1,8 +1,8 @@
 # Unit test of the licence-expression rules used by check-licenses (cmake/scripts/spdx.cmake). Run with cmake -P.
 
 cmake_minimum_required(VERSION 3.28)
-include("${CMAKE_CURRENT_LIST_DIR}/../cmake/LicensePolicy.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/../cmake/scripts/spdx.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/LicensePolicy.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/scripts/spdx.cmake")
 
 set(_failures "")
 function(expect expr expected)

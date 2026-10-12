@@ -25,7 +25,11 @@ _Update this section at the end of every session._
   check of that choice is part of item 1's Windows half.
 - Done: item 3, the repository skeleton (build presets, dependency manifest, folder layout, licence and layering
   checks, format/tidy/run/package targets). The owner installed LLVM 21 and allowed CC0-1.0 and 0BSD (D-071).
-- Next up: item 4 (GoogleTest, the golden-image harness, GitHub Actions CI on macOS, Windows and Linux).
+- Item 4 mostly done (2026-10-12): GoogleTest with unit/golden/integration labels, the golden-image harness and its
+  tests, an app startup test, and the CI workflow. 49 tests pass on the Mac (debug with sanitizers, and release). It
+  ticks after the first green CI run on GitHub (macOS, Windows, Linux).
+- Next up: the owner creates a GitHub repository (instructions in the session); then push, fix whatever Windows/Linux
+  report, and tick item 4. Meanwhile item 5 (float image core) can start.
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15); a
   GitHub remote for CI (item 4).
 
@@ -722,6 +726,15 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   referred 8/16-bit results, a difference image written on failure, an update command for reviewed changes); GitHub
   Actions on macOS (arm64), Windows and Linux with the vcpkg binary cache. Ticks after the first green run on GitHub
   (needs a remote — owner).
+  ↳ partial (2026-10-12): done and verified on the Mac — `pf_add_gtest()` with labels and test-time discovery
+  (`cmake/PfTesting.cmake`); the golden harness (`tests/support/golden/`: EXR in/out on OpenEXR, float mode with the
+  §4 tolerances and NaN/Inf checks, ΔE2000 mode, difference image on failure, `update-golden` target; rules in
+  FORMAT_NOTES §18) with 44 unit tests (incl. all 34 CIEDE2000 reference pairs) and its own golden self-test (2 cases);
+  integration test `app_startup` (hidden `--smoke-test` option, offscreen). Debug (ASan/UBSan) and release: 49/49
+  tests pass; format-check, tidy and check-licenses clean. CI workflow `.github/workflows/ci.yml` written (macOS 26,
+  Windows 2022, Ubuntu 24.04; debug + release; licence check everywhere; format and tidy on macOS). Decisions D-072.
+  Missing: the first green run on GitHub — Windows (MSVC) and Linux (GCC) have not compiled this code yet; needs the
+  owner's GitHub repository.
 - [ ] 5. **Float image core (`core/image`):** named channel sets, scene-linear float32 planes, data window vs display
   window, ROI maths, tiles (size decided by measurement, logged), copy-on-write, premultiplied alpha conventions,
   conversions to/from half, 8 and 16-bit at the boundary. Unit tests for every conversion (FORMAT_NOTES).

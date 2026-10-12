@@ -4,9 +4,12 @@
 #include "app/Brand.h"
 
 #include <QApplication>
+#include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QCoreApplication>
 #include <QMainWindow>
 #include <QString>
+#include <QTimer>
 
 namespace {
 
@@ -24,11 +27,19 @@ int main(int argc, char* argv[]) {
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addVersionOption();
+    // For the integration tests (tests/integration): start normally, then quit once the event loop runs.
+    QCommandLineOption smokeTestOption(QStringLiteral("smoke-test"),
+                                       QStringLiteral("Start, show the main window and quit (startup check)."));
+    smokeTestOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(smokeTestOption);
     parser.process(app);
 
     QMainWindow window;
     window.setWindowTitle(toQString(pf::APP_NAME));
     window.resize(1280, 800);
     window.show();
+    if (parser.isSet(smokeTestOption)) {
+        QTimer::singleShot(0, [] { QCoreApplication::quit(); });
+    }
     return QApplication::exec();
 }
