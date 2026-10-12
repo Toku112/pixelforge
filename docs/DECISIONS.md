@@ -1123,8 +1123,7 @@ and ICC profile is checked like code. **Consequences:** H.264/H.265 encoding use
 
 ## D-066 — 2026-10-12 — GPU layer: decided after a spike (pending)
 
-**Status:** spike measured on the Mac on 2026-10-12 (`docs/specs/gpu-spike.md`): recommendation Qt RHI. Waiting for
-the owner's decision. The `qsb` question no longer arises: RHI shaders are baked at run time by the LGPL runtime.
+**Status:** decided — see D-069.
 **Provisional recommendation (from documentation, before measuring):** Qt RHI, wrapped in our own `gpu::` interface.
 Reasons: it ships inside Qt (no second large dependency); it renders straight into Qt windows; it already has HDR
 swapchain formats and HDR info for macOS EDR and Windows HDR; OpenColorIO generates GLSL/MSL/HLSL (not WGSL), which
@@ -1159,3 +1158,21 @@ The owner may ask for different minimums.
   edition, LTS patch releases stop being public after the first year, so 6.8 lacks public fixes for macOS 26 and
   Xcode 26. Upgrading Qt is a deliberate, tested change (pin, rebuild, run all tests).
 - **Still open:** Qt's GPL-3 shader build tool (`qsb`) — asked again with the GPU decision after the spike.
+
+## D-069 — 2026-10-12 — GPU layer: Qt RHI (owner decision)
+
+**Context:** Spike results in `docs/specs/gpu-spike.md` (Apple M5 Pro). Qt RHI ran OpenColorIO's shaders unchanged
+(AgX 0.7 ms, ACES 2.0 ~1 ms per 4K frame, matching OCIO's CPU result to 2e-5), supports HDR/EDR swapchains and adds no
+dependency. Dawn needed OCIO shader rewriting, ran ACES 2.0 ~600× slower, rejects HDR on macOS and adds a heavy build;
+its advantage is ~4× faster CPU↔GPU frame transfers with reused mapped buffers.
+**Decision (owner, 2026-10-12):** Qt RHI behind our own thin `gpu::` interface, decided on the Mac results.
+**Consequences:**
+- Shaders: one Vulkan-style GLSL source per shader, baked at run time by `QShaderBaker` (LGPL runtime of Qt Shader
+  Tools) with an on-disk cache; the GPL-3 `qsb` tool is not used.
+- QRhi comes from `Qt6::GuiPrivate`; the app is tied to the pinned Qt version (D-068); every Qt upgrade is tested.
+- Readbacks run on a separate offscreen `QRhi` on a worker thread, never on the window's.
+- `gpu::` always sets all sampler address modes (RHI defaults the third to Repeat).
+- If 4K–8K multi-pass playback needs faster transfers, add a per-backend transfer path through QRhi's native handles
+  behind `gpu::`.
+- Windows/NVIDIA (D3D12 and Vulkan) is verified with the spike's RHI programs when that machine is set up in Phase 0
+  (Part C item 1); Dawn stays the documented fallback if a blocking problem shows up there.

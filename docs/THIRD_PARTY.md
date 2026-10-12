@@ -20,8 +20,8 @@ _None yet — nothing is added until Phase 0 starts._
 
 | Component | Expected licence | Purpose | Notes |
 |---|---|---|---|
-| Qt 6 (6.8 LTS) | LGPL-3.0 (dynamic linking) | UI, windows, RHI if chosen | Owner-approved. Some Qt modules are GPL-only — use only LGPL modules. Qt Shader Tools runtime is LGPL-3.0/GPL-2.0; its `qsb` command-line tool is GPL-3.0 (build-time; ask owner if RHI is chosen) |
-| Dawn | BSD-3-Clause | GPU layer, if chosen instead of Qt RHI | Spike decides (D-066) |
+| Qt 6 (6.8 LTS) | LGPL-3.0 (dynamic linking) | UI, windows, RHI if chosen | Owner-approved. Some Qt modules are GPL-only — use only LGPL modules. Qt RHI is the GPU layer (D-069); shaders are baked at run time by the Qt Shader Tools runtime (LGPL-3.0); the GPL-3.0 `qsb` tool is not used |
+| Dawn | BSD-3-Clause | — | Not used: Qt RHI was chosen (D-069); only in the throw-away spike |
 | OpenEXR (≥ 3.4.14) | BSD-3-Clause | EXR read/write | Brings OpenJPH (BSD-2-Clause) for HTJ2K and libdeflate (MIT) |
 | Imath | BSD-3-Clause | Half floats, vectors, matrices | |
 | OpenColorIO (≥ 2.5) | BSD-3-Clause | Scene colour management | Brings yaml-cpp (MIT), pystring (BSD-3), expat (MIT), minizip-ng (Zlib) |
