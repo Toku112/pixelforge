@@ -8,7 +8,10 @@ indent_size = 2
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-[*.rs]
+[*.{cpp,cc,h,hpp,mm,m}]
+indent_size = 4
+
+[{CMakeLists.txt,*.cmake}]
 indent_size = 4
 
 [*.md]

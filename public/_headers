@@ -1,5 +1,0 @@
-# Static-host header rules (Netlify / Cloudflare Pages format).
-# Cross-origin isolation is required for SharedArrayBuffer and multi-threaded WebAssembly.
-/*
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp

@@ -1,16 +1,17 @@
-# dependencies
-node_modules/
+# build output (CMake presets put everything under build/)
+build/
+out/
+cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
 
-# build output
-dist/
-src/wasm/target/
-src/wasm/pkg/
+# dependency caches
+vcpkg_installed/
+.cache/
 
 # test output
-coverage/
-playwright-report/
-test-results/
 tests/golden/__output__/
+Testing/
 
 # OS / editor
 .DS_Store
@@ -18,6 +19,7 @@ tests/golden/__output__/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+*.xcodeproj/xcuserdata/
 
 # local env
 .env
