@@ -8,6 +8,7 @@
 #   include-cleaner: unreliable with Qt's umbrella headers.
 #   non-private-member-variables-in-classes: plain data structs with public members are fine.
 #   avoid-do-while, no-recursion: legitimate patterns (graph traversal recurses).
+#   avoid-pragma-once: every compiler we support (Clang, GCC, MSVC) handles #pragma once; it is our header guard.
 Checks: >
   -*,
   bugprone-*,
@@ -30,6 +31,7 @@ Checks: >
   -modernize-use-nodiscard,
   performance-*,
   portability-*,
+  -portability-avoid-pragma-once,
   readability-*,
   -readability-magic-numbers,
   -readability-identifier-length

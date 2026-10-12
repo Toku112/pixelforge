@@ -23,9 +23,9 @@ _Update this section at the end of every session._
   GoogleTest and Dawn; Open Image Denoise has no port (official prebuilt releases or an overlay port, Phase 2).
 - Done: item 2, the GPU-layer spike (`docs/specs/gpu-spike.md`). The owner chose **Qt RHI** (D-069). The Windows
   check of that choice is part of item 1's Windows half.
-- In progress: item 3, repository skeleton — done except running clang-tidy (the owner installs `llvm@21`). Licence
-  policy now also allows CC0-1.0 and 0BSD (owner, D-071).
-- Next up: finish item 3 (run `tidy`, fix findings, tick), then item 4 (tests and CI).
+- Done: item 3, the repository skeleton (build presets, dependency manifest, folder layout, licence and layering
+  checks, format/tidy/run/package targets). The owner installed LLVM 21 and allowed CC0-1.0 and 0BSD (D-071).
+- Next up: item 4 (GoogleTest, the golden-image harness, GitHub Actions CI on macOS, Windows and Linux).
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15); a
   GitHub remote for CI (item 4).
 
@@ -684,7 +684,8 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   binaries via `aqtinstall`; pinned, D-068). Same list for the Windows machine (Visual Studio 2022
   Build Tools) later in the phase. Record exact versions in `README.md`.
   ↳ partial: the Mac is set up (2026-10-12): Xcode 26.6 with Metal tools, Homebrew, CMake 4.4.4, Ninja 1.13.2, vcpkg
-  (tool 2026-09-26, ports at e456309), aqtinstall 3.3.0, Qt 6.11.3 in `~/Qt/6.11.3/macos` with Qt Shader Tools.
+  (tool 2026-09-26, ports at e456309), aqtinstall 3.3.0, Qt 6.11.3 in `~/Qt/6.11.3/macos` with Qt Shader Tools,
+  LLVM 21.1.8 (`llvm@21`: clang-format, clang-tidy).
   Versions in `README.md`. Missing: the Windows machine, including running the GPU spike's RHI programs there
   (`spikes/gpu`, D3D12 and Vulkan) to confirm D-069.
 - [x] 2. **GPU-layer spike** (in `spikes/gpu/`, never linked into the app): the same small test program written twice,
@@ -705,15 +706,17 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   OCIO shader rewriting, was ~600× slower on ACES 2.0 and rejects HDR on macOS; Dawn transfers frames ~4× faster with
   reused buffers — RHI gets a per-backend transfer path later if needed). Runtime shader baking avoids the GPL-3 `qsb`
   tool. The owner chose **Qt RHI** on the Mac results (D-069); the Windows/NVIDIA check moved to item 1.
-- [ ] 3. **Repository skeleton:** `CMakeLists.txt`, `CMakePresets.json` (macos/windows/linux × debug/release),
+- [x] 3. **Repository skeleton:** `CMakeLists.txt`, `CMakePresets.json` (macos/windows/linux × debug/release),
   `vcpkg.json` with a pinned baseline, the folder layout of CLAUDE.md §3.1, `Brand.h` with `APP_NAME`, warnings as
   errors, ASan/UBSan in debug, clang-format and clang-tidy configs, the `run`, `format`, `check-licenses` and `package`
   targets (CLAUDE.md §9). A licence check that reads vcpkg's installed copyright files and fails on anything not
   allowed by CLAUDE.md §1.2. `docs/THIRD_PARTY.md` filled from it.
-  ↳ partial (2026-10-12): all of it exists and works on the Mac (debug with ASan/UBSan, release, `run`, `format`,
-  `format-check`, `check-licenses`, `update-third-party`, `package` → a self-contained, ad-hoc-signed .dmg; tests
-  `layering` and `license_policy`). Decisions D-070, D-071. Missing: the `tidy` target has not run yet — clang-tidy 21
-  needs installing (`brew install llvm@21`); Windows and Linux presets are untested until CI (item 4).
+  ↳ note (2026-10-12): verified on the Mac — debug (ASan/UBSan) and release build, the app opens its (empty) window
+  with no sanitizer reports, `run`, `format`, `format-check`, `tidy` (clang-tidy 21), `check-licenses` (14 ports),
+  `update-third-party`, `package` → a self-contained, ad-hoc-signed .dmg that runs on its own. Tests `layering` and
+  `license_policy` (label unit). Decisions D-070, D-071. DoD (D-006): float/OCIO/sequences/documents/selection/
+  history/shortcuts/panels/persistence/performance items N/A for build infrastructure; Windows and Linux presets
+  are written but first run in CI (item 4).
 - [ ] 4. **Tests and CI:** GoogleTest wired into CTest with labels (unit, golden, integration); the float golden-image
   harness (EXR in, EXR expected, per-channel absolute/relative tolerance, NaN/Inf checks, ΔE2000 mode for display-
   referred 8/16-bit results, a difference image written on failure, an update command for reviewed changes); GitHub

@@ -17,7 +17,7 @@ QString toQString(std::string_view text) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    QApplication app(argc, argv);
+    const QApplication app(argc, argv);
     QApplication::setApplicationName(toQString(pf::APP_NAME));
     QApplication::setApplicationVersion(QStringLiteral(PF_VERSION_STRING));
 

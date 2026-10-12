@@ -1194,9 +1194,12 @@ its advantage is ~4× faster CPU↔GPU frame transfers with reused mapped buffer
   sign conversions are not flagged (`-Wno-sign-conversion`): too noisy for container indexing.
 - **Sanitizers:** debug presets compile everything we build with AddressSanitizer + UndefinedBehaviorSanitizer
   (Windows: AddressSanitizer only, MSVC has no UBSan).
-- **LLVM tools pinned to major version 21:** Xcode 26.6 ships clang-format 21; clang-tidy 21 comes from Homebrew
-  `llvm@21` (Mac) and the same major in CI, so formatting and lint results match everywhere. The `format`, `tidy`
-  targets refuse other versions.
+- **LLVM tools pinned to major version 21:** clang-format and clang-tidy 21 from Homebrew `llvm@21` on the Mac (Xcode
+  26.6's own clang-format 21 is the fallback) and the same major in CI, so formatting and lint results match
+  everywhere. The `format` and `tidy` targets refuse other versions. clang-tidy's `portability-avoid-pragma-once` is
+  off: `#pragma once` is our header guard and all three compilers support it.
+- **macOS SDK named explicitly** (`CMAKE_OSX_SYSROOT=macosx` in the presets): CMake 4 otherwise leaves the SDK to
+  Apple's compiler, and the build commands then lack `-isysroot`, so LLVM's own tools cannot find the system headers.
 - **Naming** (enforced by clang-tidy): types and enum values `CamelCase`, functions, methods, parameters and locals
   `camelBack`, private/protected members `m_camelBack`, namespaces `lower_case`; `APP_NAME` keeps CLAUDE.md's
   spelling. 120 columns, 4-space indent.
