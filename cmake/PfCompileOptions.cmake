@@ -38,6 +38,9 @@ else()
         -Wnon-virtual-dtor -Woverloaded-virtual -Wcast-align -Wformat=2 -Wimplicit-fallthrough)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         list(APPEND PF_WARNING_FLAGS -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wmisleading-indentation)
+        # GCC 13 reports designated initializers that leave out fields with default values
+        # ({.priority = Priority::Viewer}), the intended way to fill options structs; Clang and MSVC do not (D-074).
+        list(APPEND PF_WARNING_FLAGS -Wno-missing-field-initializers)
     endif()
 endif()
 

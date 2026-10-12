@@ -1348,6 +1348,10 @@ unknown licences still need the owner first. **Consequences:** `cmake/LicensePol
   (the C++ allocator until then); each tile remembers the resource it came from, so changing it while tiles exist is
   safe. Tile samples start on a 64-byte boundary. The pool lives for the whole process, so images may outlive the
   engine.
+- **GCC builds drop `-Wmissing-field-initializers`** (D-070's warning list): options structs such as `JobOptions`
+  give every field a default and are filled with designated initializers naming only what differs
+  (`{.priority = Priority::Viewer}`); GCC 13 reports the fields left out, Clang and MSVC do not. Positional
+  initializers that miss fields are still reported by Clang on every macOS build.
 - **Windows packaging:** oneTBB is a DLL there (`tbb12.dll`, `tbbmalloc.dll`); vcpkg copies it next to programs in the
   build tree, the Windows zip (Part C item 16) must ship it.
 - DoD (D-006): float, OCIO, documents, selections, history, shortcuts, panels and persistence: N/A (services, no
