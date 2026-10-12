@@ -1,5 +1,7 @@
 # PixelForge
 
+[![CI](https://github.com/Toku112/pixelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Toku112/pixelforge/actions/workflows/ci.yml)
+
 A native desktop compositor for multi-layer OpenEXR render passes (stills and animations), with a full
 Photoshop-equivalent toolset for painting, retouching and selections. Working title — the name lives in
 `src/app/Brand.h`.
