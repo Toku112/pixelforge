@@ -2,5 +2,7 @@
 # code arrives; each target links only the layers it may depend on (checked by the "layering" test).
 
 add_subdirectory(core)
+add_subdirectory(io)
 add_subdirectory(engine)
+add_subdirectory(nodes)
 add_subdirectory(app)

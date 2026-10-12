@@ -6,6 +6,7 @@ find_package(TBB CONFIG REQUIRED)
 add_library(pf_engine STATIC
     Cancellation.cpp
     Engine.cpp
+    Evaluator.cpp
     MemoryBudget.cpp
     Progress.cpp
     Scheduler.cpp

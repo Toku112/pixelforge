@@ -28,12 +28,33 @@ pf_add_gtest(pf_test_core_image LABEL unit
         core_image/TileTest.cpp
     LIBRARIES pf_core)
 
+pf_add_gtest(pf_test_core_graph LABEL unit
+    SOURCES
+        core_anim/AnimCurveTest.cpp
+        core_graph/GraphTest.cpp
+        core_graph/ParamTest.cpp
+    LIBRARIES pf_core)
+
 pf_add_gtest(pf_test_engine LABEL unit
     SOURCES
         engine/CancellationTest.cpp
         engine/EngineTest.cpp
+        engine/EvaluatorTest.cpp
         engine/MemoryBudgetTest.cpp
         engine/ProgressTest.cpp
         engine/SchedulerTest.cpp
         engine/TilePoolTest.cpp
     LIBRARIES pf_engine)
+
+pf_add_gtest(pf_test_io LABEL unit
+    SOURCES
+        io/ImageReaderTest.cpp
+    LIBRARIES pf_test_node_bench)
+
+pf_add_gtest(pf_test_nodes LABEL unit
+    SOURCES
+        nodes/ExposureTest.cpp
+        nodes/ReadTest.cpp
+        nodes/ShuffleTest.cpp
+        nodes/ViewerTest.cpp
+    LIBRARIES pf_test_node_bench)

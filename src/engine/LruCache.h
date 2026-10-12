@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace pf::engine {
 
@@ -31,10 +32,18 @@ struct CacheStats {
 template <class Key, class Value, class Hash = std::hash<Key>>
 class LruCache final : public MemoryConsumer {
 public:
-    // Registers with `budget`, which must outlive the cache.
-    LruCache(std::string name, MemoryBudget& budget) : m_name(std::move(name)), m_budget(budget) {
+    // Registers with `budget`, which must outlive the cache. With `maxEntries` > 0 the cache also keeps at most that
+    // many entries (evicting the least recently used), so values that use no memory cannot pile up for ever.
+    LruCache(std::string name, MemoryBudget& budget, std::size_t maxEntries = 0)
+        : m_name(std::move(name)),
+          m_budget(budget),
+          m_maxEntries(maxEntries) {
         m_budget.add(*this);
     }
+    // portability-template-virtual-member-function: a header that only declares an LruCache member (Evaluator.h)
+    // instantiates the class without its virtual functions; they are instantiated wherever a cache is constructed,
+    // on every compiler, so the portability concern of the check does not arise.
+    // NOLINTNEXTLINE(portability-template-virtual-member-function)
     ~LruCache() override { m_budget.remove(*this); }
     LruCache(const LruCache&) = delete;
     LruCache(LruCache&&) = delete;
@@ -60,6 +69,7 @@ public:
     // entry last, as it is the most recently used). `bytes` is the memory the value holds, for statistics.
     void insert(const Key& key, std::shared_ptr<const Value> value, std::size_t bytes) {
         std::shared_ptr<const Value> replaced; // released after unlocking
+        std::vector<std::shared_ptr<const Value>> overflow;
         {
             const std::scoped_lock lock(m_mutex);
             const auto found = m_index.find(key);
@@ -72,8 +82,13 @@ public:
             m_entries.push_front({.key = key, .value = std::move(value), .bytes = bytes, .tick = m_budget.nextTick()});
             m_index.emplace(key, m_entries.begin());
             m_bytes += bytes;
+            while (m_maxEntries > 0 && m_entries.size() > m_maxEntries) {
+                overflow.push_back(takeLocked(std::prev(m_entries.end())));
+                ++m_evictions;
+            }
         }
         replaced.reset();
+        overflow.clear();
         m_budget.enforce();
     }
 
@@ -113,7 +128,8 @@ public:
                 .evictions = m_evictions};
     }
 
-    // ---- MemoryConsumer
+    // ---- MemoryConsumer (see the destructor about the NOLINT)
+    // NOLINTBEGIN(portability-template-virtual-member-function)
     [[nodiscard]] std::string consumerName() const override { return m_name; }
     [[nodiscard]] std::size_t consumerBytes() const override {
         const std::scoped_lock lock(m_mutex);
@@ -142,6 +158,7 @@ public:
         }
         return true;
     }
+    // NOLINTEND(portability-template-virtual-member-function)
 
 private:
     struct Entry {
@@ -163,6 +180,7 @@ private:
 
     const std::string m_name;
     MemoryBudget& m_budget;
+    const std::size_t m_maxEntries; // 0: no limit
 
     mutable std::mutex m_mutex;
     EntryList m_entries;

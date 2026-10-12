@@ -3,6 +3,13 @@
 find_package(Imath CONFIG REQUIRED)
 
 add_library(pf_core STATIC
+    anim/AnimCurve.cpp
+    graph/Evaluation.cpp
+    graph/Graph.cpp
+    graph/Hash.cpp
+    graph/Node.cpp
+    graph/NodeDef.cpp
+    graph/Param.cpp
     image/Alpha.cpp
     image/ChannelSet.cpp
     image/Image.cpp

@@ -20,3 +20,12 @@ target_link_libraries(pf_test_golden
 target_compile_definitions(pf_test_golden PRIVATE
     PF_GOLDEN_EXPECTED_ROOT="${PROJECT_SOURCE_DIR}/tests/golden"
     PF_GOLDEN_OUTPUT_ROOT="${PROJECT_BINARY_DIR}/golden-output")
+
+# Node tests: a small image format of the tests' own (.pftest), a temporary folder, and a bench with the built-in node
+# types, a format registry and an evaluator (support/nodes/TestBench.h).
+add_library(pf_test_node_bench STATIC
+    nodes/TestBench.cpp)
+pf_target_defaults(pf_test_node_bench)
+set_target_properties(pf_test_node_bench PROPERTIES AUTOMOC OFF)
+target_include_directories(pf_test_node_bench PUBLIC "${PROJECT_SOURCE_DIR}/tests")
+target_link_libraries(pf_test_node_bench PUBLIC pf_nodes pf_engine pf_io pf_test_golden)

@@ -1,9 +1,12 @@
-// Application entry point: creates the Qt application, the engine services and the main window. The window's
-// contents (menus, panels, viewer) arrive with PLAN Part C item 13.
+// Application entry point: creates the Qt application, the engine services, the node types and the main window. The
+// window's contents (menus, panels, viewer) arrive with PLAN Part C item 13.
 
 #include "app/Brand.h"
+#include "core/graph/NodeDef.h"
 #include "engine/Engine.h"
 #include "engine/Scheduler.h"
+#include "io/ImageReader.h"
+#include "nodes/Builtins.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -13,15 +16,18 @@
 #include <QString>
 #include <QTimer>
 
+#include <cstdlib>
+#include <exception>
+#include <iostream>
+#include <memory>
+
 namespace {
 
 QString toQString(std::string_view text) {
     return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
 }
 
-} // namespace
-
-int main(int argc, char* argv[]) {
+int run(int argc, char** argv) {
     const QApplication app(argc, argv);
     QApplication::setApplicationName(toQString(pf::APP_NAME));
     QApplication::setApplicationVersion(QStringLiteral(PF_VERSION_STRING));
@@ -42,6 +48,11 @@ int main(int argc, char* argv[]) {
     // before the application object: running jobs are cancelled and finish first.
     const pf::engine::Engine engine;
 
+    // Image formats the Read node opens (OpenEXR arrives with PLAN item 9) and the node types of the graph.
+    const auto formats = std::make_shared<const pf::io::FormatRegistry>();
+    pf::graph::NodeRegistry nodeTypes;
+    pf::nodes::registerBuiltinNodes(nodeTypes, formats);
+
     QMainWindow window;
     window.setWindowTitle(toQString(pf::APP_NAME));
     window.resize(1280, 800);
@@ -50,4 +61,19 @@ int main(int argc, char* argv[]) {
         QTimer::singleShot(0, [] { QCoreApplication::quit(); });
     }
     return QApplication::exec();
+}
+
+} // namespace
+
+// A failure while starting (a node type that does not register, a missing library) ends the app with a message
+// instead of an unexplained crash.
+int main(int argc, char* argv[]) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << pf::APP_NAME << " could not start: " << error.what() << '\n';
+    } catch (...) {
+        std::cerr << pf::APP_NAME << " could not start: unknown error\n";
+    }
+    return EXIT_FAILURE;
 }

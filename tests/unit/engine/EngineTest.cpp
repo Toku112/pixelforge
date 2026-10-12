@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <string>
 #include <thread>
+#include <vector>
 
 namespace pf::engine {
 namespace {
@@ -87,6 +89,15 @@ TEST(Engine, LoweringTheLimitEvictsAndReleasesFreeBlocks) {
     EXPECT_LE(engine.tilePool().retainLimit(), (base + (3 * block)) / Engine::retainDivisor);
 }
 
+std::vector<std::string> consumerNames(const MemoryBudgetStats& stats) {
+    std::vector<std::string> names;
+    names.reserve(stats.consumers.size());
+    for (const ConsumerStats& consumer : stats.consumers) {
+        names.push_back(consumer.name);
+    }
+    return names;
+}
+
 TEST(Engine, StatsGatherEverything) {
     Engine engine;
     engine.setMemoryLimit(std::size_t{1} << 30);
@@ -99,8 +110,9 @@ TEST(Engine, StatsGatherEverything) {
     const EngineStats stats = engine.stats();
     EXPECT_EQ(stats.memory.limit, std::size_t{1} << 30);
     EXPECT_GE(stats.memory.usage, 2 * block);
-    ASSERT_EQ(stats.memory.consumers.size(), 1U);
-    EXPECT_EQ(stats.memory.consumers[0].name, "frames");
+    // The evaluator's two caches register first, at startup.
+    EXPECT_EQ(consumerNames(stats.memory), (std::vector<std::string>{"Node results", "Node descriptions", "frames"}));
+    EXPECT_EQ(stats.evaluation.tiles.entries, 0U);
     EXPECT_GE(stats.tiles.bytesInUse, 2 * block);
     EXPECT_EQ(stats.jobs.finished, 1U);
     EXPECT_GE(stats.jobs.threads, 1);

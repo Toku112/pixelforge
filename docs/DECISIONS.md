@@ -1360,3 +1360,95 @@ unknown licences still need the owner first. **Consequences:** `cmake/LicensePol
   2 core tests, debug (ASan/UBSan) and release; clang-tidy and format clean. Performance: measured (above). No memory
   growth: pool counters return to zero after repeated use in the tests. The app creates the engine at startup
   (`app_startup` test); the status bar shows `Engine::stats()` from item 13 on.
+
+## D-075 — 2026-10-12 — Node graph core (PLAN Part C item 7)
+
+Behaviour: `docs/specs/node-graph.md`; maths and hashing: FORMAT_NOTES §20; timings: `spikes/node-eval`.
+
+- **Where things live.** Keyframes (`core/anim`) and the graph model — parameters, node types, nodes, graph,
+  requests, hashing — (`core/graph`) are pure C++. The pixel interface of a node type (`NodeOp`) is also in
+  `core/graph`; it gets a small `TaskRunner` (parallel loop + cancellation) that the engine implements, so node code
+  needs neither threads nor the engine. Evaluation and the node result cache are in `engine/Evaluator`; node types in
+  `nodes/<type>/`; image files through a format registry in `io/`.
+- **The graph is a value; nodes are immutable and shared.** Each edit replaces only the edited node with a copy.
+  Background work evaluates its own copy of the graph, so the UI never waits for a lock and evaluations never see a
+  half-made edit. Copying is a map of shared pointers (microseconds for hundreds of nodes).
+- **Keys have a type per key** — Constant, Linear, Smooth, Bézier — as in compositor curve editors, and the curve
+  between two keys follows from both keys' slopes. **New keys are Linear**, the image editor's default for timeline
+  keys; the curve editor (Phase 4) changes types. **Smooth never overshoots** (flat at peaks and end keys,
+  Fritsch–Carlson slope limit), the usual expectation for automatic tangents. **Bézier handles store a slope and a
+  length as a share of the segment** (weights): handles keep their shape when keys move, and with 1/3 lengths a
+  Bézier segment is exactly the Hermite cubic. Crossing handles are shortened in proportion.
+- **Each numeric component animates on its own curve** (a colour can animate only its red). **Text parameters
+  (strings, file paths) are not animatable** in Phase 0 — no node needs it yet; the Text tool (Phase 10) brings it.
+  Bool and Enum keys are always Constant; Int interpolates and rounds.
+- **Hashes:** our own deterministic 64-bit hash (a SplitMix64-scrambled word mixer), the same on every platform so
+  keys can name disk cache files later (Phase 4). with 64 bits the chance of any accidental collision among 10 million
+  cached results is about 1 in 370,000 (n²/2⁶⁵); a 128-bit hash can replace it behind `HashValue` if the disk cache
+  needs more. A node's hash covers its type and **type version** (raised when a node's maths changes, so old cached or
+  saved results are never reused), its pixel-affecting parameters at the frame, extra data (the Read node's file
+  size and modification time) and its inputs' hashes at the frames it reads them — **not** its name, position or
+  display settings. Identical work therefore shares results: two identical nodes, or a still image at every frame.
+- **Tile-level caching.** Results are cached per (hash, proxy, channel, 256² tile), so a viewer region, a single
+  channel or a scrolled view reuses whatever tiles exist. This rests on one rule for node code: a pixel's value never
+  depends on the requested region or on which other channels were requested. Missing tiles are rendered for the
+  bounding box of the missing tiles (inputs are asked for that box), all missing channels at once.
+- **Every node's result is cached**, under the memory budget with least-recently-used eviction (D-074). Dragging a
+  slider therefore leaves every intermediate result behind until the budget evicts it — measured: 50 steps at 4K fill
+  ~30 GB — in exchange for 2 ms instead of 10 ms per step at 1080p when only a downstream node changes. **Item 14 must
+  give playback frames priority** over node results (the frame cache reports eviction ticks that rank its frames
+  above intermediate tiles), so a slider drag never pushes out the cached sequence. Both caches also have entry
+  limits (2²⁰ tiles, 2¹⁶ descriptions): constant tiles and descriptions use almost no memory, so the budget alone
+  would never evict them.
+- **Concurrency:** any number of evaluations may run at once; two of them may compute the same tile at the same time
+  (wasted work, same result). De-duplicating work in flight can come later if profiling shows it matters. Inputs of a
+  node are evaluated one after the other, each in parallel over its tiles; evaluating independent inputs in parallel
+  is a later optimisation (Merge, Phase 1).
+- **Unconnected inputs deliver "nothing"** (no channels, empty windows), not an error, so a half-built comp shows
+  what it can. **Errors stop the evaluation with the failing node's name** (`EvaluationError` carries its id for the
+  UI); nothing of a failed node is cached. Cancellation stops at the next tile; tiles of a cancelled node are not
+  cached.
+- **Proxy scales are powers of two (1–32)**; windows are rounded outward; each node handles proxy for its own
+  parameters; the Read node averages p × p blocks (a box filter: fast and correct for a preview).
+- **Pass-through instead of copying:** a node can say it hands one input on unchanged at a frame (Viewer, neutral
+  Exposure, bypass); the evaluator then skips it entirely — no work, no cache entries, the input's hash.
+- **Node names** are ASCII identifiers (letters, digits, `_`; not starting with a digit), unique in the graph, with
+  automatic names from the type's label (`Exposure1`). Expressions (later) can then refer to nodes by name. Ids are
+  never reused within a graph.
+- **Viewer:** 10 inputs (keys 1–9, 0) and no output. Its display settings (exposure, gamma, layer, channel, display,
+  view) are parameters of the node, so they are saved with the project, but they are marked as not affecting pixels:
+  they never change a hash. The display path (item 12) applies them.
+- **Shuffle:** picks one layer of its input into an output layer (default: the main RGBA layer), red/green/blue/alpha
+  each automatic, a constant, or a named channel; everything else passes through (the usual compositor behaviour, so
+  the beauty's alpha stays). A single-channel pass shows as grey, a missing named channel reads as 0. Pixels are never
+  copied (shared tiles).
+- **Exposure:** the image editor's Exposure adjustment (exposure −20…+20 stops, offset −0.5…+0.5, gamma 0.01…9.99,
+  defaults 0/0/1) as `(v·2^e + o)^(1/γ)` on straight colour. The editor's documentation describes the controls but
+  not the exact formula (its help page could not be fetched here), so this is the widely used reconstruction;
+  negative values are mirrored (they keep their sign), which matches the editor's documented handling of HDR values
+  below zero as far as we know. **Owner check (Phase 5):** compare against real Photoshop at a few settings.
+  Exposure alone scales premultiplied values directly (exact); offset and gamma divide by alpha and multiply back;
+  where alpha is 0 the colour is adjusted as it is (FORMAT_NOTES §19.4).
+- **Read:** formats register with `io::FormatRegistry` by file extension; the first real format (OpenEXR) arrives with
+  item 9, sequences with item 10, input colour spaces with item 11. Until then the tests use a small format of their
+  own (`.pftest`, tests only). Open files are kept in a cache of 64 shared by all Read nodes and reopened when the
+  file's stamp changes; the stamp is part of the hash, so a re-rendered file is picked up by the next evaluation (live
+  linking builds on this, B0.2). A file rewritten between hashing and reading can, for that one evaluation, show the
+  new pixels under the old key; the next evaluation has a new key, so the stale entry is never used again. A manual
+  Reload button comes with the Read node's panel (item 13).
+- **Paths are UTF-8 text** in parameters and converted with `io::pathFromUtf8` (on Windows `std::filesystem` would
+  otherwise read narrow strings in the local code page); tested with Croatian and Japanese characters.
+- **Build:** Apple's linker warns when a static library appears twice on a link line, which static-library order
+  requires (Imath after both core and OpenEXR); the warning is turned off for our targets (`-no_warn_duplicate_
+  libraries`). `main()` catches startup failures and prints them instead of crashing. clang-tidy 21's
+  `portability-template-virtual-member-function` is silenced on `LruCache`'s overrides with a reason (every cache is
+  constructed somewhere, which instantiates them on all compilers).
+- DoD (D-006): float-correct (no clipping, negatives and NaN/∞ kept, premultiplication handled, any named channels —
+  tested); sequences and keyframes: every numeric parameter animatable, results hashed and cached per frame,
+  identical in any evaluation (the render queue uses the same evaluator); OCIO: N/A until item 11 (the nodes work in
+  the working space; the Viewer's display settings never touch pixels); documents/selections/history/shortcuts/
+  panels/persistence: N/A for the graph core (commands item 8, UI item 13, project file Phase 1); tests: 41 core
+  graph/curve, 19 evaluator, 25 node and 5 io unit tests, 3 golden images (checked against an independent double-
+  precision recomputation, worst relative error 3·10⁻⁷), debug (sanitizers) and release; performance: 2–10 ms per
+  slider step at 1080p, ≤ 41 ms at 4K (`spikes/node-eval`); memory bounded by the budget across repeated changes
+  (tested with 50 changes under a 4 MB limit).

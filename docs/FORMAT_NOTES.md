@@ -697,3 +697,104 @@ side, any sample type, any channel order such as BGRA, optional row padding). Im
 §19.4, then convert as in §19.5). Pixels of the buffer outside the data window are skipped on import and written as 0
 on export. With 8-bit and 16-bit straight data every pixel with alpha > 0 round-trips exactly; colour under alpha 0
 comes back as 0.
+
+## 20. Node graph maths (`src/core/anim`, `src/core/graph`, `src/engine/Evaluator`, `src/nodes`)
+
+Behaviour in plain language: `docs/specs/node-graph.md`. Decisions: D-075.
+
+### 20.1 Keyframe curves
+
+Keys `(tᵢ, vᵢ)` sorted by frame (real numbers; keys closer than 10⁻⁶ frames are the same key). The secant between
+keys i and j is `dᵢⱼ = (vⱼ − vᵢ) / (tⱼ − tᵢ)`.
+
+**Slopes on each side of a key**, by its type:
+
+| Key type | Slope arriving (from key i−1) | Slope leaving (toward key i+1) |
+|---|---|---|
+| Constant | `d₍ᵢ₋₁₎ᵢ` (arrives in a straight line) | 0 (the segment after it is a hold) |
+| Linear | `d₍ᵢ₋₁₎ᵢ` | `dᵢ₍ᵢ₊₁₎` |
+| Smooth | `mᵢ` (below) | `mᵢ` |
+| Bézier | the key's own in-slope | the key's own out-slope |
+
+At the ends, where a neighbour is missing, Linear and Constant keys use the secant to the one neighbour they have
+(0 for a single key).
+
+**Smooth slope `mᵢ`** (never overshoots):
+- first or last key: 0 (flat), or the secant to the neighbour when the curve extrapolates linearly on that side;
+- inside: with `a = d₍ᵢ₋₁₎ᵢ` and `b = dᵢ₍ᵢ₊₁₎`: if `a·b ≤ 0` (a peak, a valley or flat) `mᵢ = 0`; otherwise the
+  slope across both neighbours `c = d₍ᵢ₋₁₎₍ᵢ₊₁₎`, limited in size to `3·min(|a|, |b|)`, sign kept.
+
+With both end slopes of a segment at most three times its secant (and of the same sign), the cubic between them is
+monotonic (Fritsch–Carlson), so smooth curves never overshoot rising or falling keys.
+
+**A segment** from key i to key i+1 (`h = tᵢ₊₁ − tᵢ`, `u = (t − tᵢ) / h`):
+- key i Constant: `vᵢ`;
+- key i Linear and key i+1 Linear or Constant: `vᵢ + (vᵢ₊₁ − vᵢ)·u` (exact);
+- otherwise a cubic Bézier in (time, value). Handle lengths as shares of the segment: `w₀` = key i's out-weight if it
+  is a Bézier key, else 1/3; `w₁` = key i+1's in-weight if Bézier, else 1/3; if `w₀ + w₁ > 1` both are scaled by
+  `1/(w₀ + w₁)` (handles never cross). Control points, normalised time: `x = (0, w₀, 1 − w₁, 1)`; value:
+  `y = (vᵢ, vᵢ + s₀·w₀·h, vᵢ₊₁ − s₁·w₁·h, vᵢ₊₁)` with `s₀` key i's leaving slope and `s₁` key i+1's arriving slope.
+  The curve parameter `s` with `x(s) = u` is solved by Newton steps inside a shrinking bracket (bisection when a step
+  would leave it), to 10⁻¹⁴; with both weights 1/3, `x(s) = s` and the segment is the cubic Hermite curve through
+  the two slopes.
+
+**Extrapolation:** before the first key the value is `v₀` (constant) or `v₀ + (t − t₀)·(arriving slope of key 0)`
+(linear); after the last key `vₙ` or `vₙ + (t − tₙ)·(leaving slope of key n)`.
+
+**Parameters:** each numeric component has its own curve; the evaluated value is clamped into the parameter's hard
+limits. Int: rounded to the nearest integer (`llround`, halves away from zero). Bool: `value ≥ 0.5`. Enum: rounded
+and clamped to the item range. Bool and Enum keys are always Constant.
+
+### 20.2 Exposure node
+
+For each colour channel (suffix R, G, B or Y of the chosen layer) with gain `g = 2^exposure`, offset `o`, gamma `γ`:
+
+- on a straight value `v`: `t = v·g + o`, then if `γ ≠ 1`: `t ≥ 0 → t^(1/γ)`, `t < 0 → −(−t)^(1/γ)` (mirrored);
+- on a premultiplied value `c` with alpha `a` (the layer's `A`; 1 when the layer has none):
+  - offset 0 and gamma 1: `c·g` (scaling commutes with premultiplication — exact, no division);
+  - `a ≠ 0`: `f(c / a)·a`;
+  - `a = 0`: `f(c)` (light without coverage is adjusted as it is, matching §19.4).
+
+No clipping; NaN stays NaN (NaN compares false with 0, takes the mirrored branch and stays NaN), +∞ stays +∞.
+Computed in float32 (the CPU reference; GPU paths must match it). At exposure 0, offset 0, gamma 1 the node passes
+its input through. The formula is our reconstruction of the image editor's Exposure adjustment from its documented
+controls; the owner compares it against real Photoshop output in the Phase 5 check (D-075).
+
+### 20.3 Shuffle routing
+
+Input layer `L` (its channels in canonical order, §19.2), its alpha `L.A`, its colour channels `C` = the layer's
+channels without `L.A`. For output channel k ∈ {R, G, B, A} named `out.k`:
+
+| Choice | Source |
+|---|---|
+| `0` / `1` | the constant |
+| a suffix `s` | channel `L.s` (0 where the input lacks it) |
+| empty, k = A | `L.A` if it exists; otherwise the output channel is left as it is |
+| empty, k = R/G/B | `C` empty → left as it is; one channel → it (all three); otherwise `C[k]`, 0 past the end |
+
+Every other channel passes through. Shared tiles: no pixels are copied.
+
+### 20.4 Proxy scale
+
+Proxy `p ∈ {1, 2, 4, 8, 16, 32}`. A full-resolution window scales to `[⌊x₀/p⌋, ⌈x₁/p⌉) × [⌊y₀/p⌋, ⌈y₁/p⌉)`
+(display and data windows alike). The Read node's proxy pixel `(x, y)` is the mean of the full-resolution pixels
+`[x·p, x·p + p) × [y·p, y·p + p)`, summed in double precision, with samples outside the data window counting as 0
+(transparent black, the right premultiplied average at edges).
+
+### 20.5 Hashes and cache keys
+
+64-bit, deterministic on every platform. The hasher mixes 64-bit words: for each word `w`,
+`state ← (rotl(state ⊕ scramble(w), 27) · 0x9E3779B97F4A7C15) + 0x632BE59BD9B4E019`, where `scramble` is the
+SplitMix64 finaliser; the start state is `0x243F6A8885A308D3`; the result is `scramble(state ⊕ words · 0xD6E8FEB86659FD93)`.
+Integers are fed as their 64-bit two's-complement pattern, booleans as 0/1, doubles as their IEEE bits with −0 → +0
+and every NaN → one quiet NaN, text as its length then 8 bytes per word (first byte lowest, zero-padded). Fixed values
+are checked by a unit test on all three platforms.
+
+**A node's hash at a frame** = hash of: `"pf.node"`, type id, type version; for each parameter that affects pixels,
+its id and its value at that frame (value: the variant index, then the components / text); the node's extra data
+(Read: file exists, size, modification time); then, for each input in order, the hash of what that input shows at the
+frame the node reads it (a fixed "nothing" value `0x6E6F7468696E6721` when unconnected). Pass-through and bypassed
+nodes have the hash of the input they hand on.
+
+**Cache keys:** tiles under (node hash, proxy scale, channel name, tile x, tile y); output descriptions under
+(node hash, proxy scale). A tile's pixels are its grid cell ∩ the node's data window, whatever region was asked.

@@ -6,7 +6,8 @@ namespace pf::engine {
 
 Engine::Engine(const EngineOptions& options)
     : m_tilePool(TilePool::process()),
-      m_memory(options.memoryLimit, [pool = &m_tilePool] { return pool->bytesInUse(); }) {
+      m_memory(options.memoryLimit, [pool = &m_tilePool] { return pool->bytesInUse(); }),
+      m_evaluator(m_memory) {
     m_tilePool.setRetainLimit(options.memoryLimit / retainDivisor);
     image::setTileMemoryResource(&m_tilePool);
 }
@@ -28,7 +29,10 @@ void Engine::releaseUnusedMemory() {
 }
 
 EngineStats Engine::stats() const {
-    return {.memory = m_memory.stats(), .tiles = m_tilePool.stats(), .jobs = m_scheduler.stats()};
+    return {.memory = m_memory.stats(),
+            .tiles = m_tilePool.stats(),
+            .jobs = m_scheduler.stats(),
+            .evaluation = m_evaluator.stats()};
 }
 
 } // namespace pf::engine

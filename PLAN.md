@@ -33,8 +33,14 @@ _Update this section at the end of every session._
   chosen by measurement (`spikes/tile-size`).
 - Done: item 6 (2026-10-12) — engine services (`src/engine`, D-074): job scheduler with viewer > caching > render
   priorities, cancellation, progress, memory budget with LRU caches, tile pool (measured in `spikes/tile-alloc`).
-- Next up: item 7 (node graph core: nodes, ports, parameters, keyframes, pull evaluation, node result cache; first
-  nodes Read, Viewer, Shuffle, Exposure).
+- Done: item 7 (2026-10-12) — node graph core (`core/anim`, `core/graph`, `engine/Evaluator`, `nodes/`, `io/`
+  format registry; spec `docs/specs/node-graph.md`, FORMAT_NOTES §20, D-075): keyframes, typed parameters, graph with
+  loop checks, pull evaluation with per-tile caching, region-of-interest propagation, proxy scales, hashing; nodes
+  Read, Viewer, Shuffle, Exposure. 1080p slider changes re-render in 2–10 ms (`spikes/node-eval`).
+- Next up: item 8 (commands and history: every graph edit as an undoable Command with a JSON descriptor, slider-drag
+  coalescing, History panel model, action recording and replay).
+- Owner check later (Phase 5): compare our Exposure node with Photoshop's Exposure adjustment at a few settings
+  (D-075).
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15).
 
 ---
@@ -81,7 +87,9 @@ The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see t
 
 ### B0.1 Compositor core & UI
 - [ ] Node graph: pull-based DAG per frame, ROI/tiled evaluation, proxy scales, node result cache, cancellation and progress (Phase 0)
+  ↳ partial: all but progress done in Part C item 7 (D-075); evaluation progress for the status bar comes with the viewer and render jobs (items 12–14)
 - [ ] Every parameter keyframable; linear/constant/smooth/Bézier keys (Phase 0 data model; editors in Phase 4)
+  ↳ partial: the data model is done (Part C item 7, FORMAT_NOTES §20.1); text parameters animate from Phase 10; editors Phase 4
 - [ ] Node view: create (Tab search menu), connect, disconnect, insert into a wire, select, move, group/backdrop, collapse into a group node, bypass, view node in viewer (number keys / click), viewer A/B inputs (Phase 0 basic, Phase 1 complete)
 - [ ] Layer view: a linear part of the graph as a Photoshop-style layer stack — layers, groups, blend modes, opacity/fill, masks, adjustment layers, visibility, locks; edits in either view change the same graph (Phase 1)
 - [ ] Read node: still, sequence or movie; colour-space setting auto-detected from metadata; frame range, offset, hold/loop/black for frames outside the range; missing-frame handling; reload (Phase 0)
@@ -763,10 +771,26 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   load; tidy, format and licence checks clean; CI green on macOS, Windows and Linux. D-074. DoD (D-006): float/OCIO/
   document/selection/history/shortcut/panel/persistence items N/A for engine services; the Preferences > Performance
   control is PLAN Part B (Preferences), the engine takes the value.
-- [ ] 7. **Node graph core (`core/graph`, `core/anim`):** nodes, typed ports and parameters, DAG with cycle checks,
+- [x] 7. **Node graph core (`core/graph`, `core/anim`):** nodes, typed ports and parameters, DAG with cycle checks,
   pull evaluation per (frame, ROI, channels, proxy scale), ROI propagation, hashing for cache keys, node result cache,
   keyframe data model with interpolation (constant, linear, smooth, Bézier) and its unit tests. First nodes: Read,
   Viewer, Shuffle (pick channels/AOV), Exposure — real nodes, not test stubs.
+  ↳ note (2026-10-12): spec `docs/specs/node-graph.md`, maths FORMAT_NOTES §20, decisions D-075. `core/anim`: keyframe
+  curves (per-key Constant/Linear/Smooth/Bézier, Smooth never overshoots, Bézier slope + weight handles, constant or
+  linear extrapolation). `core/graph`: typed parameters (float, int, bool, enum, colour, 2D/3D vector, string, file;
+  limits, slider ranges, per-component animation, display-only flag), node types and registry, the `NodeOp` pixel
+  interface, nodes, and the graph as a copyable value (shared immutable nodes, unique names, loop checks), our own
+  deterministic 64-bit hash. `engine/Evaluator`: pass-through/bypass routing, hashes per (node, frame), output
+  descriptions, per-tile node result cache under the memory budget (with entry limits), ROI and channel propagation,
+  proxy scales 1–32, errors naming the node, cancellation, never on the UI thread; the engine owns it. Nodes: Read
+  (through the new `io::FormatRegistry`; re-reads rewritten files; proxy box filter — the first real format, OpenEXR,
+  plugs in with item 9, tests use a `.pftest` format of their own), Viewer (10 inputs, display settings that never
+  touch pixels), Shuffle (layer routing with shared tiles), Exposure (exposure/offset/gamma on straight colour,
+  mirrored negatives). All ports carry images (one port type until other data types need ports). 93 new unit tests
+  and 3 golden images (verified against an independent recomputation), debug (ASan/UBSan) and release; tidy, format
+  and licence checks clean. Timing: 2–10 ms per slider step at 1080p, ≤ 41 ms at 4K (`spikes/node-eval`). DoD
+  (D-006/D-075): OCIO N/A until item 11; commands/history item 8; panels and shortcuts item 13; persistence Phase 1;
+  owner check of Exposure against Photoshop in Phase 5.
 - [ ] 8. **Commands and history (`core/commands`, `core/history`):** Command interface with descriptors (JSON) and
   labels; graph edit commands (add/remove/connect/disconnect node, set parameter, set/delete keyframe); slider-drag
   coalescing; undo/redo; History panel model; action recording of descriptors with a replay test.

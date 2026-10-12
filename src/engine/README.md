@@ -12,7 +12,7 @@ Everything slow runs here, never on the UI thread (CLAUDE.md §3.4–3.5, D-074)
 | `LruCache.h` | A thread-safe cache of shared values under the budget (node results, frames) |
 | `TilePool.h` | Memory for image tiles: reuses full tiles, returns memory to the system on request |
 | `SystemMemory.h` | Installed physical memory |
+| `Evaluator.h` | Pull evaluation of the node graph with the node result cache: pass-through, hashes, descriptions, per-tile caching, region-of-interest propagation (docs/specs/node-graph.md §5, D-075) |
 | `Engine.h` | The services the app creates once at startup, and their statistics for the status bar |
 
-Still to come here: the node result cache and evaluation (Part C item 7), the RAM frame cache and prefetching
-(item 14), the disk cache (Phase 4).
+Still to come here: the RAM frame cache and prefetching (item 14), the disk cache (Phase 4).

@@ -10,8 +10,9 @@
 // all have one value may be stored as just that value (a "constant" tile, no memory); new images and new channels
 // start that way.
 //
-// Threads: const functions may run on any number of threads at once. writableTile(), overwriteTile() and
-// setTileConstant() may run on several threads at once for different (channel, tile) pairs of the same image.
+// Threads: const functions may run on any number of threads at once. writableTile(), overwriteTile(),
+// setTileConstant(), setTileContent() and copyTile() may run on several threads at once for different (channel, tile)
+// pairs of the same image.
 // Everything else needs the image to itself. Pointers in tile views stay valid until that tile of that image is
 // written or the image changes shape (data window, channels) or is destroyed.
 
@@ -119,6 +120,20 @@ public:
     [[nodiscard]] MutableTile overwriteTile(std::size_t channel, TileCoord tile);
     // Makes every pixel of the tile `value` and releases its memory.
     void setTileConstant(std::size_t channel, TileCoord tile, float value);
+
+    // ---- sharing tiles between images (the node result cache keeps TileContents)
+    // A tile's contents as a value: stored samples (shared, never written through this value) or a constant.
+    struct TileContent {
+        TileRef storage; // null: every pixel equals `constant`
+        float constant = 0.0F;
+    };
+    [[nodiscard]] TileContent tileContent(std::size_t channel, TileCoord tile) const;
+    // Makes the tile share `content`. Stored samples must hold exactly this tile's pixels (its grid cell ∩ the data
+    // window); throws std::invalid_argument otherwise.
+    void setTileContent(std::size_t channel, TileCoord tile, TileContent content);
+    // Makes the tile equal the same pixels of channel `sourceChannel` of `source` (which may be this image): shares
+    // the source tile when it holds the same pixels, otherwise copies (0 outside source's data window).
+    void copyTile(std::size_t channel, TileCoord tile, const Image& source, std::size_t sourceChannel);
 
     // ---- memory
     // Tiles that hold samples (not constant), over all channels. Tiles shared with other images count here too.

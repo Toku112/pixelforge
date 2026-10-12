@@ -1,0 +1,16 @@
+1920 x 1080, 14 channels, viewer asks for RGBA
+  first view (read + shuffle + 5 exposures, nothing cached)  median   10.40 ms   worst   10.40 ms
+  same view again (all from the cache)                       median    0.01 ms   worst    0.03 ms
+  drag the last Exposure's slider (1 node recomputed)        median    1.96 ms   worst    2.04 ms
+  drag the first Exposure's slider (5 nodes recomputed)      median    9.79 ms   worst   10.30 ms
+  same, at proxy 2                                           median    4.36 ms   worst    5.45 ms
+  alternate two passes + move last slider (upstream cached)  median    1.96 ms   worst    9.95 ms
+  memory: 9362 MB in tiles, 65296 cached tiles (12514 MB), budget 28.8 GB
+3840 x 2160, 14 channels, viewer asks for RGBA
+  first view (read + shuffle + 5 exposures, nothing cached)  median   31.36 ms   worst   31.36 ms
+  same view again (all from the cache)                       median    0.02 ms   worst    0.05 ms
+  drag the last Exposure's slider (1 node recomputed)        median    6.64 ms   worst    7.09 ms
+  drag the first Exposure's slider (5 nodes recomputed)      median   35.53 ms   worst   40.22 ms
+  same, at proxy 2                                           median    9.26 ms   worst   12.16 ms
+  alternate two passes + move last slider (upstream cached)  median    6.46 ms   worst   32.88 ms
+  memory: 29491 MB in tiles, 174235 cached tiles (39353 MB), budget 28.8 GB

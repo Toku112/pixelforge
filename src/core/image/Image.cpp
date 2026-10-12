@@ -327,6 +327,47 @@ void Image::setTileConstant(std::size_t channel, TileCoord tile, float value) {
     current.constant = value;
 }
 
+Image::TileContent Image::tileContent(std::size_t channel, TileCoord tile) const {
+    const Slot& current = slot(channel, tile);
+    return {.storage = current.storage, .constant = current.constant};
+}
+
+void Image::setTileContent(std::size_t channel, TileCoord tile, TileContent content) {
+    Slot& current = slot(channel, tile);
+    if (content.storage && content.storage->rect() != pixelsOf(tile)) {
+        throw std::invalid_argument("tile samples for " + toString(content.storage->rect()) +
+                                    " do not match the tile's pixels " + toString(pixelsOf(tile)));
+    }
+    current.storage = std::move(content.storage);
+    current.constant = content.constant;
+}
+
+void Image::copyTile(std::size_t channel, TileCoord tile, const Image& source, std::size_t sourceChannel) {
+    const Rect pixels = pixelsOf(tile);
+    source.checkChannel(sourceChannel);
+    if (source.m_tileRange.contains(tile.x, tile.y)) {
+        const Slot& from = source.m_planes[sourceChannel][source.slotIndex(tile)];
+        if (source.pixelsOf(tile) == pixels) {
+            Slot& to = slot(channel, tile);
+            if (&to != &from) {
+                to = from; // same pixels: share
+            }
+            return;
+        }
+        const ConstTile src = source.tile(sourceChannel, tile);
+        const Rect part = intersect(pixels, src.rect);
+        if (src.isConstant() && (src.constant == 0.0F || part == pixels)) {
+            setTileConstant(channel, tile, src.constant);
+            return;
+        }
+        const MutableTile dst = overwriteTile(channel, tile);
+        std::fill_n(dst.samples, pixels.area(), 0.0F);
+        copyPart(src, part, dst);
+        return;
+    }
+    setTileConstant(channel, tile, 0.0F); // the source has no pixels here
+}
+
 std::size_t Image::storedTileCount() const {
     std::size_t count = 0;
     for (const Plane& plane : m_planes) {

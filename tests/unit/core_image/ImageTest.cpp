@@ -351,6 +351,61 @@ TEST(Image, CopyChannelBetweenDifferentWindows) {
     EXPECT_EQ(target.tile(r, {.x = 1, .y = 2}).samples, source.tile(0, {.x = 1, .y = 2}).samples);
 }
 
+TEST(Image, TileContentsMoveBetweenImagesWithoutCopying) {
+    Image source(hd, hd, {"R", "G"});
+    writePattern(source, hd);
+    source.fill(1, hd, 0.5F);
+    Image target(hd, hd, {"X", "Y"});
+    const TileCoord t{.x = 2, .y = 1};
+    target.setTileContent(0, t, source.tileContent(0, t));
+    target.setTileContent(1, t, source.tileContent(1, t));
+    EXPECT_EQ(target.tile(0, t).samples, source.tile(0, t).samples); // shared
+    EXPECT_TRUE(target.tile(1, t).isConstant());
+    EXPECT_EQ(target.sample("X", 600, 300), pattern(0, 600, 300));
+    EXPECT_EQ(target.sample("Y", 600, 300), 0.5F);
+
+    // Writing to the shared tile copies it first.
+    target.setSample("X", 600, 300, -1.0F);
+    EXPECT_EQ(source.sample("R", 600, 300), pattern(0, 600, 300));
+}
+
+TEST(Image, TileContentMustHoldTheTilesPixels) {
+    Image source(hd, hd, {"R"});
+    writePattern(source, hd);
+    Image smaller(hd, Rect{.x0 = 0, .y0 = 0, .x1 = 100, .y1 = 100}, {"R"});
+    EXPECT_THROW(smaller.setTileContent(0, {.x = 0, .y = 0}, source.tileContent(0, {.x = 0, .y = 0})),
+                 std::invalid_argument);
+    // Constant contents fit any tile.
+    smaller.setTileContent(0, {.x = 0, .y = 0}, {.storage = {}, .constant = 3.0F});
+    EXPECT_EQ(smaller.sample("R", 99, 99), 3.0F);
+}
+
+TEST(Image, CopyTileSharesMatchingTilesAndCopiesTheRest) {
+    Image source(hd, hd, {"R"});
+    writePattern(source, hd);
+    // Same tile grid cell, same pixels: shared.
+    Image same(hd, Rect{.x0 = 0, .y0 = 0, .x1 = 512, .y1 = 512}, {"A"});
+    same.copyTile(0, {.x = 1, .y = 1}, source, 0);
+    EXPECT_EQ(same.tile(0, {.x = 1, .y = 1}).samples, source.tile(0, {.x = 1, .y = 1}).samples);
+
+    // A window that cuts the tile differently: copied, zeros outside the source's data window.
+    const Rect overscan{.x0 = -100, .y0 = -100, .x1 = 200, .y1 = 200};
+    Image other(hd, overscan, {"A"});
+    other.copyTile(0, {.x = -1, .y = -1}, source, 0);
+    other.copyTile(0, {.x = 0, .y = 0}, source, 0);
+    EXPECT_EQ(other.sample("A", -50, -50), 0.0F);
+    EXPECT_EQ(other.sample("A", 150, 150), pattern(0, 150, 150));
+    EXPECT_NE(other.tile(0, {.x = 0, .y = 0}).samples, source.tile(0, {.x = 0, .y = 0}).samples);
+
+    // A tile the source does not have becomes 0.
+    other.fill(0, overscan, 7.0F);
+    const Image empty(hd, Rect{}, {"R"});
+    other.copyTile(0, {.x = 0, .y = 0}, empty, 0);
+    EXPECT_TRUE(other.tile(0, {.x = 0, .y = 0}).isConstant());
+    EXPECT_EQ(other.sample("A", 150, 150), 0.0F);
+    EXPECT_EQ(other.sample("A", -50, -50), 7.0F);
+}
+
 TEST(Image, DifferentTilesCanBeWrittenFromSeveralThreads) {
     Image original(hd, hd, {"R", "G"});
     writePattern(original, hd);

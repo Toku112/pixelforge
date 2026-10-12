@@ -50,4 +50,9 @@ function(pf_target_defaults target)
     target_compile_options(${target} PRIVATE ${PF_WARNING_FLAGS})
     set_target_properties(${target} PROPERTIES COMPILE_WARNING_AS_ERROR ${PF_WARNINGS_AS_ERRORS})
     target_include_directories(${target} PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>")
+    # Static libraries must come after every library that uses them, so one used by two others (Imath, by core and
+    # by OpenEXR) can appear twice on a link line. Apple's linker handles that but warns; the warning means nothing.
+    if(APPLE)
+        target_link_options(${target} PRIVATE "LINKER:-no_warn_duplicate_libraries")
+    endif()
 endfunction()
