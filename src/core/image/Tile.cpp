@@ -14,13 +14,43 @@ Rect tilesCovering(const Rect& pixels) {
     return {.x0 = first.x, .y0 = first.y, .x1 = last.x + 1, .y1 = last.y + 1};
 }
 
+namespace {
+
+// nullptr: the default resource. Set once at startup in practice; atomic so a late change is still well-defined.
+std::atomic<std::pmr::memory_resource*>& installedTileMemory() {
+    static std::atomic<std::pmr::memory_resource*> resource{nullptr};
+    return resource;
+}
+
+std::pmr::memory_resource* orDefault(std::pmr::memory_resource* resource) {
+    return resource != nullptr ? resource : std::pmr::new_delete_resource();
+}
+
+} // namespace
+
+void setTileMemoryResource(std::pmr::memory_resource* resource) noexcept {
+    installedTileMemory().store(resource, std::memory_order_release);
+}
+
+std::pmr::memory_resource* tileMemoryResource() noexcept {
+    return orDefault(installedTileMemory().load(std::memory_order_acquire));
+}
+
 TileBuffer::TileBuffer(const Rect& rect) : m_rect(rect) {
     const TileCoord tile = tileContaining(rect.x0, rect.y0);
     if (rect.isEmpty() || !tileCell(tile).contains(rect)) {
         throw std::invalid_argument("tile buffer " + toString(rect) + " is empty or crosses a tile boundary");
     }
-    m_samples = std::make_unique_for_overwrite<float[]>( // NOLINT(*-avoid-c-arrays): a block sized at run time
-        static_cast<std::size_t>(rect.area()));
+    m_memory = tileMemoryResource();
+    m_samples = static_cast<float*>(m_memory->allocate(byteSize(), tileSampleAlignment));
+}
+
+TileBuffer::~TileBuffer() {
+    m_memory->deallocate(m_samples, byteSize(), tileSampleAlignment);
+}
+
+std::size_t TileBuffer::byteSize() const {
+    return static_cast<std::size_t>(m_rect.area()) * sizeof(float);
 }
 
 TileRef TileRef::allocate(const Rect& rect) {

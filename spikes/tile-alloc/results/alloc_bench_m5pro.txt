@@ -1,0 +1,16 @@
+Apple M5 Pro (6 + 12 cores, 48 GB), macOS 26, Apple clang, release, oneTBB 2023.1, 2026-10-12. One process per allocator.
+Times in ms, median. 4 channels (RGBA float32), 256x256 tiles, oneTBB default arena.
+
+allocator         4K     1080p   chain4K chain1080  cache1st cacheAgain   keptMB   trimMB
+noAlloc         1.04      0.19         -         -
+system          2.46      0.59     11.69      2.60      90.1      36.3      906     1127
+tbbmalloc       1.55      0.60     10.75      3.91     114.7      96.0     1026        0
+pool            2.01      0.75      9.59      2.79      96.7      22.3     1007     1007
+poolSpin        1.66      0.54      9.16      2.74      98.9      22.1      960      960
+poolFull        1.76      0.59     10.10      3.91      90.3      21.9      984     1003
+poolTbb         1.69      0.59     10.05      3.52     117.4      20.3     1463        0
+
+4K/1080p: grade into a new image per frame, previous result released. chain: five grade nodes,
+intermediates released. cache: fill eleven 4K RGBA frames (1.5 GB), release, fill again; keptMB =
+memory footprint the allocator keeps after the release (as Activity Monitor
+shows it), trimMB = after trim() and the system allocator's pressure relief.

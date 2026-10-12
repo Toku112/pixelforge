@@ -1295,3 +1295,64 @@ unknown licences still need the owner first. **Consequences:** `cmake/LicensePol
   sequences, documents, selections, history, shortcuts, panels and persistence: N/A for the data type itself
   (they arrive with items 6–15). Performance: measured in the spike; the conversion loops get measured with EXR
   reading (item 9).
+
+## D-074 — 2026-10-12 — Engine services (PLAN Part C item 6)
+
+- **Scheduler on three oneTBB arenas** (high, normal, low priority) for **Viewer > Caching > Render**. Jobs are
+  enqueued into the arena of their priority; a free worker always joins the highest-priority arena that has work, and
+  parallel loops inside a job run in the job's arena, so nested work keeps the job's priority. Running work is not
+  interrupted, so work is cut into pieces (tiles, frames). Checked by a test with one worker thread (after a blocking
+  render job: the viewer job runs first, then caching, then the queued render jobs), and by running all engine tests
+  600 times, 24 processes at once, without a failure.
+- **Threads:** oneTBB's default — one worker per core less one, leaving a core for the UI thread. There is no
+  per-scheduler thread setting: oneTBB limits threads per arena, so "4 threads" would mean 4 per priority. A
+  process-wide limit is `tbb::global_control` (tests use it; a Preferences setting can later).
+- **Thread rules, enforced at run time** (std::logic_error): the UI thread never waits for a job (CLAUDE.md §3.5; it
+  gets results through `onFinished`, which runs on the worker and is passed to the UI thread by the UI layer), and a
+  job never waits for another job (with every worker waiting, nothing would run; nested work uses `parallelFor`). The
+  one exception is shutdown: destroying the scheduler cancels everything and waits for running jobs to stop.
+- **Cancellation tokens of our own** instead of oneTBB's task-group contexts: a source can be chained to any parent
+  token (closing a document cancels its renders and their frames), checks are one atomic load per level, and the
+  tokens work outside oneTBB too (I/O, the UI). `parallelFor` connects them to oneTBB, so a cancelled loop starts no
+  new pieces. Work that stops throws `OperationCancelled`; the job ends as Cancelled, not Failed. A failed job keeps
+  its exception (`Job::get()` rethrows it).
+- **Progress** is a set of atomics the work writes and the UI polls a few times a second, so busy work never floods
+  the UI thread. Named jobs are listed (`Scheduler::jobs()`) for progress bars; internal jobs are not.
+- **Memory budget:** default 60 % of physical memory (CLAUDE.md §3.5); the Preferences > Performance control is PLAN
+  Part B (Preferences section) — the engine takes the value. **Usage is real tile memory** — the bytes of every tile
+  that exists, counted by the tile pool — so a tile shared by several images (copy-on-write) counts once, and images
+  being worked on count too. Adding up each cache's own sizes would count shared tiles several times. When usage is
+  over the limit (checked when a cache stores something and when the limit changes), the least recently used entry
+  over all caches is evicted, until usage fits or the caches are empty. Entries still held elsewhere free nothing when
+  evicted; when the work in progress alone is over the limit, the caches end up empty — the work in progress cannot be
+  dropped, so that is the right priority.
+- **Caches** (`LruCache`) hold shared, immutable values; recency is a tick from the budget's clock, so caches compare
+  with each other. A cache with its own order (playback keeps frames near the playhead, item 14) reports ticks that
+  express that order and still shares the one budget.
+- **Tile memory — a pool of full tiles on top of oneTBB's allocator** (`spikes/tile-alloc`, measured on the real code
+  too): a 4K RGBA grade into a new image takes ~1.2 ms instead of ~1.5–1.9 ms (no allocation at all: ~1.05 ms),
+  refilling a 1.5 GB cache 6.5 ms instead of 8.3–9.3 ms. Released full 256 × 256 tiles go on a free list (up to the
+  *retain limit*, 1/16 of the memory budget, kept on top of it) and are handed out again without page faults; edge
+  tiles and the overflow go to oneTBB's scalable allocator. That allocator, unlike the macOS system allocator (which
+  kept ~1 GB charged to the app after everything was freed, even after its pressure-relief call), really returns
+  memory to the system when asked: lowering the limit (and Edit > Purge, later) gives the free blocks back.
+  - Free blocks do not count as usage: if they did, every eviction during playback would also throw away the blocks
+    the next frame is about to reuse. The retain limit bounds them instead.
+  - oneTBB's allocator may keep freed memory in its own caches until the next release, so the app's footprint can be
+    above limit + retain limit for a while; the status bar shows the engine's own numbers.
+  - **oneTBB 2023.1 bug:** its clean-up command crashes when it runs before the allocator was ever used; the pool only
+    calls it after its first allocation (tested).
+  - AddressSanitizer builds take blocks from `operator new` and poison kept blocks, so out-of-bounds writes and use
+    of a released tile are still caught.
+- **core/image stays standard C++:** tiles get memory from a `std::pmr::memory_resource` the app installs at startup
+  (the C++ allocator until then); each tile remembers the resource it came from, so changing it while tiles exist is
+  safe. Tile samples start on a 64-byte boundary. The pool lives for the whole process, so images may outlive the
+  engine.
+- **Windows packaging:** oneTBB is a DLL there (`tbb12.dll`, `tbbmalloc.dll`); vcpkg copies it next to programs in the
+  build tree, the Windows zip (Part C item 16) must ship it.
+- DoD (D-006): float, OCIO, documents, selections, history, shortcuts, panels and persistence: N/A (services, no
+  pixels or document state). Sequences: the caches are per (key, frame) by design; frame caching itself is item 14.
+  Tests: 62 engine unit tests (scheduler, priorities, cancellation, progress, budget, caches, pool, engine wiring) +
+  2 core tests, debug (ASan/UBSan) and release; clang-tidy and format clean. Performance: measured (above). No memory
+  growth: pool counters return to zero after repeated use in the tests. The app creates the engine at startup
+  (`app_startup` test); the status bar shows `Engine::stats()` from item 13 on.

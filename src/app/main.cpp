@@ -1,7 +1,9 @@
-// Application entry point: creates the Qt application and the main window. The window's contents (menus, panels,
-// viewer) arrive with PLAN Part C item 13.
+// Application entry point: creates the Qt application, the engine services and the main window. The window's
+// contents (menus, panels, viewer) arrive with PLAN Part C item 13.
 
 #include "app/Brand.h"
+#include "engine/Engine.h"
+#include "engine/Scheduler.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -33,6 +35,12 @@ int main(int argc, char* argv[]) {
     smokeTestOption.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOption(smokeTestOption);
     parser.process(app);
+
+    // Background work never waits on this thread (CLAUDE.md §3.5); declaring it lets the engine enforce that.
+    pf::engine::setUiThread();
+    // Job scheduler, memory budget (60 % of RAM until Preferences > Performance sets it) and tile memory. Destroyed
+    // before the application object: running jobs are cancelled and finish first.
+    const pf::engine::Engine engine;
 
     QMainWindow window;
     window.setWindowTitle(toQString(pf::APP_NAME));

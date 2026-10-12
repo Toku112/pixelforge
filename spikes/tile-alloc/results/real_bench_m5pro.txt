@@ -1,0 +1,15 @@
+Apple M5 Pro (6 + 12 cores, 48 GB), macOS 26, Apple clang, release, 2026-10-12. Three runs.
+Real core/image + engine/TilePool, ms (median). grade: new RGBA image per frame; refill: 1.5 GB cache emptied and filled again.
+tile memory        4K    1080p    refill
+operator new     1.92     0.66       8.3
+TilePool         1.16     0.40       6.5
+operator new     1.58     0.44       9.0
+TilePool         1.19     0.38       6.6
+operator new     1.52     0.41       8.5
+TilePool         1.19     0.36       6.5
+operator new     1.57     0.42       9.2
+TilePool         1.18     0.38       6.5
+operator new     1.54     0.41       8.5
+TilePool         1.15     0.34       6.6
+operator new     1.68     0.50       9.3
+TilePool         1.21     0.37       6.8

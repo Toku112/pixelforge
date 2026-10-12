@@ -45,7 +45,8 @@ each shipped port's licence text into the app (`ThirdPartyLicenses/`).
 
 Why each one is there: OpenEXR (EXR files; brings OpenJPH for HTJ2K, libdeflate, zstd), Imath (half floats,
 vectors, matrices), OpenColorIO (scene colour management; brings expat, minizip-ng, pystring, yaml-cpp, zlib, and
-sse2neon on Arm), oneTBB (task scheduler; built without its optional hwloc feature), GoogleTest (tests only).
+sse2neon on Arm), oneTBB (task scheduler, and its scalable allocator under the tile pool, D-074; built without its
+optional hwloc feature), GoogleTest (tests only).
 Where a port offers a choice of licences (`A OR B`), we use it under the allowed one — e.g. zstd under BSD-3-Clause.
 
 ### Other components

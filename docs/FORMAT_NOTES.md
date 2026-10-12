@@ -664,6 +664,8 @@ scene-linear float32 samples (D-062).
   reference is the only one (checked with acquire ordering, so earlier readers have finished).
 - Changing the data window keeps tiles whose pixels stay the same, re-cuts edge tiles (new pixels 0) and drops the
   rest. Constant tiles stay constant where all their new pixels still equal the constant.
+- A tile's first sample starts on a **64-byte boundary**. Tile memory comes from the memory resource the app installs
+  (the engine's tile pool, D-074); each tile gives its memory back to the resource it came from.
 
 ### 19.4 Premultiplied alpha
 

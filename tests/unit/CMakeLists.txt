@@ -27,3 +27,13 @@ pf_add_gtest(pf_test_core_image LABEL unit
         core_image/SampleConversionTest.cpp
         core_image/TileTest.cpp
     LIBRARIES pf_core)
+
+pf_add_gtest(pf_test_engine LABEL unit
+    SOURCES
+        engine/CancellationTest.cpp
+        engine/EngineTest.cpp
+        engine/MemoryBudgetTest.cpp
+        engine/ProgressTest.cpp
+        engine/SchedulerTest.cpp
+        engine/TilePoolTest.cpp
+    LIBRARIES pf_engine)

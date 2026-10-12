@@ -11,7 +11,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
+#include <memory_resource>
 
 namespace pf::image {
 
@@ -42,22 +42,40 @@ struct TileCoord {
 // The tiles touched by `pixels`, as a half-open range of tile coordinates (Rect{} for an empty rectangle).
 [[nodiscard]] Rect tilesCovering(const Rect& pixels);
 
+// Where tile samples get their memory (FORMAT_NOTES §19.3). The default is the C++ allocator; the engine installs
+// its tile pool at startup (engine/TilePool.h, D-074). Every tile remembers the resource it came from and gives its
+// memory back there, so the resource may change while tiles exist. Pass nullptr to restore the default.
+void setTileMemoryResource(std::pmr::memory_resource* resource) noexcept;
+[[nodiscard]] std::pmr::memory_resource* tileMemoryResource() noexcept;
+
+// Alignment of every tile's first sample: one cache line, enough for any vector width we use.
+inline constexpr std::size_t tileSampleAlignment = 64;
+
 // The samples of one tile of one channel: rect.area() floats, row by row, rows rect.width() apart.
 class TileBuffer {
 public:
-    // Samples are left uninitialised. `rect` must not be empty and must lie inside one grid cell.
+    // Samples are left uninitialised. `rect` must not be empty and must lie inside one grid cell. The memory comes
+    // from tileMemoryResource().
     explicit TileBuffer(const Rect& rect);
+    ~TileBuffer();
+    TileBuffer(const TileBuffer&) = delete;
+    TileBuffer(TileBuffer&&) = delete;
+    TileBuffer& operator=(const TileBuffer&) = delete;
+    TileBuffer& operator=(TileBuffer&&) = delete;
 
     [[nodiscard]] const Rect& rect() const { return m_rect; }
-    [[nodiscard]] float* samples() { return m_samples.get(); }
-    [[nodiscard]] const float* samples() const { return m_samples.get(); }
+    [[nodiscard]] float* samples() { return m_samples; }
+    [[nodiscard]] const float* samples() const { return m_samples; }
 
 private:
     friend class TileRef;
 
+    [[nodiscard]] std::size_t byteSize() const;
+
     mutable std::atomic<std::uint32_t> m_refs{0};
     Rect m_rect;
-    std::unique_ptr<float[]> m_samples; // NOLINT(*-avoid-c-arrays): a block sized at run time
+    std::pmr::memory_resource* m_memory = nullptr; // where m_samples came from
+    float* m_samples = nullptr;
 };
 
 // A counted reference to a TileBuffer (null or shared). Copies share the buffer; the last reference frees it.

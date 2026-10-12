@@ -4,6 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include <bit>
+#include <cstddef>
+#include <cstdint>
+#include <memory_resource>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -96,6 +100,52 @@ TEST(TileRef, CountsStayCorrectAcrossThreads) {
         thread.join();
     }
     EXPECT_TRUE(shared.isUnique());
+}
+
+// Counts what passes through it; memory comes from the default resource.
+class CountingResource final : public std::pmr::memory_resource {
+public:
+    std::size_t bytes = 0;
+    int allocations = 0;
+    std::size_t lastAlignment = 0;
+
+private:
+    void* do_allocate(std::size_t size, std::size_t alignment) override {
+        bytes += size;
+        ++allocations;
+        lastAlignment = alignment;
+        return std::pmr::new_delete_resource()->allocate(size, alignment);
+    }
+    void do_deallocate(void* pointer, std::size_t size, std::size_t alignment) override {
+        bytes -= size;
+        std::pmr::new_delete_resource()->deallocate(pointer, size, alignment);
+    }
+    [[nodiscard]] bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+        return this == &other;
+    }
+};
+
+TEST(TileMemory, DefaultIsTheCxxAllocator) {
+    EXPECT_EQ(tileMemoryResource(), std::pmr::new_delete_resource());
+}
+
+TEST(TileMemory, TilesUseTheInstalledResourceAndReturnMemoryToIt) {
+    CountingResource counting;
+    setTileMemoryResource(&counting);
+    TileRef edge = TileRef::allocate(Rect{.x0 = 1792, .y0 = 1024, .x1 = 1920, .y1 = 1080});
+    setTileMemoryResource(nullptr); // back to the default while the tile still exists
+    EXPECT_EQ(tileMemoryResource(), std::pmr::new_delete_resource());
+
+    EXPECT_EQ(counting.allocations, 1);
+    EXPECT_EQ(counting.bytes, std::size_t{128} * 56 * sizeof(float));
+    EXPECT_EQ(counting.lastAlignment, tileSampleAlignment);
+    EXPECT_EQ(std::bit_cast<std::uintptr_t>(edge->samples()) % tileSampleAlignment, 0U);
+
+    const TileRef fromDefault = TileRef::allocate(Rect{.x0 = 0, .y0 = 0, .x1 = 4, .y1 = 4});
+    EXPECT_EQ(counting.allocations, 1);
+
+    edge.reset(); // goes back to the counting resource, not to the one installed now
+    EXPECT_EQ(counting.bytes, 0U);
 }
 
 } // namespace
