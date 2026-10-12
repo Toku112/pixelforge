@@ -16,3 +16,14 @@ pf_add_gtest(pf_test_golden_harness LABEL unit
         golden_harness/ExrFileTest.cpp
         golden_harness/GoldenTest.cpp
     LIBRARIES pf_test_golden)
+
+pf_add_gtest(pf_test_core_image LABEL unit
+    SOURCES
+        core_image/AlphaTest.cpp
+        core_image/ChannelSetTest.cpp
+        core_image/ImageTest.cpp
+        core_image/InterleavedTest.cpp
+        core_image/RectTest.cpp
+        core_image/SampleConversionTest.cpp
+        core_image/TileTest.cpp
+    LIBRARIES pf_core)

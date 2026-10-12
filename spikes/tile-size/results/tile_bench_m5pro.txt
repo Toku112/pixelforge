@@ -1,0 +1,14 @@
+Times in ms, median of 15 runs, oneTBB default arena. 4 channels unless noted.
+
+tile    tasks4K  grade4K  noAlloc grade1080   1thr4K   gauss4   gauss32  viewCopy   ingest    roiMs  roiWaste undo/paint
+64         8160     1.93     1.09     0.44      4.5    19.98    147.80      1.00     3.09    0.052     1.39x     2.62x
+128        2040     2.75     1.06     0.64      5.0     9.55    118.47      1.86     2.97    0.059     1.85x     4.04x
+256         540     1.59     1.03     0.36      3.7     5.92    103.33      3.13     4.12    0.109     2.95x     7.40x
+512         160     1.25     1.06     0.26      3.4     6.68    101.39      4.15     3.60    0.208     5.49x    15.46x
+
+tasks4K: (tile, channel) tasks for a 3840×2160 RGBA image. grade4K: out = in * gain + lift into
+new tiles; noAlloc: the same into existing tiles. 1thr4K: grade4K on one thread.
+gauss4/gauss32: separable Gaussian, radius 4 / 32, per output tile from a padded gather.
+viewCopy: 1920×1080 window at (517, 233) to interleaved RGBA float. ingest: interleaved 4K RGBA
+scanlines into tiles. roiMs/roiWaste: grade of a 480×270 window (zoomed viewer), ms per window and
+computed/requested pixels. undo/paint: whole-tile undo bytes / painted-pixel bytes, 60 px brush.

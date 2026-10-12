@@ -29,7 +29,9 @@ _Update this section at the end of every session._
   startup test, and CI on GitHub (https://github.com/Toku112/pixelforge, public): macOS, Windows and Linux all green,
   49/49 tests in debug and release. Commits use the owner's GitHub private e-mail address (history rewritten before
   the first push, owner's choice).
-- Next up: item 5 (float image core, `core/image`).
+- Done: item 5 (2026-10-12) — the float image core (`src/core/image`, FORMAT_NOTES §19, D-073); tile size 256 × 256
+  chosen by measurement (`spikes/tile-size`).
+- Next up: item 6 (engine services: scheduler, cancellation, memory budget, tile pool).
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15).
 
 ---
@@ -734,9 +736,17 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   each debug (sanitizers) + release, 49/49 tests, check-licenses; format-check and tidy on macOS. Decisions D-072
   (incl. the aqtinstall commit needed for Qt 6.11 on Windows). DoD (D-006): float/OCIO/sequence/document/selection/
   history/shortcut/panel/persistence/performance items N/A for test infrastructure.
-- [ ] 5. **Float image core (`core/image`):** named channel sets, scene-linear float32 planes, data window vs display
+- [x] 5. **Float image core (`core/image`):** named channel sets, scene-linear float32 planes, data window vs display
   window, ROI maths, tiles (size decided by measurement, logged), copy-on-write, premultiplied alpha conventions,
   conversions to/from half, 8 and 16-bit at the boundary. Unit tests for every conversion (FORMAT_NOTES).
+  ↳ note (2026-10-12): `pf_core` library, `src/core/image/` — half-open `Rect` and region maths, `ChannelSet`
+  (canonical order), 256² tiles measured in `spikes/tile-size` (edge tiles clipped, constant tiles, copy-on-write
+  with an atomic reference count), `Image` (windows, channels, regions, tile access, thread-safe writes to different
+  tiles), premultiply/unpremultiply (alpha 0 keeps colour), 8/16-bit/half conversions and interleaved buffer
+  import/export with straight or premultiplied alpha. 75 unit tests (every 8-bit, 16-bit and half code round-trips;
+  every straight 8-bit pixel round-trips), debug (ASan/UBSan) and release; tidy, format and licence checks clean.
+  FORMAT_NOTES §19, D-073. DoD (D-006): OCIO/sequence/document/selection/history/shortcut/panel/persistence items
+  N/A for the data type; performance measured in the spike, conversion loops measured with EXR reading (item 9).
 - [ ] 6. **Engine services (`engine/`):** oneTBB-based scheduler with priorities (viewer > caching > render), cancellation
   tokens, progress reporting to the UI; memory budget (Preferences value, default 60% of RAM) shared by caches; LRU
   eviction; statistics for the status bar.

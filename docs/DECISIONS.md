@@ -1264,3 +1264,34 @@ unknown licences still need the owner first. **Consequences:** `cmake/LicensePol
   aqtinstall 3.3.0 (its latest release) cannot read; the fix (aqtinstall pull request 1000, merged March 2026) is not
   released, so CI installs aqtinstall from a fixed commit of its main branch (`076e165`, checked to contain the fix
   and to list Qt 6.11.3 for Windows, macOS and Linux). Back to a release once 3.4.0 is out.
+
+## D-073 — 2026-10-12 — Float image core (PLAN Part C item 5)
+
+- **Tile size 256 × 256, by measurement** (`spikes/tile-size`, Apple M5 Pro, 64/128/256/512 compared). Point
+  operations take the same time at every size once the memory allocator is taken out (~1.05 ms for a 4K RGBA grade).
+  Neighbourhood filters need a border from the neighbouring tiles: a radius-4 blur is 1.6× faster with 256 than with
+  128 and 3.4× faster than with 64; 512 gains nothing more. A zoomed-in viewer computes ~3× the pixels it shows with
+  256 (1.9× with 128) — about 0.1 ms per window for a grade, acceptable. Undo will store only the changed part of each
+  tile (Phase 3), so it does not depend on the tile size.
+- **Edge tiles are clipped to the data window**, not padded to 256: padded tiles would make a 1920 × 1080 frame take
+  the memory of 2048 × 1280 (26 % more), which matters for many-channel EXRs in the caches.
+- **The allocator matters:** fresh 256² tiles from the system allocator make a memory-bound grade ~50 % slower than
+  reusing tiles. The engine (item 6) gets a tile pool or a faster allocator; measured there.
+- **Half-open rectangles** (`[x0, x1)`), y downward, coordinates within ±2^29 (2^30 overflowed `int` in a width, found
+  by the sanitizer test). OpenEXR's inclusive boxes are converted in `io/`.
+- **Constant tiles** (a value instead of memory) keep new images, constant channels (alpha = 1) and empty layers free.
+- **Copy-on-write with our own atomic reference count** (`TileRef`) instead of `std::shared_ptr`: the "am I the only
+  owner?" test needs an acquire load to be correct across threads, which `shared_ptr::use_count()` does not promise.
+- **Channel order:** main layer first, then layers by name; inside a layer R, G, B, A, X, Y, Z, W, U, V, then the rest
+  (FORMAT_NOTES §19.2), so channel sets do not depend on the order channels arrived in.
+- **Alpha 0 on unpremultiply leaves colour unchanged** (emission without coverage survives), the usual compositing
+  convention. Colour channels of an alpha are R, G, B, Y of its layer; data passes are never premultiplied.
+- **Integer conversions round half up**, clamp to 0–1 and map NaN to 0; half conversion uses Imath (ties to even,
+  overflow to infinity, as OpenEXR does). Bit-depth conversion and colour conversion are separate steps.
+- **Storage is float32 only.** How 8/16-bit image-editor documents emulate their bit depth (quantising after each
+  operation, or integer tiles) is decided with the Paint/Retouch node (Phase 3) and PSD (Phase 9).
+- DoD (D-006): float-correct (no clipping, NaN/infinity kept, tested); premultiplication conventions and every
+  conversion unit-tested (all 8-bit, 16-bit and half codes round-trip); thread-safe tile writes tested. OCIO,
+  sequences, documents, selections, history, shortcuts, panels and persistence: N/A for the data type itself
+  (they arrive with items 6–15). Performance: measured in the spike; the conversion loops get measured with EXR
+  reading (item 9).

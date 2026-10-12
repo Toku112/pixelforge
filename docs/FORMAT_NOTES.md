@@ -624,3 +624,74 @@ NaN or infinity in R, G, B or A fails. Channels other than R, G, B and A are com
 **Difference image** (written on failure, same windows as the expected image): `|a − e|` per float-compared channel
 (infinity where NaN or infinity made a sample fail, 0 where they matched as allowed), `golden.deltaE` in ΔE mode, and
 `golden.failed` = 1 on pixels where any channel failed.
+
+## 19. Native image core (`src/core/image`)
+
+The engine's image type (D-073). One image = a display window, a data window and any number of named channels of
+scene-linear float32 samples (D-062).
+
+### 19.1 Coordinates and windows
+
+- Rectangles are **half-open**: `[x0, x1) × [y0, y1)`, so width = `x1 − x0` and an empty rectangle is natural.
+  OpenEXR's boxes are inclusive; at the file boundary `x1 = max.x + 1`, `y1 = max.y + 1`.
+- **y grows downward** (row 0 at the top), as in OpenEXR and image editors. Pixel (x, y) covers `[x, x+1) × [y, y+1)`;
+  its centre is `(x + 0.5, y + 0.5)`.
+- **Display window** = the frame. **Data window** = where pixels exist; it may be larger (overscan), smaller (a
+  partial render) or elsewhere. Pixels outside the data window read as 0. Nothing outside the display window is ever
+  cropped.
+- Every coordinate stays within ±2^29, so widths and sums of two coordinates never overflow a 32-bit int. Region
+  helpers clamp their results to that range; images refuse windows outside it.
+
+### 19.2 Channels
+
+- Channel names are OpenEXR's: everything before the **last** dot is the layer, the rest the suffix
+  (`ViewLayer.Combined.R` → layer `ViewLayer.Combined`, suffix `R`). A name without a dot is in the main layer.
+  Names are case-sensitive.
+- **Canonical order** (channel sets, lists, anything hashed from them): by layer name in byte order with the main
+  layer first; inside a layer R, G, B, A, then X, Y, Z, W, then U, V, then all other suffixes in byte order.
+
+### 19.3 Tiles and copy-on-write
+
+- Each channel is stored as **256 × 256 tiles** on one grid aligned to pixel (0, 0): tile (tx, ty) is the cell
+  `[256·tx, 256·tx + 256) × [256·ty, 256·ty + 256)`. Tile coordinates are `x >> 8`, `y >> 8` (rounding toward minus
+  infinity, so pixel −1 is in tile −1). The size was measured (`spikes/tile-size`, D-073).
+- A tile stores only **its cell ∩ the data window**, row by row, rows as long as that intersection is wide. Edge tiles
+  are smaller, never padded, so no memory is spent outside the data window.
+- A tile is either **stored** (samples in memory) or **constant** (one value for all its pixels, no memory). New
+  images and channels start as constant 0.
+- Stored tiles are **reference counted and copy-on-write**: copying an image copies references; writing to a tile
+  that another image also holds first makes a private copy. A writer may change a tile in place only when its
+  reference is the only one (checked with acquire ordering, so earlier readers have finished).
+- Changing the data window keeps tiles whose pixels stay the same, re-cuts edge tiles (new pixels 0) and drops the
+  rest. Constant tiles stay constant where all their new pixels still equal the constant.
+
+### 19.4 Premultiplied alpha
+
+- In the engine, colour channels are **premultiplied**: stored colour = straight colour × alpha.
+- Premultiply: `c · a`. Unpremultiply: `c / a`, except **where a = 0 the colour is left unchanged** — a pixel with no
+  coverage may still add light (glows, fire) and that light must survive. Alpha above 1 or below 0 is used as it is.
+- The colour channels of an alpha channel are the channels of the same layer with suffix R, G, B or Y. Depth,
+  vectors, normals, IDs and other data channels are never premultiplied.
+
+### 19.5 Sample types at the boundary
+
+Only the number format changes here; transfer functions (sRGB and other curves) and colour spaces are OpenColorIO's
+job (`color/`).
+
+| Type | To float | From float |
+|---|---|---|
+| 8-bit | `code / 255` | clamp to 0–1, `floor(v · 255 + 0.5)`; NaN → 0 |
+| 16-bit | `code / 65535` (full range, PNG/TIFF) | clamp to 0–1, `floor(v · 65535 + 0.5)`; NaN → 0 |
+| half | exact (every half fits in a float) | nearest half, ties to even; beyond 65504 (rounding past it) → ±infinity; NaN stays NaN; too small → ±0 |
+
+Every 8-bit and 16-bit code and every half bit pattern round-trips exactly (unit tests). Photoshop's 16-bit range
+(0–32768) is converted by the PSD codec (§1.1), not here.
+
+### 19.6 Interleaved buffers
+
+Decoders, encoders, the GPU upload and the clipboard exchange **interleaved** buffers (all samples of a pixel side by
+side, any sample type, any channel order such as BGRA, optional row padding). Import converts to float and, for
+**straight** alpha, multiplies the alpha's colour channels by alpha; export does the reverse (unpremultiply as in
+§19.4, then convert as in §19.5). Pixels of the buffer outside the data window are skipped on import and written as 0
+on export. With 8-bit and 16-bit straight data every pixel with alpha > 0 round-trips exactly; colour under alpha 0
+comes back as 0.
