@@ -18,8 +18,9 @@ _Update this section at the end of every session._
   branch `archive/web-prototype` with its full history. `main` holds only the docs. Why and what was removed:
   `docs/DECISIONS.md` D-054 to D-068.
 - Phase: **0 — Foundation, started 2026-10-12** (owner approved the new docs; approvals in D-068).
-- In progress: Part C item 1 (toolchain). Already on the Mac: Xcode 26.6 with the Metal tools, Homebrew, Git,
-  Blender 5.2. Missing, installed by the owner step by step: CMake, Ninja, vcpkg, aqtinstall, Qt 6.11.3.
+- Done: Part C item 1 on the Mac (toolchain installed by the owner; the Windows machine follows later in the phase).
+  vcpkg has ports for OpenEXR 3.5.2, OpenColorIO 2.6.0, OpenImageIO 3.1, oneTBB, lcms2, HarfBuzz, FreeType, FFmpeg,
+  GoogleTest and Dawn; Open Image Denoise has no port (official prebuilt releases or an overlay port, Phase 2).
 - Next up: item 2 (the GPU-layer spike). It ends with a recommendation; the owner decides between Qt RHI and Dawn
   (and on Qt's GPL-3 `qsb` build tool) before item 3 starts.
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15); a
@@ -679,6 +680,9 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   Metal tools), Homebrew, CMake ≥ 3.28, Ninja, Git, vcpkg (cloned, `VCPKG_ROOT` set), Qt 6.11.3 (official
   binaries via `aqtinstall`; pinned, D-068). Same list for the Windows machine (Visual Studio 2022
   Build Tools) later in the phase. Record exact versions in `README.md`.
+  ↳ partial: the Mac is set up (2026-10-12): Xcode 26.6 with Metal tools, Homebrew, CMake 4.4.4, Ninja 1.13.2, vcpkg
+  (tool 2026-09-26, ports at e456309), aqtinstall 3.3.0, Qt 6.11.3 in `~/Qt/6.11.3/macos` with Qt Shader Tools.
+  Versions in `README.md`. Missing: the Windows machine.
 - [ ] 2. **GPU-layer spike** (in `spikes/gpu/`, never linked into the app): the same small test program written twice,
   on **Qt RHI** and on **Dawn**, measuring on Apple Silicon (and on the Windows/NVIDIA machine before deciding):
   - upload and download an 8K RGBA32F image (GB/s), and a 16K × 16K image as tiles;
