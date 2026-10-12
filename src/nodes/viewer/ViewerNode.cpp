@@ -2,8 +2,10 @@
 
 #include "core/graph/NodeOp.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace pf::nodes {
@@ -44,7 +46,8 @@ std::shared_ptr<const graph::NodeDef> makeViewerNodeDef() {
         .category = "Viewer",
         .inputs = std::move(inputs),
         .hasOutput = false,
-        .params = {graph::intParam("activeInput", "Active Input", 0, 0, viewerInputCount - 1),
+        .params = {graph::intParam("activeInput", "Active Input", 0, 0,
+                                   static_cast<std::int64_t>(viewerInputCount) - 1),
                    displaySetting(graph::floatParam("exposure", "Exposure", 0.0, -20.0, 20.0, -10.0, 10.0)),
                    displaySetting(graph::floatParam("gamma", "Gamma", 1.0, 0.01, 10.0, 0.2, 5.0)),
                    displaySetting(graph::stringParam("layer", "Layer")),

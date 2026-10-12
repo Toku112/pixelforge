@@ -3,6 +3,7 @@
 #include "core/graph/NodeOp.h"
 #include "core/image/Alpha.h"
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <string>

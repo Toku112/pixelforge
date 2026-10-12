@@ -4,11 +4,13 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace pf::image {

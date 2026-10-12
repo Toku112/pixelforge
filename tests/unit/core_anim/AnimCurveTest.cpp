@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 #include <random>
 #include <stdexcept>
