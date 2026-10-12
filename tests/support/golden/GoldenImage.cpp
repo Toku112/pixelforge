@@ -10,14 +10,13 @@ std::string toString(const Box& box) {
            std::to_string(box.maxY) + ")";
 }
 
-Image Image::create(const Box& displayWindow, const Box& dataWindow,
-                    std::initializer_list<std::string_view> channelNames) {
-    if (dataWindow.isEmpty()) {
-        throw std::invalid_argument("golden image: empty data window " + toString(dataWindow));
+Image Image::create(const Box& display, const Box& data, std::initializer_list<std::string_view> channelNames) {
+    if (data.isEmpty()) {
+        throw std::invalid_argument("golden image: empty data window " + toString(data));
     }
     Image image;
-    image.displayWindow = displayWindow;
-    image.dataWindow = dataWindow;
+    image.displayWindow = display;
+    image.dataWindow = data;
     for (const std::string_view name : channelNames) {
         image.addChannel(name);
     }

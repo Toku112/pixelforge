@@ -62,7 +62,7 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up paths
         id: paths
@@ -70,7 +70,6 @@ jobs:
           temp="$RUNNER_TEMP"
           if [[ "$RUNNER_OS" == "Windows" ]]; then temp="$(cygpath -m "$RUNNER_TEMP")"; fi
           {
-            echo "VCPKG_ROOT=$temp/vcpkg"
             echo "PF_QT_ROOT=$temp/Qt/$QT_VERSION/${{ matrix.qt-folder }}"
             echo "VCPKG_BINARY_SOURCES=clear;files,$temp/vcpkg-binary-cache,readwrite"
           } >> "$GITHUB_ENV"
@@ -91,43 +90,58 @@ jobs:
           cmakeVersion: ${{ env.CMAKE_VERSION }}
           ninjaVersion: ${{ env.NINJA_VERSION }}
 
-      - name: Set up the Visual Studio environment
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
       - name: Install LLVM tools (clang-format, clang-tidy)
         if: runner.os == 'macOS'
         run: brew install "llvm@$LLVM_TOOLS_MAJOR"
 
       - name: Restore Qt
         id: qt-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ steps.paths.outputs.temp }}/Qt
           key: qt-${{ matrix.qt-host }}-${{ env.QT_VERSION }}-${{ matrix.qt-arch }}-shadertools
 
-      # A Python of our own: the runners' system Pythons refuse pip installs (PEP 668).
+      # A Python of our own: the runners' system Pythons refuse pip installs (PEP 668). Called by its full path, and
+      # before the Visual Studio environment, which rewrites PATH on Windows.
       - name: Set up Python
+        id: python
         if: steps.qt-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
       - name: Install Qt
         if: steps.qt-cache.outputs.cache-hit != 'true'
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
-          python -m pip install --disable-pip-version-check "aqtinstall==$AQTINSTALL_VERSION"
-          python -m aqt install-qt ${{ matrix.qt-host }} desktop "$QT_VERSION" ${{ matrix.qt-arch }} \
+          if [[ "$RUNNER_OS" == "Windows" ]]; then PYTHON="$(cygpath -u "$PYTHON")"; fi
+          "$PYTHON" -m pip install --disable-pip-version-check "aqtinstall==$AQTINSTALL_VERSION"
+          "$PYTHON" -m aqt install-qt ${{ matrix.qt-host }} desktop "$QT_VERSION" ${{ matrix.qt-arch }} \
             -m qtshadertools -O "${{ steps.paths.outputs.temp }}/Qt"
           test -f "$PF_QT_ROOT/lib/cmake/Qt6/Qt6Config.cmake"
 
-      # The full history is needed: vcpkg reads port versions from it (builtin-baseline in vcpkg.json).
+      - name: Save Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.paths.outputs.temp }}/Qt
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+
+      - name: Set up the Visual Studio environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Set after the Visual Studio environment, which points VCPKG_ROOT at Visual Studio's own copy of vcpkg. The full
+      # history is needed: vcpkg reads port versions from it (builtin-baseline in vcpkg.json).
       - name: Install vcpkg
         run: |
-          git clone --quiet https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
-          git -C "$VCPKG_ROOT" checkout --quiet "$VCPKG_COMMIT"
+          root="${{ steps.paths.outputs.temp }}/vcpkg"
+          git clone --quiet https://github.com/microsoft/vcpkg "$root"
+          git -C "$root" checkout --quiet "$VCPKG_COMMIT"
+          echo "VCPKG_ROOT=$root" >> "$GITHUB_ENV"
 
       - name: Bootstrap vcpkg
         if: runner.os != 'Windows'
@@ -140,7 +154,7 @@ jobs:
 
       - name: Restore built dependencies
         id: vcpkg-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ steps.paths.outputs.temp }}/vcpkg-binary-cache
           key: vcpkg-${{ matrix.platform }}-${{ steps.paths.outputs.image }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/**') }}
@@ -154,7 +168,7 @@ jobs:
 
       - name: Save built dependencies
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ steps.paths.outputs.temp }}/vcpkg-binary-cache
           key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
@@ -187,7 +201,7 @@ jobs:
 
       - name: Upload golden-test output
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: golden-output-${{ matrix.platform }}
           path: build/*/golden-output/

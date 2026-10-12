@@ -41,7 +41,7 @@ struct Image {
 
     // An image with the given channels, every sample 0. Throws std::invalid_argument for an empty data window or a
     // duplicate channel name.
-    [[nodiscard]] static Image create(const Box& displayWindow, const Box& dataWindow,
+    [[nodiscard]] static Image create(const Box& display, const Box& data,
                                       std::initializer_list<std::string_view> channelNames);
 
     [[nodiscard]] std::size_t pixelCount() const;
