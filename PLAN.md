@@ -788,7 +788,7 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   touch pixels), Shuffle (layer routing with shared tiles), Exposure (exposure/offset/gamma on straight colour,
   mirrored negatives). All ports carry images (one port type until other data types need ports). 93 new unit tests
   and 3 golden images (verified against an independent recomputation), debug (ASan/UBSan) and release; tidy, format
-  and licence checks clean. Timing: 2–10 ms per slider step at 1080p, ≤ 41 ms at 4K (`spikes/node-eval`). DoD
+  and licence checks clean; CI green on macOS, Windows and Linux (run 38309857915, 284/284 tests each). Timing: 2–10 ms per slider step at 1080p, ≤ 41 ms at 4K (`spikes/node-eval`). DoD
   (D-006/D-075): OCIO N/A until item 11; commands/history item 8; panels and shortcuts item 13; persistence Phase 1;
   owner check of Exposure against Photoshop in Phase 5.
 - [ ] 8. **Commands and history (`core/commands`, `core/history`):** Command interface with descriptors (JSON) and
