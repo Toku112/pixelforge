@@ -1,0 +1,8 @@
+B8   swapchain format HDRExtendedDisplayP3Linear
+B8   EDR headroom now 11.43, potential 16.00 (1.0 = SDR white)
+B9   frame interval, frames 5–59 (baseline): avg / worst      16.36 / 20.07 ms
+B8   EDR headroom after showing values > 1 for 4 s              11.43 (potential 16.00)
+B9   same-thread 8K readback at frame 60: worst frame 58–70   80.97 ms interval, 80.89 ms CPU in frame
+B9     readback latency                                         113.7 ms, done in frame 62
+B9   worker-thread 8K upload+readback, frames 120–239: avg / worst 16.66 / 21.19 ms
+B9     worker round trips (upload + readback of 531 MB)         15 done, median 128.9 ms

@@ -1123,7 +1123,8 @@ and ICC profile is checked like code. **Consequences:** H.264/H.265 encoding use
 
 ## D-066 — 2026-10-12 — GPU layer: decided after a spike (pending)
 
-**Status:** waiting for the spike (PLAN Part C item 2) and the owner's decision.
+**Status:** spike measured on the Mac on 2026-10-12 (`docs/specs/gpu-spike.md`): recommendation Qt RHI. Waiting for
+the owner's decision. The `qsb` question no longer arises: RHI shaders are baked at run time by the LGPL runtime.
 **Provisional recommendation (from documentation, before measuring):** Qt RHI, wrapped in our own `gpu::` interface.
 Reasons: it ships inside Qt (no second large dependency); it renders straight into Qt windows; it already has HDR
 swapchain formats and HDR info for macOS EDR and Windows HDR; OpenColorIO generates GLSL/MSL/HLSL (not WGSL), which

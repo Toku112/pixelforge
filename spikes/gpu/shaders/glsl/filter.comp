@@ -1,0 +1,10 @@
+#version 440
+// B6: sample a 2x1 RGBA32F texture half-way between its texels with a linear sampler.
+layout(local_size_x = 1, local_size_y = 1) in;
+layout(binding = 0) uniform sampler2D src;
+layout(binding = 1, rgba32f) uniform writeonly image2D dst;
+
+void main()
+{
+    imageStore(dst, ivec2(0, 0), textureLod(src, vec2(0.5, 0.5), 0.0));
+}

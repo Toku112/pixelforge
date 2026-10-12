@@ -1,0 +1,11 @@
+Qt RHI 6.11.3 on Apple M5 Pro, backend Metal
+  compute=1 timestamps=1 maxTexture=16384 RGBA32F load/store=1 RGBA16F load/store=1
+B1   upload 7680x4320 RGBA32F (531 MB), median of 5             66.9 ms  7.94 GB/s
+B2   readback same, median of 5                                 71.8 ms  7.40 GB/s  bit-exact=yes
+B3   upload 16384x16384 RGBA32F as 16 tiles (4.3 GB)            620 ms  6.92 GB/s
+B3   single 16384x16384 RGBA32F texture                         created
+B4   grade 3840x2160 RGBA32F, per dispatch (20 in one frame)    0.622 ms  426 GB/s  (max err 9.5e-07)  shader bake 26 ms
+B5   Gaussian r=64 3840x2160 RGBA32F, per pass (H or V)         13.05 ms  (max err 0)
+B6   RGBA32F linear filtering (expect 0.5 1 2)                  0.5 1 2  -> filtered
+B7   OCIO sRGB/AgX 4K vs OCIO CPU                               max err 2.1e-05, 0.000% px > half 8-bit step; 0.82 ms/frame; bake 57 ms
+B7   OCIO sRGB/ACES 2.0 4K vs OCIO CPU                          max err 8.4e-06, 0.000% px > half 8-bit step; 1.17 ms/frame; bake 8 ms

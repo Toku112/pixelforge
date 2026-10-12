@@ -1,0 +1,20 @@
+#version 440
+// B5: one pass of a separable Gaussian, clamp-to-edge. dirRadius = (dx, dy, radius, 0).
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(binding = 0) uniform sampler2D src;
+layout(binding = 1, rgba32f) uniform writeonly image2D dst;
+layout(std430, binding = 2) readonly buffer Weights { float w[]; };
+layout(std140, binding = 3) uniform Dir { ivec4 dirRadius; };
+
+void main()
+{
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 sz = imageSize(dst);
+    if (p.x >= sz.x || p.y >= sz.y) return;
+    ivec2 d = dirRadius.xy;
+    int r = dirRadius.z;
+    vec4 acc = vec4(0.0);
+    for (int k = -r; k <= r; ++k)
+        acc += w[k + r] * texelFetch(src, clamp(p + d * k, ivec2(0), sz - 1), 0);
+    imageStore(dst, p, acc);
+}

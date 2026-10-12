@@ -1,0 +1,13 @@
+Dawn on Apple M5 Pro (Metal driver on macOS Version 26.3.1 (Build 25D2128))
+  maxTexture=16384 maxBuffer=4095 MB float32-filterable=1
+B1   upload 7680x4320 RGBA32F (531 MB), median of 5             63.1 ms  8.41 GB/s
+B2   readback same, median of 5                                 71.9 ms  7.39 GB/s  bit-exact=yes
+B1     upload via reused staging buffer, median of 5            17.1 ms  31.00 GB/s
+B2     readback via reused staging buffer, median of 5          16.2 ms  32.83 GB/s  bit-exact=yes
+B3   upload 16384x16384 RGBA32F as 16 tiles (4.3 GB)            508 ms  8.46 GB/s
+B3   single 16384x16384 RGBA32F texture                         created
+B4   grade 3840x2160 RGBA32F, per dispatch (20 in one frame)    0.571 ms  465 GB/s  (max err 9.5e-07)  shader+pipeline 4 ms
+B5   Gaussian r=64 3840x2160 RGBA32F, per pass (H or V)         15.73 ms  (max err 0)
+B6   RGBA32F linear filtering (expect 0.5 1 2)                  0.5 1 2  -> filtered
+B7   OCIO sRGB/AgX 4K vs OCIO CPU                               max err 2.1e-05, 0.000% px > half 8-bit step; 0.71 ms/frame; glslang 61 ms + Tint/pipeline 6 ms
+B7   OCIO sRGB/ACES 2.0 4K vs OCIO CPU                          max err 8.4e-06, 0.000% px > half 8-bit step; 586.37 ms/frame; glslang 14 ms + Tint/pipeline 12 ms

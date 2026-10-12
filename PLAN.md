@@ -21,8 +21,9 @@ _Update this section at the end of every session._
 - Done: Part C item 1 on the Mac (toolchain installed by the owner; the Windows machine follows later in the phase).
   vcpkg has ports for OpenEXR 3.5.2, OpenColorIO 2.6.0, OpenImageIO 3.1, oneTBB, lcms2, HarfBuzz, FreeType, FFmpeg,
   GoogleTest and Dawn; Open Image Denoise has no port (official prebuilt releases or an overlay port, Phase 2).
-- Next up: item 2 (the GPU-layer spike). It ends with a recommendation; the owner decides between Qt RHI and Dawn
-  (and on Qt's GPL-3 `qsb` build tool) before item 3 starts.
+- Done: item 2's measurements on the Mac (`docs/specs/gpu-spike.md`): recommendation **Qt RHI**. Waiting for the
+  owner's decision; the Windows run follows when that machine is set up.
+- Next up: after the decision, item 3 (repository skeleton).
 - Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15); a
   GitHub remote for CI (item 4).
 
@@ -696,6 +697,11 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   - build cost (time, binary size, how the dependency is pinned in vcpkg/CMake) and licences of everything involved.
   Output: `docs/specs/gpu-spike.md` with numbers, a recommendation and the reasons, in plain language.
   **Stop and wait for the owner's decision**, then log it in `docs/DECISIONS.md` and update CLAUDE.md §2.
+  ↳ partial: measured on the Mac (2026-10-12), report `docs/specs/gpu-spike.md`, raw output `spikes/gpu/results/`.
+  Recommendation: Qt RHI (OCIO shaders work unchanged and fast, HDR/EDR supported, no extra dependency; Dawn needed
+  OCIO shader rewriting, was ~600× slower on ACES 2.0 and rejects HDR on macOS; Dawn transfers frames ~4× faster with
+  reused buffers — RHI gets a per-backend transfer path later if needed). Runtime shader baking avoids the GPL-3 `qsb`
+  tool. Missing: the owner's decision; the same run on the Windows/NVIDIA machine.
 - [ ] 3. **Repository skeleton:** `CMakeLists.txt`, `CMakePresets.json` (macos/windows/linux × debug/release),
   `vcpkg.json` with a pinned baseline, the folder layout of CLAUDE.md §3.1, `Brand.h` with `APP_NAME`, warnings as
   errors, ASan/UBSan in debug, clang-format and clang-tidy configs, the `run`, `format`, `check-licenses` and `package`
