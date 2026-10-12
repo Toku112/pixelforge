@@ -1142,3 +1142,19 @@ method.
 **Decision:** macOS 14 (Apple Silicon first; Intel Macs best effort), Windows 10 22H2 / Windows 11 (x64), Linux x64
 with glibc 2.35 (Ubuntu 22.04) or newer. These match Qt 6.8 LTS support and current Metal/D3D12/Vulkan feature levels.
 The owner may ask for different minimums.
+
+## D-068 — 2026-10-12 — Owner approvals; AgX from Blender; Qt 6.11.3
+
+- **Approved by the owner:** the rewritten CLAUDE.md and PLAN.md; start Phase 0.
+- **Colour configs (updates D-066):** use Blender's AgX config and ACES. Blender 5.2 is installed on the owner's Mac
+  (`/Applications/Blender.app/Contents/Resources/5.2/datafiles/colormanagement/config.ocio`, OCIO profile version
+  2.5, so we need OpenColorIO ≥ 2.5). The app finds the config of an installed Blender automatically and offers it
+  (macOS, Windows and Linux install locations). A bundled copy for machines without Blender ships only once the
+  licence text the config points to (`ocio-license.txt`, not present in the installed app) is confirmed from Blender's
+  source repository — checked in PLAN Part C item 11. ACES 2.0 configs are bundled (BSD-3).
+- **Video (updates D-064):** H.264/H.265 export uses the operating system's encoders (VideoToolbox, Media Foundation,
+  VA-API) — approved.
+- **Qt version:** Qt **6.11.3** (latest patch of 6.11; 6.12.0 is a first release), not 6.8 LTS: in the open-source
+  edition, LTS patch releases stop being public after the first year, so 6.8 lacks public fixes for macOS 26 and
+  Xcode 26. Upgrading Qt is a deliberate, tested change (pin, rebuild, run all tests).
+- **Still open:** Qt's GPL-3 shader build tool (`qsb`) — asked again with the GPU decision after the spike.

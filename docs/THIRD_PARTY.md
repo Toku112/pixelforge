@@ -24,9 +24,9 @@ _None yet — nothing is added until Phase 0 starts._
 | Dawn | BSD-3-Clause | GPU layer, if chosen instead of Qt RHI | Spike decides (D-066) |
 | OpenEXR (≥ 3.4.14) | BSD-3-Clause | EXR read/write | Brings OpenJPH (BSD-2-Clause) for HTJ2K and libdeflate (MIT) |
 | Imath | BSD-3-Clause | Half floats, vectors, matrices | |
-| OpenColorIO 2.x | BSD-3-Clause | Scene colour management | Brings yaml-cpp (MIT), pystring (BSD-3), expat (MIT), minizip-ng (Zlib) |
+| OpenColorIO (≥ 2.5) | BSD-3-Clause | Scene colour management | Brings yaml-cpp (MIT), pystring (BSD-3), expat (MIT), minizip-ng (Zlib) |
 | ACES 2.0 OCIO configs (OpenColorIO-Config-ACES) | BSD-3-Clause | Bundled config | Verify the exact config files |
-| Blender-compatible AgX config | **Unknown** | Bundled config | Not bundled until confirmed (D-066) |
+| Blender AgX config | **To confirm** (`ocio-license.txt` in Blender's source) | Display transform | Read from the user's Blender install; bundled only once confirmed (D-068) |
 | OpenImageIO | Apache-2.0 (verify per version) | Non-EXR image formats | Its optional plugins pull in more libraries — each checked (libtiff, libpng, libjpeg-turbo, libwebp…) |
 | Open Image Denoise | Apache-2.0 | Render denoising | |
 | oneTBB | Apache-2.0 | Thread pool / tasks | |

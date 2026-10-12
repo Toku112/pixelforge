@@ -16,12 +16,14 @@ _Update this section at the end of every session._
 - **2026-10-12 — change of direction.** The browser prototype (Phases 0–2 of the old plan: tiled document model,
   WebGL compositor, layers, selections, the whole brush engine and painting tools, basic PSD) is archived on the git
   branch `archive/web-prototype` with its full history. `main` holds only the docs. Why and what was removed:
-  `docs/DECISIONS.md` D-054 to D-067.
-- Phase: **0 — Foundation, not started.** Waiting for the owner to approve the rewritten CLAUDE.md and PLAN.md.
-- Next up: Part C item 1 (toolchain), then item 2 (the GPU-layer spike). The spike ends with a recommendation; the
-  owner decides between Qt RHI and Dawn before item 3 starts.
-- Blockers: the owner's approval; the GPU decision (after the spike); sample renders from Cycles, Redshift and Octane
-  for test fixtures (Part C item 15).
+  `docs/DECISIONS.md` D-054 to D-068.
+- Phase: **0 — Foundation, started 2026-10-12** (owner approved the new docs; approvals in D-068).
+- In progress: Part C item 1 (toolchain). Already on the Mac: Xcode 26.6 with the Metal tools, Homebrew, Git,
+  Blender 5.2. Missing, installed by the owner step by step: CMake, Ninja, vcpkg, aqtinstall, Qt 6.11.3.
+- Next up: item 2 (the GPU-layer spike). It ends with a recommendation; the owner decides between Qt RHI and Dawn
+  (and on Qt's GPL-3 `qsb` build tool) before item 3 starts.
+- Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15); a
+  GitHub remote for CI (item 4).
 
 ---
 
@@ -674,8 +676,8 @@ and view any AOV. Infrastructure items follow D-006 (applicable Definition of Do
 decide the foundations, 3–4 make every later item testable on all three platforms.
 
 - [ ] 1. **Toolchain.** Owner installs, one step at a time with checks: Xcode (Command Line Tools are not enough for
-  Metal tools), Homebrew, CMake ≥ 3.28, Ninja, Git, vcpkg (cloned, `VCPKG_ROOT` set), Qt 6 LTS (6.8.x, official
-  binaries via the Qt online installer or `aqtinstall`; pinned). Same list for the Windows machine (Visual Studio 2022
+  Metal tools), Homebrew, CMake ≥ 3.28, Ninja, Git, vcpkg (cloned, `VCPKG_ROOT` set), Qt 6.11.3 (official
+  binaries via `aqtinstall`; pinned, D-068). Same list for the Windows machine (Visual Studio 2022
   Build Tools) later in the phase. Record exact versions in `README.md`.
 - [ ] 2. **GPU-layer spike** (in `spikes/gpu/`, never linked into the app): the same small test program written twice,
   on **Qt RHI** and on **Dawn**, measuring on Apple Silicon (and on the Windows/NVIDIA machine before deciding):

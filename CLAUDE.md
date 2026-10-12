@@ -71,12 +71,12 @@ Functional compatibility is the goal. Copying protected expression is not. There
 |---|---|---|
 | Language | **C++20** | Warnings as errors; ASan/UBSan in debug builds; clang-format + clang-tidy |
 | Build | **CMake** (presets) + **vcpkg** manifest mode with a pinned baseline | Conan was the alternative (D-059) |
-| UI | **Qt 6 Widgets**, LGPL, **dynamically linked** | Dockable/floating panels, workspaces, Photoshop-style menus and shortcuts (Cmd on Mac, Ctrl on Windows/Linux) |
+| UI | **Qt 6 Widgets** (6.11.3, pinned — D-068), LGPL, **dynamically linked** | Dockable/floating panels, workspaces, Photoshop-style menus and shortcuts (Cmd on Mac, Ctrl on Windows/Linux) |
 | GPU | **One cross-platform layer over Metal, D3D12 and Vulkan, shaders written once.** Candidates: **Qt RHI** or **Dawn**. Chosen by the owner after the Phase 0 spike (PLAN Part C). | All GPU work goes through our own thin `gpu::` interface so the backend can change |
 | Threads | **oneTBB** task scheduler (D-061) | I/O, decode, evaluation and caching run off the UI thread |
 | EXR | **OpenEXR ≥ 3.4.14** + **Imath** | All compressions incl. HTJ2K, multi-part, deep read, data vs display window. 3.4.14 has the HTJ2K security fixes |
 | Other images | **OpenImageIO** | TIFF, PNG, JPEG, DPX, HDR, etc. PSD through our own codec (Phase 9) |
-| Colour (scene) | **OpenColorIO 2.x** | ACES 2.0 + AgX configs bundled if licences allow; user configs |
+| Colour (scene) | **OpenColorIO ≥ 2.5** | ACES 2.0 bundled; Blender's AgX config found in the user's Blender install (bundled once its licence is confirmed, D-068); user configs |
 | Colour (print) | **lcms2** | ICC v2/v4, CMYK, soft proofing, all intents, black point compensation |
 | Denoise | **Open Image Denoise** | CPU + Metal (Apple Silicon) + other GPU backends; uses albedo/normal passes |
 | Text | **HarfBuzz + FreeType** | System fonts via CoreText / DirectWrite / fontconfig |
