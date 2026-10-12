@@ -3,6 +3,9 @@
 Non-obvious decisions (algorithm choices, deviations from the reference behaviour, tooling choices).
 Newest at the bottom. Format: ID — date — title, then context, decision, consequences.
 
+> **2026-10-12 — change of direction (D-054).** D-001 to D-053 were made for the browser prototype, now on the branch
+> `archive/web-prototype`. D-055 lists which of them still apply to the native app.
+
 ---
 
 ## D-001 — 2026-10-06 — TypeScript 6.0 instead of 7.0
@@ -970,3 +973,172 @@ exit test.
   records selecting a layer or a history state.
 - The painting's dynamics seeds differ between runs, so `docs/phase2-check/painting.psd` is one example run (made
   with PF_PHASE2_CHECK_DIR); the test compares each run with itself, not with that file.
+
+---
+
+# Native compositor (from 2026-10-12)
+
+## D-054 — 2026-10-12 — Change of direction: native node-based compositor (owner decision)
+
+**Context:** The owner is a 3D artist (Blender/Cycles, Redshift, Octane). What they need most is compositing
+multi-layer EXR render passes, stills and animations, and pushing CG renders to photographic realism — with the full
+Photoshop toolset built in so Photoshop is never needed. A browser app cannot handle huge multi-layer float EXR
+sequences, real-time playback, OCIO, OIDN or hardware ProRes well.
+**Decision:** Build a native C++20/Qt 6 desktop app around a node graph with a Photoshop-style layer view. macOS on
+Apple Silicon first; Windows and Linux supported; no NVIDIA-only code. The browser prototype (53 commits: Phase 0, 1
+and most of 2 of the old plan — ~47,000 lines of TypeScript/Rust and 113 test files) moves to the branch
+`archive/web-prototype` (commit 5fd798a) with full history. `main` keeps only the docs (commit 8b0b978).
+**Consequences:** No code carries over; behaviour research and maths notes do (D-055). New CLAUDE.md and PLAN.md.
+
+## D-055 — 2026-10-12 — Which prototype decisions still apply
+
+- **Still apply:** D-006 (Definition of Done for infrastructure tasks).
+- **Still apply as behaviour reference** (what the user sees, ranges, defaults, edge cases — re-check when the feature
+  is rebuilt; their TypeScript/WebAssembly/worker implementation details do not apply): D-004 (Invert greyed out in
+  32-bit Photoshop-style documents), D-013 (layer order and Background rules only), D-014 (history: command undo plus
+  a snapshot of the opening state), D-018 (zoom means device pixels; zoom steps), D-019 (navigation input), D-020
+  (keymap design), D-021 (app shell behaviour), D-022 to D-033 (layers, blend modes, Layers panel, merging, selections,
+  colour picker, brush, fill, move, crop/size/rotation, Free Transform, Save As behaviour), D-035 to D-053 (pen input,
+  brush engine, presets, smoothing, symmetry, eyedropper and colour panels, pencil/eraser, gradients, patterns, paint
+  bucket, history brush, mixer brush, dodge/burn/sponge, blur/sharpen/smudge, File > New, exit-test design).
+- **Superseded** (browser-only): D-001 (TypeScript version), D-002 and D-003 (Rust/WebAssembly codecs and toolchain),
+  D-005 (own React dock framework — re-decided in PLAN Part C item 13), D-007 (npm licence tooling; the policy idea
+  stays, see D-064), D-008 (tsconfig per layer — the same layering is enforced with CMake targets), D-009 and D-010
+  (cross-origin isolation, WebAssembly memory), D-011 (worker RPC), D-012 (browser test harness), D-015 (OPFS scratch
+  disk), D-016 (fixtures made via Chromium), D-017 (WebGL compositor), D-034 (our own JPEG encoder and the browser's
+  WebP encoder — OpenImageIO handles these now).
+
+## D-056 — 2026-10-12 — Stack replaced
+
+| Concern | Prototype | Native app |
+|---|---|---|
+| Language / build | TypeScript, Vite, pnpm | C++20, CMake presets, vcpkg (D-059) |
+| UI | React + Zustand | Qt 6 Widgets (LGPL, dynamic) |
+| Rendering | WebGL2, WebGPU later | One GPU layer over Metal/D3D12/Vulkan: Qt RHI or Dawn (D-066) |
+| Heavy pixel work | Rust → WebAssembly in Web Workers | C++ on oneTBB threads (D-061) + GPU compute |
+| Native working space | 8-bit / 16-bit / 32-bit per document | Scene-linear float32 everywhere (D-062) |
+| Colour | lcms2 compiled to WebAssembly (planned) | OpenColorIO 2.x for scene work + lcms2 for ICC/print |
+| Files | ag-psd, Rust codecs, browser encoders | OpenEXR 3.4+, OpenImageIO, own PSD codec (basic in Phase 3, full in Phase 9) |
+| Video | WebCodecs | FFmpeg (LGPL build) + VideoToolbox |
+| Text | harfbuzzjs + opentype.js/fontkit | HarfBuzz + FreeType, system font APIs |
+| ML | ONNX Runtime Web | ONNX Runtime (CoreML / DirectML / CPU) |
+| Denoise | — | Open Image Denoise |
+| Storage | OPFS, IndexedDB, File System Access | Real files: disk cache and scratch disks, app data folder, native dialogs |
+| Plugins | Sandboxed iframes/workers | OpenFX host + own C++ plugin API |
+| Tests | Vitest, Playwright, ΔE golden images | GoogleTest (D-060), float golden images, headless integration tests |
+
+## D-057 — 2026-10-12 — Web-only plan items removed or replaced
+
+| Removed (web) | Replaced by |
+|---|---|
+| OPFS scratch disk, tile swap and autosave journal | Disk cache and scratch disks on real drives; autosave/crash journal in the app data folder |
+| File System Access API, download fallback | Native open/save dialogs, save in place with atomic writes |
+| "(web-alt)" markers: Browse, Share, Droplets, device camera import, Comments, Libraries, Scratch Disks, print dialog, plugin host, cloud fonts, 8BF | Native equivalents: built-in file browser, OS share sheet, launcher droplets + command line, Image Capture/WIA, local notes, local asset library, real scratch disks, Qt print dialog, OpenFX host, system fonts; 8BF stays a known gap |
+| Installable PWA, file handlers | Signed native installers with file associations (PLAN B25) |
+| Browser-reserved shortcuts, Keyboard Lock API, Cmd+Space browser workaround | Gone: native apps receive every shortcut; only OS-reserved keys remain (KNOWN_GAPS) |
+| Local Font Access API | CoreText / DirectWrite / fontconfig |
+| Pointer Events (pressure, tilt, coalesced/predicted events, iPad Safari) | Qt tablet events: Wacom/Apple Pencil via Sidecar, Windows Ink/Wintab, libinput |
+| CSS colour-gamut / display-p3 canvas | OS display profiles + OCIO displays + EDR/HDR swapchain |
+| WebGL/WebGPU selection in Preferences | GPU backend and GPU device selection |
+| Cross-origin isolation headers, COOP/COEP, `_headers` deployment notes | Not needed |
+| WebCodecs video import/export, MP4/WebM | FFmpeg/VideoToolbox: ProRes, DNxHR, H.264/H.265, image sequences |
+| Ghostscript compiled to WebAssembly | Same licence question (AGPL) for a native Ghostscript — still ask the owner |
+| CI for browsers (Chromium/Firefox/WebKit) | CI on macOS arm64, Windows and Linux |
+
+## D-058 — 2026-10-12 — Roadmap replaced
+
+**Old:** 15 phases starting from a Photoshop clone (0 Foundation, 1 Core editor, 2 Painting, 3 Selections, … 14 Polish),
+with Part C/D/E task lists for Phases 0–2.
+**New:** 0 Foundation → 1 Render comp MVP → 2 Realism toolkit → 3 Paint/Retouch node → 4 Animation depth → then the
+remaining Photoshop phases (5 Adjustments, 6 Selections/masks/channels, 7 Filters, 8 Retouching & transforms, 9 Colour
+management/modes/formats, 10 Vector & type, 11 Layer styles & smart objects, 12 Raw, 13 Automation & extensibility,
+14 AI, 15 Output/print/preferences/polish).
+**Reasons for the order after Phase 4:** adjustments come first because grading is daily work for a 3D artist; then
+selections and filters, which compositing reuses; colour management and formats before vector/type because PSD and
+CMYK fidelity matter more to this owner than poster design; AI late because it depends on everything else.
+**Removed with it:** old Parts C, D and E (prototype task lists and progress notes), every `[x]` tick and `↳` note in
+Part B (nothing is on `main`), the owner checks for old Phases 1 and 2 (`docs/phase1-check`, `docs/phase2-check` —
+they tested the browser app; they remain on the archive branch). The Photoshop inventory (Part B) is kept in full, with
+web-only items replaced (D-057), and the new section B0 added on top.
+**Moved earlier:** basic PSD import/export of the layer view to Phase 3 (it was old Phase 1), so stills can leave and
+enter Photoshop as soon as painting exists; the full PSD/PSB codec stays with colour management (Phase 9).
+
+## D-059 — 2026-10-12 — vcpkg rather than Conan
+
+**Context:** The owner allowed either. **Decision:** vcpkg in manifest mode with a pinned baseline. It is driven from
+CMake presets with no extra tool, has ports for the VFX libraries we need (OpenEXR, Imath, OpenColorIO,
+OpenImageIO, lcms, HarfBuzz, FreeType, FFmpeg with feature selection, oneTBB, GoogleTest — each verified when added),
+and a binary cache for CI. Qt itself comes from the official binaries (Part C item 1), because building Qt through
+vcpkg takes hours and the official builds are the tested ones. **Consequences:** Custom overlay ports where a library
+is missing or needs our build options (e.g. FFmpeg without GPL parts).
+
+## D-060 — 2026-10-12 — GoogleTest rather than Catch2
+
+**Decision:** GoogleTest (BSD-3-Clause, already in the allowed licence list), with CTest discovery and labels. Catch2
+(BSL-1.0) would also have been fine. GoogleTest's death tests and parameterised tests suit file-format and maths
+tests; it is what OpenEXR, OCIO and OIIO use.
+
+## D-061 — 2026-10-12 — oneTBB for threads
+
+**Decision:** oneTBB (Apache-2.0) as the task scheduler for I/O, decode, node evaluation and caching. Open Image
+Denoise and OpenImageIO already use it, so one thread pool serves everything instead of several competing pools.
+
+## D-062 — 2026-10-12 — Scene-linear float32 as the native working space
+
+**Replaces** CLAUDE.md's old rule "8-bit = Uint8, 16-bit = Uint16 (0–65535), 32-bit = Float32 per document".
+**Decision:** All engine maths is scene-linear float32, unclipped; images carry named channels; alpha is
+premultiplied inside the engine; data window and display window are kept as in EXR. 8/16-bit and half float exist at
+I/O and for Photoshop-style documents. Golden tests compare float values per channel (CLAUDE.md §4) instead of only ΔE.
+**Consequences:** FORMAT_NOTES §1 (prototype storage) is superseded; the 16-bit 0–32768 PSD conversion (§1.1) still
+applies at PSD I/O.
+
+## D-063 — 2026-10-12 — Menu placement of compositor features
+
+**Decision:** Photoshop's menu bar stays in its order. Compositor features get one extra top-level **Composite** menu
+(node creation by category, Render Stack, mattes, light groups) placed between Filter and View, and render items under
+File (Render Queue, Render Selected Output). Timeline, Node View, Layer View, Viewer, Metadata and Render Queue panels
+live in Window. Photoshop users find everything where they expect it; compositor items have one obvious home.
+
+## D-064 — 2026-10-12 — Licence policy for the native app
+
+**Decision:** Allowed by default: MIT, BSD-2/3-Clause, Apache-2.0, ISC, Zlib, BSL-1.0, MPL-2.0 (separate module).
+LGPL only with dynamic linking and only for owner-approved components: **Qt 6** and an **LGPL build of FFmpeg**
+(configured without `--enable-gpl` and `--enable-nonfree`, so no libx264/libx265). Anything else LGPL, GPL, AGPL or
+non-commercial needs the owner first — including build tools whose output ships (e.g. Qt's `qsb` shader tool is
+GPLv3, relevant if Qt RHI is chosen; its output shaders are ours, but we ask anyway). Every bundled OCIO config, LUT
+and ICC profile is checked like code. **Consequences:** H.264/H.265 encoding uses the operating system's encoders
+(see KNOWN_GAPS); the licence check runs in CI.
+
+## D-065 — 2026-10-12 — Docs kept, rewritten or archived
+
+- `CLAUDE.md`, `PLAN.md`: rewritten (kept: brand/legal rules, Photoshop compatibility, work loop, Definition of Done
+  extended, shortcut rules, UI conventions, owner checks, `↳ partial`/`↳ note` convention, session checklist).
+- `docs/DECISIONS.md`: kept in full, continued from D-054.
+- `docs/FORMAT_NOTES.md`: kept as the maths reference (blend modes, colour measurement, brushes, gradients, patterns,
+  Photoshop file formats); §1 storage, §5 and §7 implementation notes are marked as prototype-only.
+- `docs/KNOWN_GAPS.md` and `docs/THIRD_PARTY.md`: rewritten for the native stack (browser gaps and npm/Rust
+  dependencies removed; they remain on the archive branch).
+- `README.md`: rewritten. `.github/workflows/ci.yml`, `.husky`, all npm/Vite/TypeScript/Playwright configs and the
+  `docs/phase1-check`, `docs/phase2-check` folders: archived only (new CI comes in Part C item 4).
+
+## D-066 — 2026-10-12 — GPU layer: decided after a spike (pending)
+
+**Status:** waiting for the spike (PLAN Part C item 2) and the owner's decision.
+**Provisional recommendation (from documentation, before measuring):** Qt RHI, wrapped in our own `gpu::` interface.
+Reasons: it ships inside Qt (no second large dependency); it renders straight into Qt windows; it already has HDR
+swapchain formats and HDR info for macOS EDR and Windows HDR; OpenColorIO generates GLSL/MSL/HLSL (not WGSL), which
+fits RHI's shader pipeline directly; shaders are written once in Vulkan-style GLSL and translated for Metal/D3D12/Vulkan.
+Risks to measure: RHI's API has limited compatibility promises between Qt versions (we pin Qt and keep it behind our
+interface); its compute support is simpler than WebGPU's; the offline shader tool `qsb` is GPLv3 (build-time only).
+Dawn (BSD-3) stays the fallback if RHI fails the measurements: strong validation and compute, but a heavy build without
+stable releases, its own window-surface plumbing per OS, and an extra GLSL→WGSL step for OCIO shaders.
+**AgX config note:** the Blender AgX config's licence is unclear (EaryChow/AgX has no licence file; Blender's
+`ocio-license.txt` is a BSD-style notice from the older config). Until confirmed, we do not bundle it. Alternatives:
+detect and offer the config from the user's own Blender install, or build our own AgX-style config from the published
+method.
+
+## D-067 — 2026-10-12 — Minimum platform versions
+
+**Decision:** macOS 14 (Apple Silicon first; Intel Macs best effort), Windows 10 22H2 / Windows 11 (x64), Linux x64
+with glibc 2.35 (Ubuntu 22.04) or newer. These match Qt 6.8 LTS support and current Metal/D3D12/Vulkan feature levels.
+The owner may ask for different minimums.

@@ -1,8 +1,11 @@
 # PLAN.md — Feature inventory and build roadmap
 
-> Reference target: **Photoshop 2026 (desktop v27.x)**, behaviour taken from Adobe's public Photoshop User Guide.
-> Read `CLAUDE.md` first. Tick `[x]` only when the Definition of Done in `CLAUDE.md §5` is met.
-> Items marked **(AI)** go through the `AIProvider` interface. Items marked **(web-alt)** have no direct browser equivalent and get the documented alternative.
+> What we build: a native node-based compositor for multi-layer EXR render passes (stills and animations) with the full
+> Photoshop-equivalent toolset built in. Read `CLAUDE.md` first.
+> Photoshop reference: **Photoshop 2026 (desktop v27.x)**, behaviour taken from Adobe's public Photoshop User Guide.
+> Tick `[x]` only when the Definition of Done in `CLAUDE.md §5` is met. Partial work gets `↳ partial: …`, scope notes on
+> ticked items get `↳ note: …`.
+> Items marked **(AI)** go through the `AIProvider` interface (CLAUDE.md §6).
 
 ---
 
@@ -10,50 +13,154 @@
 
 _Update this section at the end of every session._
 
-- Phase: 2 — Painting engine (task list in Part E). Started on 2026-10-08 at the owner's request, before the owner's
-  Phase 1 check with real Photoshop (`docs/phase1-check/README.md`, Part D item 13); fixes from that check come first
-  when it arrives.
-- Last completed: File > New (New Document dialog with presets, Recent and Saved, D-052) and the automated part of
-  Part E item 17, the Phase 2 exit test (`tests/e2e/phase2-exit.spec.ts`, D-053); before that Part E items 1–16
-  (the whole brush engine and every painting tool); Phase 1 Part D items 1–12 and the automated part of item 13.
-- Waiting for the owner: the Phase 1 check (`docs/phase1-check/README.md`) and the Phase 2 check — painting a small
-  picture with a tablet and opening our painting in Photoshop (`docs/phase2-check/README.md`). Item 17 ticks, and
-  Phase 2 ends, once the owner's findings are in and fixed.
-- Next up: fixes from the owner's checks when they arrive. Otherwise Phase 3 (Selections & masks) starts only when
-  the owner says so (CLAUDE.md §4: no phase jumps); its task list has to be written first, as Part F.
-- Blockers: none. CI needs a GitHub remote to run.
+- **2026-10-12 — change of direction.** The browser prototype (Phases 0–2 of the old plan: tiled document model,
+  WebGL compositor, layers, selections, the whole brush engine and painting tools, basic PSD) is archived on the git
+  branch `archive/web-prototype` with its full history. `main` holds only the docs. Why and what was removed:
+  `docs/DECISIONS.md` D-054 to D-067.
+- Phase: **0 — Foundation, not started.** Waiting for the owner to approve the rewritten CLAUDE.md and PLAN.md.
+- Next up: Part C item 1 (toolchain), then item 2 (the GPU-layer spike). The spike ends with a recommendation; the
+  owner decides between Qt RHI and Dawn before item 3 starts.
+- Blockers: the owner's approval; the GPU decision (after the spike); sample renders from Cycles, Redshift and Octane
+  for test fixtures (Part C item 15).
 
 ---
 
 # PART A — ROADMAP (build order)
 
-Build in this order. Each phase ends with a working, releasable app. Do not start a phase until the previous phase's exit criteria pass.
+Build in this order. Each phase ends with a working, releasable app on macOS (Apple Silicon), with Windows and Linux
+building and passing tests in CI. Do not start a phase until the previous phase's exit criteria pass. Each phase gets
+its own task list (Part C for Phase 0, then Part D, E, …) written when it starts.
 
 | Phase | Goal | Exit criteria |
 |---|---|---|
-| **0. Foundation** | Repo, tooling, CI, WASM pipeline, tiled document model, command/history system, WebGL compositor with Normal blend, app shell | Open a PNG, view it, pan/zoom smoothly, undo a test command |
-| **1. Core editor MVP** | Layers panel, basic selections, Move, Brush/Eraser (simple), Fill, Crop, Image/Canvas Size, Free Transform, all 27 blend modes, opacity/fill, open/save PNG/JPEG/WebP + basic PSD | Edit a layered composition and round-trip a simple PSD with real Photoshop |
-| **2. Painting engine** | Full brush engine, Brush Settings panel, pressure/tilt, symmetry, Mixer Brush, Gradient tool & editor, patterns, History Brush | A digital painter can paint a full illustration |
-| **3. Selections & masks** | All selection tools, Select and Mask, Color Range, Quick Mask, layer/vector/clipping masks, channels & alpha channels | Complex compositing (hair cut-out) achievable without AI |
-| **4. Adjustments** | All adjustments as both destructive commands and adjustment layers, Properties panel, Histogram/Info panels, fill layers | Full photographic colour-grading workflow |
-| **5. Vector & type** | Pen tools, paths, shape layers & live shapes, full type engine (point/paragraph/path text, OpenType, styles), warp text | Design a poster with editable text & shapes that round-trips as PSD |
-| **6. Layer styles & smart objects** | All 10 effects + blending options, styles panel, smart objects (embedded/linked), smart filters, layer comps, artboards | UI/marketing design workflow, non-destructive |
-| **7. Colour management & modes** | lcms2, all modes & bit depths, profiles, soft proofing, own full PSD/PSB codec, TIFF/PDF/EXR etc. | Pre-press CMYK job, 16-bit and 32-bit HDR documents round-trip |
-| **8. Filters** | Every filter incl. Filter Gallery, Blur Gallery, Liquify, Lens Correction, Adaptive Wide Angle, Vanishing Point | All filter menu items work, as smart filters too |
-| **9. Retouching & transforms** | Healing family, Clone Source, Content-Aware Fill/Scale/Move, Puppet/Perspective Warp, warp, Auto-Align/Blend, Photomerge, HDR | Professional retouching workflow |
-| **10. Raw development** | Full Camera-Raw-equivalent module (as dialog and as filter) | Edit a camera RAW end-to-end |
-| **11. Automation** | Actions (+ATN import), Batch, Droplets(web-alt), Image Processor, scripting API, plugin host, variables/data sets | Batch-process 500 images via a recorded action |
-| **12. Web, animation & video** | Slices, Export As, Save for Web, asset generation, frame animation, video timeline, render video | Export animated GIF and MP4 |
-| **13. AI features** | Select Subject/Sky/People, Remove tool, Generative Fill/Expand, Neural-filter equivalents, Denoise, upscale, Sky Replacement | AI features run locally (or via configured provider) on new layers |
-| **14. Print, prefs, polish** | Print dialog, all Preferences, workspaces, shortcut editor, menu/toolbar customisation, onboarding, perf hardening | Pro user beta with real-world files |
+| **0. Foundation** | Native Qt shell; the chosen GPU layer; float images and tiles; node graph core; command/undo; OCIO viewer; EXR still + sequence reading; RAM playback cache | Open a Cycles multi-layer EXR sequence, play it in real time at 1080p from cache with the AgX view, scrub frames, and view any AOV |
+| **1. Render comp MVP** | Render Stack / AOV rebuild; light group mixer; Cryptomatte and ID mattes; merge/blend nodes (all Photoshop blend modes); grade nodes; layer view; project file; EXR/PNG sequence + ProRes export | Rebuild a Cycles, a Redshift and an Octane beauty from passes (difference ≈ 0), regrade light groups and an object picked by Cryptomatte, save/reopen the project, export an EXR sequence and a ProRes movie |
+| **2. Realism toolkit** | Z-depth defocus, glare/bloom (FFT), lens effects, vector motion blur, depth atmosphere, relighting, film/sensor emulation, grain matching, light wrap, OIDN denoise, full grading (CDL, ACEScct, curves, hue-vs, LUTs) | Take a raw Cycles render to a photographic final using only these nodes; every effect keyframable and identical in the render queue |
+| **3. Paint/Retouch node** | Core Photoshop tools inside a Paint/Retouch node: selections (marquee, lasso, magic wand, quick selection), brush engine, eraser, clone stamp, healing brush, spot healing, masks; per-frame / frame-range / all-frames strokes; basic PSD import/export of the layer view | Remove a firefly on one frame, paint out a wire across a frame range, clone-fix a texture seam on all frames; round-trip a layered still through PSD with real Photoshop |
+| **4. Animation depth** | Curve editor, dope sheet, 2D tracker (stabilise, attach paint fixes), render queue with multiple jobs, disk cache, A/B wipe of versions, live file linking polish | Track a point through a shot, attach a paint fix to it, animate a grade with eased keys in the curve editor, queue three renders overnight |
+| **5. Adjustments** | Every Photoshop adjustment as a node, a destructive command and an adjustment layer; Properties, Histogram and Info panels; fill layers | Full photographic colour-grading workflow on stills and sequences, float-correct |
+| **6. Selections, masks & channels** | All remaining selection tools, Select and Mask, Color Range, Focus Area, Quick Mask, vector and clipping masks, channels and alpha channels | Complex cut-out (hair) achievable without AI, on a still and on a sequence frame |
+| **7. Filters** | Every Photoshop filter incl. Filter Gallery, Blur Gallery, Liquify, Lens Correction, Adaptive Wide Angle, Vanishing Point — as nodes and smart filters | All Filter menu items work, as smart filters too, float-correct where Photoshop supports 32-bit |
+| **8. Retouching & transforms** | Full healing family, Clone Source panel, Content-Aware Fill/Scale/Move, Puppet/Perspective Warp, Warp, Auto-Align/Blend, Photomerge, Merge to HDR | Professional retouching workflow on stills; content-aware fill across a frame range |
+| **9. Colour management, modes & formats** | lcms2 ICC pipeline, all Photoshop colour modes and bit depths, soft proofing, our own full PSD/PSB codec, TIFF/PDF and the rest of the format table | Pre-press CMYK job; 16-bit and 32-bit documents round-trip with Photoshop |
+| **10. Vector & type** | Pen tools, paths, shape layers and live shapes, full type engine (HarfBuzz/FreeType) | Design a poster with editable text and shapes that round-trips as PSD |
+| **11. Layer styles & smart objects** | All 10 effects + blending options, Styles panel, smart objects (embedded/linked), smart filters, layer comps, artboards | Non-destructive design workflow; a smart object can hold a comp |
+| **12. Raw development** | Camera-Raw-equivalent module (as dialog and as filter) | Edit a camera RAW end-to-end |
+| **13. Automation & extensibility** | Actions panel (+ATN import), Batch, Droplets, Image Processor, scripting API, OpenFX host, Blender add-on ("send to comp", render-output watch) | Batch-process 500 images via a recorded action; run an OpenFX plugin as a node |
+| **14. AI features** | Select Subject/Sky/People, Remove tool, Generative Fill/Expand, neural-filter equivalents, upscale, Sky Replacement | AI features run locally (or via a configured provider) on new layers/nodes |
+| **15. Output, print, preferences & polish** | Export As / Save for Web, slices, frame animation and GIF, Print, all Preferences, workspaces, shortcut editor, menu/toolbar customisation, onboarding, installers, performance hardening | Pro user beta on macOS and Windows with real-world renders and PSDs |
+
+Which phase completes which Part B section: B0 → Phases 0–4 (each B0 item names its phase); B1, B15, B16, B21 grow in
+every phase and finish in 15; B2 tools → 3 (core), 6, 8, 10; B3/B4 → spread, finished in 15; B5 → 5 and 9; B6 → 1 (layer
+view), 3, 11; B7 → 5; B8 → 1; B9 → 3; B10 → 11; B11 → 3 (core), 6; B12/B13 → 10; B14 → 7; B17 → 12; B18 → 4 and 15;
+B19 → 13; B20 → 9 and 15; B22 → 0–1 (EXR), 3 (basic PSD), 9; B23 → 8; B24 → 15; B25 → all.
 
 ---
 
 # PART B — COMPLETE FEATURE INVENTORY
 
+The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see the archive branch). Nothing of it is on
+`main`, so every item starts unticked. When those features are rebuilt, the prototype's behaviour decisions
+(`docs/DECISIONS.md` D-020 to D-053) and maths (`docs/FORMAT_NOTES.md` §3–§17) are the starting reference.
+
+## B0. Render compositing & realism (top priority)
+
+### B0.1 Compositor core & UI
+- [ ] Node graph: pull-based DAG per frame, ROI/tiled evaluation, proxy scales, node result cache, cancellation and progress (Phase 0)
+- [ ] Every parameter keyframable; linear/constant/smooth/Bézier keys (Phase 0 data model; editors in Phase 4)
+- [ ] Node view: create (Tab search menu), connect, disconnect, insert into a wire, select, move, group/backdrop, collapse into a group node, bypass, view node in viewer (number keys / click), viewer A/B inputs (Phase 0 basic, Phase 1 complete)
+- [ ] Layer view: a linear part of the graph as a Photoshop-style layer stack — layers, groups, blend modes, opacity/fill, masks, adjustment layers, visibility, locks; edits in either view change the same graph (Phase 1)
+- [ ] Read node: still, sequence or movie; colour-space setting auto-detected from metadata; frame range, offset, hold/loop/black for frames outside the range; missing-frame handling; reload (Phase 0)
+- [ ] Project file: graph, parameters, keyframes, paint descriptors, viewer/workspace state, relative file links; versioned; autosave and crash recovery (Phase 1)
+- [ ] OCIO: bundled ACES 2.0 and Blender-compatible AgX configs (licences permitting), load any config, `$OCIO`, per-input colour space, working space setting, display/view menus in the viewer (Phase 0)
+- [ ] Merge node with all Photoshop blend modes plus compositing operators (over, under, in, out, atop, xor, plus, minus, multiply, screen, max, min, difference, mask, stencil, copy) on premultiplied float (Phase 1)
+- [ ] Shuffle/Copy channels, rename layers, Premult/Unpremult, Transform/Reformat/Crop, Constant, Switch, Dissolve, Dot, Group nodes (Phase 1)
+
+### B0.2 EXR & renderer support
+- [ ] Multi-layer and multi-part EXR stills and frame sequences: all compressions (none, RLE, ZIPS, ZIP, PIZ, PXR24, B44, B44A, DWAA, DWAB, HTJ2K), half/float/uint, scanline and tiled, data window vs display window, multi-view (stereo) (Phase 0)
+- [ ] Deep EXR read: detect deep parts, flatten to a regular image; full deep compositing later (Phase 1)
+- [ ] Lazy per-channel loading: only the channels the graph reads are decoded (Phase 0)
+- [ ] Automatic sequence detection, including frame-number patterns (`name.1001.exr`, `name_1001.exr`, `name1001.exr`, `####`, `%04d`, `@@@@`), negative frames, gaps; missing frames reported and shown as held/black/checker (Phase 0)
+- [ ] Metadata panel: every EXR header attribute per part (renderer, camera, render time, chromaticities, custom attributes) (Phase 0)
+- [ ] Renderer presets that auto-detect and organise passes (Phase 1):
+  - [ ] **Blender/Cycles**: view layers, light groups, Cryptomatte, denoising data, pass naming
+  - [ ] **Redshift**: AOVs, light groups, Cryptomatte, raw vs filtered AOVs
+  - [ ] **Octane**: render passes, light passes, Cryptomatte, info passes
+- [ ] Live file linking: when frames are re-rendered on disk, the comp reloads them automatically and keeps all grades (Phase 1, polish in Phase 4)
+
+### B0.3 AOV rebuild
+- [ ] Render Stack node: rebuilds the beauty from component passes — diffuse/specular/transmission (direct + indirect, colour/albedo where the renderer splits it), emission, SSS, volume, background/environment, and so on — using the renderer preset's recipe (Phase 1)
+- [ ] Per-pass grading inside the Render Stack (exposure, colour, saturation, mute/solo per pass) (Phase 1)
+- [ ] Rebuild-check view: difference between the rebuilt and the original beauty, with a numeric error readout (Phase 1)
+
+### B0.4 Light group mixer
+- [ ] Per light group: exposure in stops, colour temperature/tint, RGB gain, saturation, mute/solo; keyframable (Phase 1)
+- [ ] Works with Cycles light groups, Redshift light-group AOVs and Octane light passes (Phase 1)
+
+### B0.5 Mattes
+- [ ] Cryptomatte picker: click to add/remove in the viewer, manifest support (embedded or sidecar), name list with search, wildcards, preview overlay; object/material/asset layers (Phase 1)
+- [ ] Object/material ID mattes (index passes, colour IDs) (Phase 1)
+- [ ] Position-pass 3D volume mattes: sphere/box/plane in world space with falloff, placed by clicking in the viewer (Phase 2)
+- [ ] Normal-pass mattes (direction + falloff) (Phase 2)
+- [ ] Depth-range mattes (near/far with falloff) (Phase 2)
+- [ ] Luminance and hue keys (Phase 2)
+- [ ] All mattes combinable (add/subtract/intersect/invert) and usable as masks on any node (Phase 1 for Cryptomatte/ID, Phase 2 for the rest)
+
+### B0.6 Float viewer
+- [ ] Exposure (stops) and gamma view controls; display/view selection from the OCIO config; view transform never touches pixel data (Phase 0)
+- [ ] Channel/AOV selector; R/G/B/A/luma views (Phase 0)
+- [ ] Float pixel inspector: values under the cursor (scene-linear and display), area average (Phase 0)
+- [ ] False colour, clipping (> 1.0) and negative-value warnings, NaN/Inf highlight (Phase 1)
+- [ ] A/B wipe and side-by-side between nodes, versions or frames (Phase 1 for nodes, Phase 4 for versions)
+- [ ] HDR display output on Mac (EDR) where available; HDR on Windows where the display supports it (Phase 2)
+- [ ] Data window / display window overlays, safe areas, region-of-interest box (Phase 1)
+
+### B0.7 Realism toolkit (Phase 2)
+- [ ] **Z-depth defocus:** physically based (focal length, f-stop, focus distance, sensor size), bokeh shapes (blades, rotation, custom image), cat-eye, chromatic bokeh, click-to-focus in the viewer, correct foreground/background edges
+- [ ] **Glare/bloom:** FFT convolution with aperture shapes (diffraction starbursts from blade count and obstructions), threshold and energy-preserving mix
+- [ ] **Lens effects:**
+  - [ ] chromatic aberration (lateral and longitudinal)
+  - [ ] distortion (barrel/pincushion/anamorphic), ST-map import/export
+  - [ ] vignetting (optical and natural, cos⁴)
+  - [ ] anamorphic streaks
+  - [ ] halation
+  - [ ] lens dirt (driven by bright areas)
+- [ ] **Motion blur** from the vector pass (Cycles, Redshift and Octane vector conventions), shutter angle, samples
+- [ ] **Depth atmosphere:** haze, fog, aerial perspective (distance-based scattering with colour), optional height falloff from the position pass
+- [ ] **Relighting** from the normal and position passes: add/remove directional, point and area-like lights, rim lights, using albedo where available
+- [ ] **Film and sensor emulation:** luminance-responsive per-channel grain, sensor noise by ISO, film looks (our own)
+- [ ] **Grain matching:** measure grain from a reference plate (per channel, by luminance) and reproduce it
+- [ ] **CG-into-plate tools:** light wrap, edge softening/blur by matte, edge extend
+- [ ] **Denoise** with Open Image Denoise using albedo/normal passes, per pass or on the beauty; CPU and GPU (Metal on Apple Silicon)
+- [ ] **Grading:** ASC CDL (with .cdl/.cc/.ccc import/export), lift/gamma/gain/offset, grading in ACEScct (or any log space from the config), curves, hue-vs-hue/sat/lum curves, LUT import/export (.cube, 1D and 3D)
+
+### B0.8 Animation
+- [ ] Every grade and effect works across the whole sequence (Phase 1)
+- [ ] Keyframes on any parameter; keyframe buttons on every control; auto-key mode (Phase 1 basic, Phase 4 full)
+- [ ] Timeline: play, scrub, frame step, in/out points, frame rate, loop modes; RAM frame cache with a cached-frames bar; background caching (Phase 0)
+- [ ] Disk cache for frames and heavy node results (Phase 4)
+- [ ] Dope sheet and curve editor (Phase 4)
+- [ ] Per-frame paint fixes, e.g. removing a firefly on one frame (Phase 3)
+- [ ] 2D tracker (point and multi-point; translate/rotate/scale) for stabilising and attaching paint fixes (Phase 4)
+- [ ] Planar tracker (later, after Phase 4)
+
+### B0.9 Output
+- [ ] Render queue: multiple jobs, any node as output, frame ranges, progress, logs, renders in the background while the UI stays usable (Phase 1 basic, Phase 4 full)
+- [ ] EXR sequences: choose compression, which channels/layers, half/float, single- or multi-part, metadata pass-through (Phase 1)
+- [ ] PNG/TIFF/DPX sequences, with the view transform baked in or not (Phase 1 PNG, rest Phase 2)
+- [ ] ProRes (422 Proxy/LT/422/HQ, 4444, 4444 XQ) via VideoToolbox on Mac and FFmpeg elsewhere; DNxHR; H.264/H.265 (Phase 1 ProRes, rest Phase 2) — see KNOWN_GAPS for H.264/H.265 encoders
+- [ ] Stills in all Photoshop formats (with B22, Phase 9)
+
+### B0.10 Nice to have later
+- [ ] Blender add-on: "send to comp", watch the render output folder (Phase 13)
+- [ ] Deep compositing (deep merge, deep holdout, deep to image)
+- [ ] OpenFX plugins (Phase 13)
+- [ ] Optional CUDA/OptiX acceleration on NVIDIA (never required)
+- [ ] 3D card/camera projection from renderer camera metadata
+
 ## B1. Workspace & interface
 
-- [ ] Menu bar: File, Edit, Image, Layer, Type, Select, Filter, View, Plugins, Window, Help (same order and grouping)
+- [ ] Menu bar: File, Edit, Image, Layer, Type, Select, Filter, View, Plugins, Window, Help (same order and grouping), plus our **Composite** menu (nodes) between Filter and View, and render items under File (D-063); on macOS the app menu holds About/Preferences/Quit as the platform expects
 - [ ] Options bar (context-sensitive per tool), with tool preset picker at far left
 - [ ] Toolbar: single/double column, tool groups with flyouts, long-press and right-click to open group, Shift+key cycling
 - [ ] Edit Toolbar dialog (customise which tools appear, extra tools slot, save presets)
@@ -91,7 +198,6 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 
 ### Crop & slice
 - [ ] Crop tool (C): ratio/size/resolution presets, straighten, overlays (rule of thirds, grid, diagonal, triangle, golden ratio, golden spiral), delete cropped pixels toggle, content-aware fill on expand, classic mode, crop shield colour/opacity, rotate crop
-  ↳ partial: classic-mode box (draw, move, resize; Shift/Alt), ratio presets with swap/clear, rule-of-thirds while dragging, fixed shield, Delete Cropped Pixels, Enter/Esc and ✓/⊘ (Part D item 10, D-031). Missing: size/resolution presets, straighten and rotating the box, the other overlays, shield settings, content-aware fill, the image-moves (non-classic) mode.
 - [ ] Generative Expand when extending canvas with crop **(AI)**
 - [ ] Perspective Crop tool
 - [ ] Slice tool
@@ -99,8 +205,7 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Frame tool (rectangle/ellipse frames that hold placed images)
 
 ### Measurement
-- [x] Eyedropper (I): sample size (point, 3×3 … 101×101 average), sample current/all layers, show sampling ring
-  ↳ note: also "current & below"; the "no adjustments" variants come with adjustment layers (Phase 4).
+- [ ] Eyedropper (I): sample size (point, 3×3 … 101×101 average), sample current/all layers, show sampling ring
 - [ ] Color Sampler (up to 10 samplers, readouts in Info panel)
 - [ ] Ruler tool: distance/angle, Straighten Layer button
 - [ ] Note tool
@@ -114,34 +219,24 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Content-Aware Move tool: move/extend, structure, colour, transform on drop
 - [ ] Red Eye tool: pupil size, darken amount
 - [ ] Clone Stamp (S): aligned, sample modes, clone source overlay, ignore adjustment layers
-- [x] Pattern Stamp
-  ↳ note: aligned or from each stroke, Impressionist (Part E item 12, D-046).
-- [x] History Brush (Y)
-  ↳ note: paints the layer back to the source state chosen in the History panel, transparency included (Part E item 14, D-048).
-- [x] Art History Brush: style, area, tolerance
-  ↳ note: all ten styles; the strokes are our own design (FORMAT_NOTES §14, D-048).
-- [x] Blur tool, Sharpen tool (protect detail), Smudge tool (finger painting)
-  ↳ note: our own model, dab by dab; Mode, Strength, Sample All Layers; Alt switches Blur and Sharpen, or Finger Painting (D-051, FORMAT_NOTES §17).
-- [x] Dodge (O): range shadows/midtones/highlights, exposure, protect tones
-  ↳ note: our own tone curves; Alt switches to Burn for a stroke; not on 32-bit images (D-050, FORMAT_NOTES §16).
-- [x] Burn
-- [x] Sponge: saturate/desaturate, vibrance
-  ↳ note: in Grayscale it changes contrast (D-050).
+- [ ] Pattern Stamp
+- [ ] History Brush (Y)
+- [ ] Art History Brush: style, area, tolerance
+- [ ] Blur tool, Sharpen tool (protect detail), Smudge tool (finger painting)
+- [ ] Dodge (O): range shadows/midtones/highlights, exposure, protect tones
+- [ ] Burn
+- [ ] Sponge: saturate/desaturate, vibrance
 
 ### Painting
 - [ ] Brush tool (B): see B9 Brush engine
-- [x] Pencil tool: auto erase
+- [ ] Pencil tool: auto erase
 - [ ] Color Replacement tool: sampling (continuous/once/background swatch), limits, tolerance
-- [x] Mixer Brush tool: wet, load, mix, flow, load after each stroke, clean after each stroke, sample all layers, presets
-  ↳ note: our own paint-mixing model and combination values; the brush load swatch and menu (Load Brush, Clean Brush, Load Solid Colors Only), Alt-click loading from the image; number keys set Wet/Flow/Mix (Part E item 15, D-049).
-- [x] Eraser (E): brush/pencil/block modes, erase to history
-  ↳ note: Erase to History in every mode; Alt/Option when a stroke starts switches it for that stroke (D-048).
+- [ ] Mixer Brush tool: wet, load, mix, flow, load after each stroke, clean after each stroke, sample all layers, presets
+- [ ] Eraser (E): brush/pencil/block modes, erase to history
 - [ ] Background Eraser: sampling, limits, tolerance, protect foreground colour
 - [ ] Magic Eraser
 - [ ] Gradient tool (G): live on-canvas gradient (creates gradient fill layer) and classic mode; linear, radial, angle, reflected, diamond; reverse, dither, transparency; method (perceptual, linear, classic, smooth, stripes)
-  ↳ partial: classic mode with all shapes, options and methods (Part E item 11, D-045); the live gradient fill layer comes with fill layers.
-- [x] Paint Bucket: foreground/pattern, tolerance, contiguous, all layers
-  ↳ note: also anti-alias, mode (with Behind and Clear) and opacity; our own anti-aliased edge (Part E item 13, D-047).
+- [ ] Paint Bucket: foreground/pattern, tolerance, contiguous, all layers
 
 ### Drawing & type
 - [ ] Pen tool (P): shape/path/pixels mode, rubber band, auto add/delete, path operations
@@ -160,21 +255,19 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 ## B3. File menu
 
 - [ ] New (dialog with category presets: Photo, Print, Art & Illustration, Web, Mobile, Film & Video; saved presets; artboards checkbox; colour mode, bit depth, profile, pixel aspect ratio, background contents)
-  ↳ partial: the New Document dialog works with our presets in all six categories, Recent and Saved presets, units, orientation, resolution, RGB/Grayscale at 8/16/32 bits and all Background Contents (D-052). Missing: Bitmap/CMYK/Lab, colour profile and pixel aspect ratio (Phase 7), the artboards checkbox (Phase 6).
-- [ ] Open, Open As, Open as Smart Object, Open Recent, Browse (web-alt: file picker + drag-and-drop + recent list)
+- [ ] Open, Open As, Open as Smart Object, Open Recent, Browse (native file dialogs, drag-and-drop from Finder/Explorer, a built-in file browser with thumbnails of EXRs and sequences)
 - [ ] Close, Close All, Close Others, Close and Go to Home
-- [ ] Save, Save As, Save a Copy, Revert (File System Access API for save-in-place; download fallback)
-  ↳ partial: Save (in place when nothing would be lost) and Save As (name, format, options; download fallback) work (D-033). Missing: Save a Copy, Revert.
-- [ ] Version History / autosave & crash recovery (OPFS journal)
+- [ ] Save, Save As, Save a Copy, Revert (native save dialogs, save in place, safe atomic writes)
+- [ ] Version History / autosave & crash recovery (command journal + periodic project snapshots in the app's data folder)
 - [ ] Export: Quick Export as PNG, Export As (multiple sizes/suffixes, format, quality, metadata, colour space, canvas size, preview), Export Preferences
-- [ ] Export: Save for Web (Legacy) dialog — 2-up/4-up, optimisation per format, colour table, image size, preview in browser
+- [ ] Export: Save for Web (Legacy) dialog — 2-up/4-up, optimisation per format, colour table, image size, preview in the system web browser
 - [ ] Export: Artboards to Files, Artboards to PDF, Layer Comps to Files/PDF, Layers to Files, Color Lookup Tables, Data Sets as Files, Paths to vector file (SVG/AI-compatible path export), Render Video
 - [ ] Generate > Image Assets (layer-name-based asset generation)
-- [ ] Share (web-alt: Web Share API / copy link)
+- [ ] Share (macOS share sheet / Windows share; Reveal in Finder/Explorer)
 - [ ] Place Embedded, Place Linked, Package (collect linked files)
-- [ ] Automate: Batch, PDF Presentation, Create Droplet (web-alt: saved batch recipe / PWA file handler), Crop and Straighten Photos, Contact Sheet, Conditional Mode Change, Fit Image, Lens Correction (batch), Merge to HDR Pro, Photomerge
+- [ ] Automate: Batch, PDF Presentation, Create Droplet (a small launcher app/shortcut that runs a saved batch on dropped files, plus a command-line form), Crop and Straighten Photos, Contact Sheet, Conditional Mode Change, Fit Image, Lens Correction (batch), Merge to HDR Pro, Photomerge
 - [ ] Scripts: Image Processor, Delete All Empty Layers, Flatten All Layer Effects, Flatten All Masks, Load Files into Stack, Load Multiple DICOM Files, Statistics (stack modes), Script Events Manager, Browse (run script file), Export Layers to Files
-- [ ] Import: Variable Data Sets, Video Frames to Layers, Notes, images from device camera (web-alt for WIA)
+- [ ] Import: Variable Data Sets, Video Frames to Layers, Notes, images from cameras and scanners (macOS Image Capture, Windows WIA)
 - [ ] File Info (full XMP metadata editor: basic, camera data, origin, IPTC, IPTC extension, GPS, audio/video data, raw data)
 - [ ] Print, Print One Copy (see B20)
 - [ ] Content Credentials on export (C2PA manifests; use an open-source C2PA library)
@@ -187,7 +280,6 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Search
 - [ ] Check Spelling, Find and Replace Text
 - [ ] Fill: foreground/background/colour/content-aware/pattern (incl. script patterns: brick fill, cross weave, random fill, spiral, symmetry fill, place along path, picture frame, tree)/history/black/50% gray/white; blending mode, opacity, preserve transparency
-  ↳ partial: foreground, background, colour, pattern, history (also Ctrl/Cmd+Alt+Backspace), black, 50% gray and white with mode, opacity and preserve transparency; content-aware and script patterns to come.
 - [ ] Stroke: width, colour, location (inside/center/outside), blending
 - [ ] Content-Aware Fill workspace: sampling area brush, auto/rectangular/custom sampling, fill settings (colour adaptation, rotation adaptation, scale, mirror), output to new layer/current/duplicate
 - [ ] Generative Fill **(AI)**, Generate Image **(AI)**, Generate Background **(AI)**, Generate Similar **(AI)**, reference image, model picker (our providers), variations in Properties panel
@@ -195,14 +287,12 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Puppet Warp: mesh (rigid/normal/distort), density, expansion, pins, pin depth, rotate pins
 - [ ] Perspective Warp: layout planes, warp mode, auto straighten
 - [ ] Free Transform (Ctrl/Cmd+T): reference point, numeric X/Y/W/H/angle/skew, link aspect (proportional by default, Shift toggles), interpolation choice, Ctrl-drag corner distort
-  ↳ partial: everything listed works (Part D item 11, D-032). Missing: stepping back through the box's changes with Ctrl/Cmd+Z while it is open, the right-click menu.
 - [ ] Transform submenu: Again, Scale, Rotate, Skew, Distort, Perspective, Warp (presets: arc, arc lower/upper, arch, bulge, shell lower/upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist, cylinder; custom grid 3×3/4×4/5×5/custom; split warp horizontal/vertical/cross), Rotate 180°, 90° CW, 90° CCW, Flip Horizontal, Flip Vertical
 - [ ] Rotate object into new perspective/orientation with on-canvas controls **(AI)**
 - [ ] Auto-Align Layers (auto, perspective, collage, cylindrical, spherical, reposition; geometric distortion, vignette removal)
 - [ ] Auto-Blend Layers (panorama, stack images / focus stacking; seamless tones; content-aware fill transparent areas)
 - [ ] Sky Replacement **(AI)**: sky library (our own skies), shift edge, fade edge, brightness, temperature, scale, flip, foreground lighting/adjustment, output to new layers
 - [ ] Define Brush Preset, Define Pattern, Define Custom Shape
-  ↳ partial: Define Brush Preset (Part E item 1, D-035) and Define Pattern (Part E item 12, D-046) work; Define Custom Shape comes with shapes.
 - [ ] Purge (clipboard, histories, all, video cache)
 - [ ] Presets: Preset Manager, Export/Import Presets, Migrate Presets
 - [ ] Color Settings (see B13), Assign Profile, Convert to Profile
@@ -215,13 +305,9 @@ Build in this order. Each phase ends with a working, releasable app. Do not star
 - [ ] Adjustments submenu (all items in B7)
 - [ ] Auto Tone, Auto Contrast, Auto Color (with auto colour correction options: algorithms, target shadows/midtones/highlights, clip)
 - [ ] Image Size: width/height/resolution, constrain, resample methods (Automatic, Preserve Details 2.0, Preserve Details (enlargement), Bicubic Smoother, Bicubic Sharper, Bicubic, Bilinear, Nearest Neighbor), reduce noise, scale styles, fit-to presets, preview
-  ↳ partial: dimensions in all length units, resolution (px/in, px/cm), Constrain Proportions, Resample on/off, Automatic + the five classic methods, Fit To (own presets) (FORMAT_NOTES §6). Missing: Preserve Details and Preserve Details 2.0 (with Reduce Noise), Scale Styles (with layer styles, Phase 6), the result preview.
-- [x] Canvas Size: relative, anchor, extension colour
-  ↳ note: all length units, the anchor grid, extension colours (foreground/background/white/black/gray/other) on the Background, a warning before cutting off; Ctrl/Cmd+Alt+C (D-031).
+- [ ] Canvas Size: relative, anchor, extension colour
 - [ ] Image Rotation: 180°, 90° CW/CCW, Arbitrary, Flip Canvas H/V
-  ↳ partial: 180°, 90° CW/CCW and both flips work. Missing: Arbitrary (with Free Transform's resampling, Part D item 11).
 - [ ] Crop (to selection), Trim (transparent/top-left/bottom-right colour, per-side), Reveal All
-  ↳ partial: Image > Crop to the selection's exact bounds works. Missing: Trim, Reveal All.
 - [ ] Duplicate image (merged layers only option)
 - [ ] Apply Image (source document/layer/channel, invert, blending, opacity, mask)
 - [ ] Calculations (two sources → new channel/document/selection)
@@ -313,29 +399,22 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
 - [ ] Brush Settings panel:
   - [ ] Brush Tip Shape: size, flip X/Y, angle, roundness, hardness, spacing; computed/sampled/bristle/erodible/airbrush tips
   - [ ] Shape Dynamics: size/angle/roundness jitter with controls (off, fade, pen pressure, pen tilt, stylus wheel, rotation, initial direction, direction), minimum diameter, tilt scale, flip jitter, brush projection
-  - [x] Scattering (both axes, count, count jitter)
-  - [x] Texture (pattern, invert, scale, brightness, contrast, texture each tip, mode, depth, jitter)
-  - [x] Dual Brush
-  - [x] Color Dynamics (FG/BG jitter, hue/sat/brightness jitter, purity, apply per tip)
-  - [x] Transfer (opacity/flow/wetness/mix jitter)
-    ↳ note: wetness and mix jitter apply to the Mixer Brush (D-049).
-  - [x] Brush Pose (override tilt/rotation/pressure)
+  - [ ] Scattering (both axes, count, count jitter)
+  - [ ] Texture (pattern, invert, scale, brightness, contrast, texture each tip, mode, depth, jitter)
+  - [ ] Dual Brush
+  - [ ] Color Dynamics (FG/BG jitter, hue/sat/brightness jitter, purity, apply per tip)
+  - [ ] Transfer (opacity/flow/wetness/mix jitter)
+  - [ ] Brush Pose (override tilt/rotation/pressure)
   - [ ] Noise, Wet Edges, Build-up, Smoothing, Protect Texture
-    ↳ partial: all but Protect Texture (with brush presets).
-- [x] Options bar: size, hardness, mode, opacity, flow, airbrush, smoothing % with options (pulled string mode, stroke catch-up, catch-up on stroke end, adjust for zoom), angle, pressure for size/opacity, symmetry
+- [ ] Options bar: size, hardness, mode, opacity, flow, airbrush, smoothing % with options (pulled string mode, stroke catch-up, catch-up on stroke end, adjust for zoom), angle, pressure for size/opacity, symmetry
 - [ ] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial (segments), mandala (segments); symmetry path editing
-  ↳ partial: every type, placed by moving, turning and sizing its guide; path point editing and PSD storage with paths (Phase 5).
 - [ ] Brushes panel: groups, search, recent brushes, preview stroke, show additional preset info, Get more → import
-  ↳ partial: groups, search, recent brushes, preview strokes, import (Phase 2); additional preset info still to come.
 - [ ] Import ABR brush files; export our brush format
-  ↳ partial: ABR versions 6–10 and our .pfbrush format; ABR versions 1–2 (before 2003) still to come.
-- [x] Our own default brush library (general, dry media, wet media, special effects) — created from scratch
+- [ ] Our own default brush library (general, dry media, wet media, special effects) — created from scratch
 - [ ] Brush cursor options (normal/full-size tip, crosshair, show while painting), HUD resize/hardness
-- [ ] Pointer Events with pressure, tilt, twist; Windows Ink / Apple Pencil (iPad Safari) support; coalesced events for smooth strokes; predicted events for latency
-  ↳ partial: pressure, tilt (incl. Safari's altitude/azimuth), twist, wheel and coalesced events reach every stroke; predicted events move the cursor ahead (D-035). Missing: checks on real Windows Ink and iPad hardware.
-- [x] Tool Presets panel (save any tool + options, current tool only filter)
+- [ ] Native tablet input through Qt tablet events: pressure, tilt, rotation/twist, stylus wheel, eraser end; macOS (Wacom, Sidecar/Apple Pencil), Windows Ink and Wintab, Linux (libinput/XInput2); high-rate sampling for smooth strokes; latency < 1 frame
+- [ ] Tool Presets panel (save any tool + options, current tool only filter)
 - [ ] Patterns panel, Gradients panel (groups, import GRD/PAT), Swatches panel (import ASE/ACO), Shapes panel (import CSH), Styles panel (import ASL)
-  ↳ partial: Swatches panel with ASE/ACO import, Gradients panel with GRD import/export, Patterns panel with PAT import/export (Phase 2); Shapes and Styles panels come with shapes and layer styles.
 
 ## B10. Layer styles & blending options
 
@@ -390,7 +469,7 @@ Each with Properties-panel UI, presets, auto options where applicable, on-image 
 - [ ] East Asian text options (vertical text, mojikumi, kinsoku, tsume, tate-chu-yoko) and Middle Eastern/Indic (RTL, complex script shaping via HarfBuzz)
 - [ ] Warp Text (all 15 styles: arc, arc lower/upper, arch, bulge, shell lower/upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist; bend, H/V distortion)
 - [ ] Type menu: Panels, Anti-Alias, Orientation, OpenType, Create Work Path, Convert to Shape, Rasterize Type Layer, Convert to Point/Paragraph Text, Warp Text, Match Font **(AI)**, Font Preview Size, Language Options, Update All Text Layers, Manage Missing Fonts, Paste Lorem Ipsum, Load/Save Default Type Styles
-- [ ] Font sources: Local Font Access API (system fonts), uploaded fonts, Google Fonts browser (web-alt for cloud fonts)
+- [ ] Font sources: system fonts (CoreText / DirectWrite / fontconfig), fonts loaded from files, an optional open-font browser (owner approval)
 - [ ] Missing font handling on PSD open (keep text data, substitute for display, warn)
 - [ ] Spell check and Find/Replace across text layers
 - [ ] Text-engine data round trip in PSD (EngineData parsing/writing)
@@ -426,13 +505,13 @@ All filters must work destructively and as **smart filters** (with filter mask, 
 - [ ] Video: De-Interlace, NTSC Colors
 - [ ] Other: Custom (convolution kernel), High Pass, HSB/HSL, Maximum, Minimum, Offset
 - [ ] Last Filter (Ctrl/Cmd+Alt+F re-run with dialog), Fade
-- [ ] Third-party filter plugins via our plugin API (no binary 8BF support — web-alt; log in KNOWN_GAPS)
+- [ ] Third-party filter plugins via the OpenFX host and our C++ plugin API (binary 8BF hosting is not planned; see KNOWN_GAPS)
 
 ## B15. View menu
 
 - [ ] Proof Setup (Working CMYK/Cyan/Magenta/Yellow/Black/CMY plates, Legacy Mac/Windows RGB, Monitor RGB, colour-blindness protan/deutan, Custom with simulate paper/black ink), Proof Colors, Gamut Warning
 - [ ] Pixel Aspect Ratio + Pixel Aspect Ratio Correction
-- [ ] 32-bit Preview Options (exposure & gamma, highlight compression), 32-bit exposure slider in status bar
+- [ ] 32-bit Preview Options (exposure & gamma, highlight compression), 32-bit exposure slider in status bar (shares the float viewer's controls, B0)
 - [ ] Zoom In/Out, Fit on Screen, Fit Artboard, 100%, 200%, Print Size, Actual Size
 - [ ] Flip Horizontal (view only)
 - [ ] Pattern Preview (seamless tiling preview)
@@ -446,8 +525,7 @@ All filters must work destructively and as **smart filters** (with filter mask, 
 
 ## B16. Window panels (each fully functional)
 
-- [ ] Actions, Adjustments, Brush Settings, Brushes, Channels, Character, Character Styles, Clone Source (5 sources, offset, scale, rotate, overlay), Color (sliders: grayscale/RGB/HSB/CMYK/Lab/web; wheel; cube), Comments (web-alt: local notes or optional collab), Content Credentials, Glyphs, Gradients, Histogram (compact/expanded/all channels, statistics, cache refresh), History (snapshots, non-linear history option, history brush source), Info (two readouts, doc info, sampler readouts, measurement), Layer Comps, Layers, Libraries (web-alt: local asset library), Measurement Log, Navigator, Notes, Paragraph, Paragraph Styles, Paths, Patterns, Properties (context-sensitive: document, layer, type, shape, smart object, adjustments, masks, quick actions), Shapes, Styles, Swatches, Timeline, Tool Presets, Version History
-  ↳ partial: Brush Settings, Brushes, Color, Gradients, History (with the History Brush source column; snapshots and non-linear history to come), Layers, Navigator, Patterns, Swatches and Tool Presets exist so far.
+- [ ] Actions, Adjustments, Brush Settings, Brushes, Channels, Character, Character Styles, Clone Source (5 sources, offset, scale, rotate, overlay), Color (sliders: grayscale/RGB/HSB/CMYK/Lab/web; wheel; cube), Comments (local notes; optional collaboration later), Content Credentials, Glyphs, Gradients, Histogram (compact/expanded/all channels, statistics, cache refresh), History (snapshots, non-linear history option, history brush source), Info (two readouts, doc info, sampler readouts, measurement), Layer Comps, Layers, Libraries (local asset library), Measurement Log, Navigator, Notes, Paragraph, Paragraph Styles, Paths, Patterns, Properties (context-sensitive: document, layer, type, shape, smart object, adjustments, masks, quick actions), Shapes, Styles, Swatches, Timeline, Tool Presets, Version History
 - [ ] Options bar and Tools visibility toggles
 - [ ] Arrange submenu & Workspace submenu
 - [ ] Open documents list
@@ -456,7 +534,7 @@ All filters must work destructively and as **smart filters** (with filter mask, 
 
 Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smart-filter compatible).
 
-- [ ] Decode raw formats via LibRaw (WASM), DNG read/write
+- [ ] Decode raw formats via LibRaw (licence check: LGPL-2.1 or CDDL-1.0 — ask the owner), DNG read/write
 - [ ] Profiles (our own colour profiles: colour, monochrome, vivid, etc.; import DCP), profile browser
 - [ ] Basic/Light: white balance (as shot, auto, presets, eyedropper), temperature, tint, exposure, contrast, highlights, shadows, whites, blacks
 - [ ] Presence: texture, clarity, dehaze, vibrance, saturation
@@ -473,13 +551,15 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] Crop & straighten, Snapshots, Presets (create/import XMP), Before/After views, histogram with clipping warnings, HDR editing & HDR output, filmstrip for multiple files, sync settings, workflow options (colour space, bit depth, size, resolution, sharpen for output, open as smart object)
 - [ ] Merge to HDR / Panorama / HDR Panorama (raw)
 
-## B18. Animation & video
+## B18. Animation & video (Photoshop-style)
+
+These Photoshop features sit on top of our own timeline (B0 Animation): the same clock, keyframes and render queue.
 
 - [ ] Timeline panel: Frame Animation mode — frames, delay, looping, tween (position, opacity, effects), onion skin settings, reverse/copy/paste frames, Make Frames from Layers, Flatten Frames into Layers, Match Layer Across Frames, Unify buttons
 - [ ] Timeline panel: Video Timeline mode — video groups, video layers, keyframes (position, opacity, style, layer mask position/enable, vector mask, text warp, transform), transitions (fade, cross fade, fade with black/white/colour, zoom, crush), audio tracks (add, mute, fade in/out), split at playhead, trim, speed, work area, onion skin, frame rate, playback quality
 - [ ] Video Layers menu: New Video Layer from File, New Blank Video Layer, Insert/Duplicate/Delete Frame, Replace Footage, Interpret Footage, Show (altered/all), Restore Frame/All Frames, Reload Frame, Rasterize
-- [ ] Import Video Frames to Layers (WebCodecs decode)
-- [ ] Render Video: MP4 (H.264/HEVC where supported), WebM, image sequence (PNG/JPEG/TIFF/OpenEXR), size, frame rate, range, alpha
+- [ ] Import Video Frames to Layers (FFmpeg / VideoToolbox decode)
+- [ ] Render Video: through the render queue (B0 Output) — ProRes, DNxHR, H.264/H.265, image sequences (EXR/DPX/PNG/TIFF/JPEG), size, frame rate, range, alpha
 - [ ] Export animated GIF (via Save for Web/Export As), animated WebP/APNG
 
 ## B19. Automation, scripting & extensibility
@@ -487,11 +567,11 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] Actions panel: list & button mode, sets, record, stop, play, play from step, step-by-step playback speed, toggle dialogs on/off per step, toggle items, insert menu item, insert stop (with message, allow continue), insert conditional, insert path, record again, duplicate/delete/move steps, playback options (accelerated, step by step, pause for), reset/load/replace/save actions
 - [ ] Import Photoshop .ATN action files (map descriptors to our commands; unknown steps reported, not silently dropped)
 - [ ] Our own default action sets (frames, text effects, production, image effects, grid presets)
-- [ ] Batch: source (folder via File System Access / file list / opened files), override open, include subfolders, suppress dialogs, destination (folder/save and close), file naming tokens, error log
-- [ ] Droplets (web-alt): saved batch recipes runnable via drag-drop onto the app or PWA File Handling API
+- [ ] Batch: source (folder / file list / opened files / a watched folder), override open, include subfolders, suppress dialogs, destination (folder/save and close), file naming tokens, error log
+- [ ] Droplets: saved batch recipes runnable by dropping files onto a launcher, onto the app icon, or from the command line
 - [ ] Image Processor (JPEG/PSD/TIFF outputs, resize, run action, copyright, ICC)
 - [ ] Scripting API: documented JavaScript API mirroring our command descriptors (document, layers, selection, actions); script runner (File > Scripts > Browse); Script Events Manager (run scripts on events)
-- [ ] Plugin host: sandboxed iframe/Worker plugins with manifest, permissions, panels, commands; Plugins menu & plugin manager (web-alt for UXP)
+- [ ] Plugin host: OpenFX image-effect plugins (as nodes and as smart filters) + our own plugin API with manifest, panels and commands, plugins run out of process where possible; Plugins menu & plugin manager
 - [ ] Variables & data sets: text replacement, image replacement, visibility; CSV/TXT import; export data sets as files
 - [ ] Image Assets generator (layer naming conventions → assets)
 
@@ -499,11 +579,11 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 
 - [ ] Color Settings dialog: presets (our own named presets for general, web, prepress), working spaces (RGB, CMYK, Gray, Spot), colour management policies (preserve embedded, convert to working, off; mismatch/missing prompts), conversion options (engine = lcms, intent: perceptual/relative/saturation/absolute, black point compensation, dither 8-bit), advanced (desaturate monitor colours, blend RGB colours using gamma, blend text colours using gamma), save/load .csf
 - [ ] Bundle open ICC profiles (sRGB, Display P3, Rec.2020, ProPhoto-equivalent, AdobeRGB-compatible open equivalent, a default CMYK such as an ISO-coated-compatible open profile, gray gamma 2.2/dot gain) — verify licences
-- [ ] Monitor colour: use CSS color-gamut / display-p3 canvas where supported; document limitations in KNOWN_GAPS
+- [ ] Monitor colour: read the display's ICC profile from the OS (ColorSync / Windows colour management / colord), per-monitor when windows move; wide-gamut and EDR/HDR output where available
 - [ ] Assign Profile / Convert to Profile (advanced: convert to multichannel profiles)
 - [ ] Color Picker dialog: HSB/RGB/Lab/CMYK/hex, only web colours, gamut warnings, add to swatches, Color Libraries (import ASE only)
 - [ ] HUD colour picker (hue strip/wheel, sizes)
-- [ ] Print dialog: printer selection (web-alt: browser print + high-res PDF export), colour handling (printer manages / app manages / separations), printer profile, rendering intent, BPC, proof print, position & size (centre, scale to fit, print selected area), printing marks (corner/centre crop marks, registration marks, description, labels), functions (emulsion down, negative, background, border, bleed), PostScript options → PDF/X output where possible
+- [ ] Print dialog: printer selection (native print dialog through Qt Print Support; PDF export), colour handling (printer manages / app manages / separations), printer profile, rendering intent, BPC, proof print, position & size (centre, scale to fit, print selected area), printing marks (corner/centre crop marks, registration marks, description, labels), functions (emulsion down, negative, background, border, bleed), PostScript options → PDF/X output where possible
 - [ ] Export PDF (Photoshop PDF equivalent: PDF/X-1a, X-3, X-4 presets, compression, security)
 
 ## B21. Preferences
@@ -512,14 +592,12 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 - [ ] Interface (colour theme, highlight colour, border styles per screen mode, UI scaling, text size, language, tooltips, rich tooltips, panel options)
 - [ ] Workspace (auto-collapse icon panels, open docs as tabs, floating window docking, large tabs, narrow options bar)
 - [ ] Tools (show tooltips, gestures, overscroll, animated zoom, zoom with scroll wheel, flick panning, vary round brush hardness, use legacy free transform, show transformation values, double-click layer mask launches Select and Mask, use Shift key for tool switch, snap vector tools to pixel grid)
-  ↳ partial: overscroll and vary round brush hardness (Phase 2).
 - [ ] History & Content Credentials (history log to metadata/text file, edit log items)
 - [ ] File Handling (image previews, file extension case, save in background, auto-save every N minutes, camera raw preferences, maximise PSD compatibility, recent file list length)
 - [ ] Export (quick export format/location/metadata/colour space)
-- [ ] Performance (memory usage budget, history states, cache levels & tile size, GPU settings with WebGL/WebGPU selection, legacy compositing off)
-- [ ] Scratch Disks (web-alt: OPFS quota usage display, clear cache)
+- [ ] Performance (memory usage budget, history states, cache levels & tile size, GPU settings: backend selection Metal/D3D12/Vulkan, GPU choice on multi-GPU machines, RAM frame cache size, node cache size, disk cache location and size)
+- [ ] Scratch Disks: choose drives in priority order, usage display, clear disk cache
 - [ ] Cursors (painting cursors, other cursors, brush preview colour)
-  ↳ partial: painting cursors (with Caps Lock) and brush preview colour; other cursors to come.
 - [ ] Transparency & Gamut (grid size, colours, gamut warning colour/opacity)
 - [ ] Units & Rulers (units, column size, new document preset resolutions, point/pica size)
 - [ ] Guides, Grid & Slices (colours, styles, gridline every, subdivisions)
@@ -545,28 +623,21 @@ Usable as a raw-file opener and as Filter > Camera Raw Filter on any layer (smar
 | HEIC/HEIF | [ ] | [ ] | Read priority; write if licence-safe codec available |
 | BMP, TGA, PCX, PBM/PGM/PPM, IFF, Pixar, Scitex CT, Photoshop Raw (.raw) | [ ] | [ ] | |
 | PDF (Photoshop-style) | [ ] | [ ] | Open (rasterize pages/images, Import PDF dialog), save with layers preserved as private data |
-| EPS | [ ] | [ ] | Read via rasterizer (Ghostscript WASM is AGPL — ask owner first), write EPS/DCS |
+| EPS | [ ] | [ ] | Read via rasterizer (Ghostscript is AGPL — ask owner first), write EPS/DCS |
 | SVG | [ ] | [ ] | Place/open as smart object, export shapes/text |
 | AI (PDF-compatible) | [ ] | — | Open/place via PDF engine |
-| OpenEXR | [ ] | [ ] | 32-bit, multi-layer |
+| OpenEXR | [ ] | [ ] | See B0: multi-part/multi-layer, all compressions incl. HTJ2K, deep read, half/float, data/display window; 32-bit Photoshop-style documents |
 | Radiance HDR, Portable Float Map | [ ] | [ ] | |
 | DICOM | [ ] | [ ] | Incl. multi-frame |
-| Cineon/DPX | [ ] | [ ] | |
+| Cineon/DPX | [ ] | [ ] | 10/12/16-bit log/lin, sequences (see B0 Output) |
 | Camera RAW (CR2/CR3/NEF/ARW/RAF/ORF/RW2/DNG…) | [ ] | DNG | Via LibRaw |
 | MPO | [ ] | — | |
-| Video (MP4/MOV/WebM) | [ ] | [ ] | Via WebCodecs |
+| Video (MOV/MP4/MXF) | [ ] | [ ] | FFmpeg (LGPL) + VideoToolbox; ProRes, DNxHR, H.264/H.265 (see B0 Output) |
 | ABR, PAT, GRD, ASL, CSH, ASE, ACO, ACT, ATN, CUBE/3DL, XMP presets | [ ] | [ ] (own formats + ASE/ACO/CUBE) | Import user-owned preset files |
-
-Progress notes (Phase 1):
-
-- PSD ↳ partial: open 8/16/32-bit RGB/Grayscale with layers, groups, properties, locks and the Background (masks, clipping, styles, text/smart-object editability and adjustment layers simplified, D-033); save 8-bit RGB with layers. Missing: everything else listed in the row (our own codec, Phase 7).
-- JPEG ↳ partial: read (RGB/Gray, ICC, JFIF resolution, EXIF orientation) and write (quality 0–12, baseline/optimised/progressive, matte, ICC, resolution) work; missing: CMYK, EXIF/XMP metadata, the canvas preview of compression.
-- PNG ↳ partial: read (all PNG types, 8/16-bit, ICC, resolution) and write (8/16-bit, alpha when needed, ICC, resolution, compression level) work; missing: interlaced writing, a PNG options dialog.
-- WebP ↳ partial: read (lossy/lossless, alpha, ICC) and write (lossless everywhere; lossy where the browser encodes it — not Safari; ICC) work; missing: animated, metadata.
 
 ## B23. Retouching, compositing & photography commands
 
-- [ ] Content-aware algorithms in WASM: PatchMatch-based fill, healing (Poisson/gradient-domain), structure/colour adaptation
+- [ ] Content-aware algorithms in C++ (multithreaded, GPU where it pays): PatchMatch-based fill, healing (Poisson/gradient-domain), structure/colour adaptation
 - [ ] Photomerge (panorama) with feature matching (ORB/SIFT-like), layouts auto/perspective/cylindrical/spherical/collage/reposition, blend images together, vignette removal, geometric distortion correction, content-aware fill transparent areas
 - [ ] Merge to HDR Pro (ghost removal, 32-bit or tone-mapped 8/16-bit output, presets)
 - [ ] Focus stacking via Auto-Blend
@@ -577,7 +648,7 @@ Progress notes (Phase 1):
 
 ## B24. Collaboration & cloud (Adobe-specific → our alternatives)
 
-- [ ] Cloud documents → local projects in OPFS + optional owner-configured sync backend (later; ask owner)
+- [ ] Cloud documents → local project files + optional owner-configured sync backend (later; ask owner)
 - [ ] Libraries panel → local asset library (colours, character styles, graphics, brushes)
 - [ ] Comments/review → optional (later)
 - [ ] Adobe Stock, Firefly Boards, Adobe Express, Behance, Adobe Fonts: **not replicated** — log in KNOWN_GAPS; offer stock/fonts via open sources (e.g. Google Fonts) only if owner approves
@@ -585,112 +656,100 @@ Progress notes (Phase 1):
 ## B25. Non-functional requirements
 
 - [ ] Opens a 100 MP 16-bit image with 20 layers on a 16 GB laptop without crashing
+- [ ] Plays a 1080p multi-layer EXR sequence in real time from the RAM cache; 4K real time on a 32 GB Apple Silicon Mac; the UI stays responsive while caching
 - [ ] Brush latency < 16 ms per dab batch; no visible lag at 4K canvas, 500 px brush
 - [ ] Autosave + crash recovery restores to the last history state
-- [ ] Offline-capable PWA (installable; file handlers for .psd/.png/.jpg etc.)
-- [ ] Localisation framework (all UI strings in i18n files; English first)
+- [ ] Native installers: signed and notarized macOS app (DMG), Windows installer (signed), Linux AppImage/Flatpak; file associations for our project files, .exr, .psd, .png, .jpg, .tif etc.; works fully offline
+- [ ] Localisation framework (Qt translation files; English first)
 - [ ] Telemetry: none by default
 - [ ] Security: plugins sandboxed; no remote calls except configured AI provider and user-initiated actions
 - [ ] Documentation: in-app help pages written by us for every tool and command
 
 ---
 
-# PART C — PHASE 0 TASK BREAKDOWN (start here)
+# PART C — PHASE 0 TASK BREAKDOWN (start here, after the owner's approval)
 
-- [x] Initialise repo: pnpm, Vite, React, TypeScript strict, ESLint, Prettier, Vitest, Playwright, Husky pre-commit
-- [x] Rust workspace under `src/wasm/` with one sample crate built by `wasm-pack`, SIMD + threads (COOP/COEP headers in dev server and production config)
-- [ ] CI (GitHub Actions): typecheck, lint, unit, golden, e2e, wasm build
-  ↳ partial: `.github/workflows/ci.yml` written and every step verified locally with `CI=true`; it has not run on GitHub yet because the repo has no remote. Tick after the first green run on GitHub.
-- [x] `core/document`: Document, LayerNode tree, PixelLayer with tiled buffer (8/16/32-bit), Background layer semantics
-- [x] `core/commands` + `core/history`: Command interface, descriptors, undo/redo stack with tile-diff storage, history labels
-- [x] `engine/tiles`: tile store, dirty-rect tracking, memory budget, OPFS eviction
-  ↳ note: eviction covers tiles not used by open documents (undo data, snapshots); swapping live tiles of documents larger than RAM is part of B25 (see KNOWN_GAPS, DECISIONS D-015).
-- [x] `engine/gl`: WebGL2 context, tile textures, compositor with Normal blend + opacity, transparency checkerboard, mip pyramid
-- [x] Viewport: pan, zoom (0.1%–12800%), rotate view, pixel grid at high zoom, HiDPI
-  ↳ note: Hand/Zoom/Rotate View tools, wheel/pinch, Space/Ctrl+Space spring-loading and pan limits work on the canvas; toolbar buttons, options-bar fields and View-menu shortcuts are wired in the app-shell and keymap tasks.
-- [x] App shell: menu bar (all top-level menus present; unimplemented items hidden behind feature flags), toolbar frame, options bar frame, docking panel framework, status bar, document tabs
-  ↳ note: Phase 0 panels are History and Navigator; workspace saving beyond the Essentials layout, toolbar double-column mode, screen modes and the Home screen are PLAN B1 items.
-- [x] `io`: format registry; PNG/JPEG/WebP open via WASM codecs; drag-and-drop open; Save As PNG
-  ↳ note: wired into the app's File menu and canvas in the app-shell task; known temporary limits (palette → RGB, CMYK JPEG, PNG-only save) in KNOWN_GAPS.
-- [x] Keymap system with Photoshop-default bindings scaffold and conflict handling
-  ↳ note: connected to menus and tools in the app-shell task; the Keyboard Shortcuts editor UI is PLAN B4.
-- [x] Golden-image test harness with ΔE2000 comparison and diff image output
-- [x] `docs/` files created: THIRD_PARTY.md, DECISIONS.md, FORMAT_NOTES.md, KNOWN_GAPS.md
+Goal: open a Cycles multi-layer EXR sequence, play it in real time at 1080p from cache with the AgX view, scrub frames,
+and view any AOV. Infrastructure items follow D-006 (applicable Definition of Done items only). Order matters: items 1–2
+decide the foundations, 3–4 make every later item testable on all three platforms.
+
+- [ ] 1. **Toolchain.** Owner installs, one step at a time with checks: Xcode (Command Line Tools are not enough for
+  Metal tools), Homebrew, CMake ≥ 3.28, Ninja, Git, vcpkg (cloned, `VCPKG_ROOT` set), Qt 6 LTS (6.8.x, official
+  binaries via the Qt online installer or `aqtinstall`; pinned). Same list for the Windows machine (Visual Studio 2022
+  Build Tools) later in the phase. Record exact versions in `README.md`.
+- [ ] 2. **GPU-layer spike** (in `spikes/gpu/`, never linked into the app): the same small test program written twice,
+  on **Qt RHI** and on **Dawn**, measuring on Apple Silicon (and on the Windows/NVIDIA machine before deciding):
+  - upload and download an 8K RGBA32F image (GB/s), and a 16K × 16K image as tiles;
+  - a compute shader reading/writing RGBA32F storage textures: a separable 64-px Gaussian blur and a per-pixel grade
+    on a 4K image (ms per pass);
+  - float32 texture sampling with linear filtering (supported or not, per GPU);
+  - showing a float texture in a Qt window through an **OCIO GPU shader** (AgX view), including the shader-language
+    route (OCIO generates GLSL/MSL/HLSL, not WGSL);
+  - EDR/HDR output on the Mac (values > 1.0 visible as brighter-than-white);
+  - async GPU→CPU readback without stalling the UI; behaviour when the window moves between displays;
+  - build cost (time, binary size, how the dependency is pinned in vcpkg/CMake) and licences of everything involved.
+  Output: `docs/specs/gpu-spike.md` with numbers, a recommendation and the reasons, in plain language.
+  **Stop and wait for the owner's decision**, then log it in `docs/DECISIONS.md` and update CLAUDE.md §2.
+- [ ] 3. **Repository skeleton:** `CMakeLists.txt`, `CMakePresets.json` (macos/windows/linux × debug/release),
+  `vcpkg.json` with a pinned baseline, the folder layout of CLAUDE.md §3.1, `Brand.h` with `APP_NAME`, warnings as
+  errors, ASan/UBSan in debug, clang-format and clang-tidy configs, the `run`, `format`, `check-licenses` and `package`
+  targets (CLAUDE.md §9). A licence check that reads vcpkg's installed copyright files and fails on anything not
+  allowed by CLAUDE.md §1.2. `docs/THIRD_PARTY.md` filled from it.
+- [ ] 4. **Tests and CI:** GoogleTest wired into CTest with labels (unit, golden, integration); the float golden-image
+  harness (EXR in, EXR expected, per-channel absolute/relative tolerance, NaN/Inf checks, ΔE2000 mode for display-
+  referred 8/16-bit results, a difference image written on failure, an update command for reviewed changes); GitHub
+  Actions on macOS (arm64), Windows and Linux with the vcpkg binary cache. Ticks after the first green run on GitHub
+  (needs a remote — owner).
+- [ ] 5. **Float image core (`core/image`):** named channel sets, scene-linear float32 planes, data window vs display
+  window, ROI maths, tiles (size decided by measurement, logged), copy-on-write, premultiplied alpha conventions,
+  conversions to/from half, 8 and 16-bit at the boundary. Unit tests for every conversion (FORMAT_NOTES).
+- [ ] 6. **Engine services (`engine/`):** oneTBB-based scheduler with priorities (viewer > caching > render), cancellation
+  tokens, progress reporting to the UI; memory budget (Preferences value, default 60% of RAM) shared by caches; LRU
+  eviction; statistics for the status bar.
+- [ ] 7. **Node graph core (`core/graph`, `core/anim`):** nodes, typed ports and parameters, DAG with cycle checks,
+  pull evaluation per (frame, ROI, channels, proxy scale), ROI propagation, hashing for cache keys, node result cache,
+  keyframe data model with interpolation (constant, linear, smooth, Bézier) and its unit tests. First nodes: Read,
+  Viewer, Shuffle (pick channels/AOV), Exposure — real nodes, not test stubs.
+- [ ] 8. **Commands and history (`core/commands`, `core/history`):** Command interface with descriptors (JSON) and
+  labels; graph edit commands (add/remove/connect/disconnect node, set parameter, set/delete keyframe); slider-drag
+  coalescing; undo/redo; History panel model; action recording of descriptors with a replay test.
+- [ ] 9. **EXR reading (`io/exr`):** OpenEXR ≥ 3.4.14; scanline and tiled; multi-part and multi-layer channel naming
+  (`layer.view.channel`, Cycles `ViewLayer.Pass.Channel`, Redshift/Octane conventions); half/float/uint; every
+  compression incl. HTJ2K; data/display window; multi-view; deep parts detected and reported (flattening is Phase 1);
+  lazy per-channel decode on background threads; metadata to a key/value model. Golden tests with our own generated
+  fixtures for every compression type, plus fuzz-style tests with truncated/corrupt files (no crash, clear error).
+- [ ] 10. **Sequences (`io/sequence`):** frame-pattern detection (`name.1001.exr`, `name_1001.exr`, `name1001.exr`,
+  `####`, `%04d`, `@@@@`, negative frames, mixed padding), frame range and gaps, missing frames (hold / black /
+  checker, listed in the Read node), file-change detection groundwork for live linking. Unit tests on generated
+  folders.
+- [ ] 11. **OCIO (`color/`):** OpenColorIO 2.x; bundled ACES 2.0 config (the ACES CG/studio configs from the OpenColorIO-Config-ACES project, BSD-3; recent OCIO releases also build them in — verify version and licence) and an AgX config —
+  only after its licence is confirmed (THIRD_PARTY; otherwise use the config from the user's own Blender install or
+  our own AgX-style config, D-066); load a config file; `$OCIO`; input colour-space detection from EXR metadata
+  and the config's file rules; CPU processor for tests and export, GPU shader path for the viewer. Golden tests against
+  OCIO's own CPU results.
+- [ ] 12. **GPU layer (`gpu/`) and viewer (`ui/viewer`):** our thin `gpu::` interface over the backend chosen in item 2;
+  texture pool; tiled uploads; the float viewer: pan/zoom (Photoshop navigation keys), exposure/gamma, display/view
+  menus, channel/AOV selector, R/G/B/A/luma, float pixel inspector, HiDPI, EDR where the spike proved it. CPU and GPU
+  display paths agree within tolerance.
+- [ ] 13. **Native shell (`ui/`):** Qt Widgets main window with Photoshop's menu bar structure (all top-level menus;
+  unbuilt items hidden behind a feature flag), the macOS app menu, dock system (panels dock, stack, collapse to icons,
+  float; layout saved per workspace — dock framework choice measured and logged), status bar, viewer area, node view
+  (basic: create via Tab menu, connect, select, move, view node), Read-node properties, Metadata panel, History panel,
+  four interface brightness themes. Keymap system with Photoshop defaults, platform modifiers, contexts and
+  spring-loaded keys (CLAUDE.md §7). Open via File > Open and drag-and-drop.
+- [ ] 14. **Timeline and RAM playback cache:** timeline bar with play/stop, frame step, scrub, in/out points, frame rate,
+  loop; background prefetch of frames ahead of the playhead into the RAM cache (budgeted), a cached-frames bar, dropped-
+  frame counter; playback runs at the set fps without blocking the UI.
+- [ ] 15. **Fixtures and Phase 0 exit test:** owner provides short renders (Cycles: multi-layer EXR sequence with
+  several passes, a light group and Cryptomatte; Redshift and Octane equivalents for Phase 1); we also generate our own
+  synthetic sequences. Automated integration test: open the Cycles sequence headless, list all AOVs, evaluate any AOV
+  through the AgX view at every frame, measure cached playback at 1080p (must hold the frame rate). Owner check
+  (`docs/phase0-check/README.md`): play it on the Mac, scrub, switch AOVs; the Windows build runs the same steps.
+- [ ] 16. **Developer packaging:** a double-clickable macOS `.app` (Qt deployed, ad-hoc signed) and a Windows zip build
+  for the owner's checks; real signing/notarizing and installers come in Phase 15.
 
 ---
 
 # PART D — PHASE 1 TASK BREAKDOWN
 
-Goal: edit a layered composition and round-trip a simple PSD with real Photoshop. Each item ticks only when its
-Definition of Done (CLAUDE.md §5) holds for the scope stated; the matching Part B items stay unticked until their full
-scope (all modes, masks, etc.) is complete.
-
-- [x] Layer model and commands: multi-layer selection; New/Delete/Duplicate/Rename layer; New Group, Group/Ungroup; reorder and Arrange (bring forward/to front, send backward/to back); visibility, locks, opacity, fill, blend mode; Layer from Background
-  ↳ note: Background from Layer moved to the merge/flatten item (it needs the same compositing step); the New Layer / Duplicate Layer dialogs come with the Layers panel.
-- [x] Layers panel: thumbnails, visibility (Alt-click solo), rename, blend mode menu, Opacity/Fill fields, lock buttons, new/delete/group buttons, drag to reorder, multi-select, group expand/collapse
-  ↳ note: includes the New Layer, New Group, Group from Layers, Layer from Background and Duplicate Layer dialogs and keyboard navigation (D-024). Not in this item (Part B Layers panel): filtering by kind, colour labels, Panel Options (thumbnail size/contents), Alt-drag to duplicate, dragging across eyes, row context menu, mask/fx/adjustment buttons (their phases).
-- [x] All 27 blend modes with Photoshop math in the CPU and GPU compositors (incl. Dissolve, Darker/Lighter Color, Hue/Saturation/Color/Luminosity, Fill vs Opacity for the "special eight"); Shift+/− and Alt+Shift+letter blend-mode shortcuts
-  ↳ note: formulas in FORMAT_NOTES §3, choices in D-023. The blend-mode menu itself comes with the Layers panel; PSD blend-mode keys with the PSD item; CMYK on screen with Phase 7. The Special-eight Fill formula should be re-checked against real reference files when the owner provides them.
-- [x] Merge Down, Merge Visible, Stamp Visible, Flatten Image, Background from Layer (composited off the main thread)
-  ↳ note: also Merge Layers and Merge Group (Ctrl/Cmd+E adapts, as does its menu label); progress bar and Esc-to-cancel for long commands added here (D-025). Compositing is TypeScript in the pixel worker (~0.6 s per 6000×4000 16-bit layer); a Rust/multi-threaded compositor is a later performance task.
-- [x] Selections: selection mask model; Select All/Deselect/Reselect/Inverse; Rectangular, Elliptical, Single Row/Column Marquee; Lasso and Polygonal Lasso (new/add/subtract/intersect, feather, anti-alias); marching ants; selection-aware Invert and Delete
-  ↳ note: also marquee styles (Fixed Ratio/Size), Shift/Alt/Space while dragging, moving the outline, M/L and Shift+M/L tool keys (D-026, FORMAT_NOTES §4).
-- [x] Foreground/background colours in the toolbar (X swap, D default) and a Color Picker dialog
-  ↳ note: picker with HSB/RGB/Lab/hex fields, saturation–brightness field and hue strip (D-027); Clear and Background from Layer use the background colour. Not in this item (Part B picker): field modes other than hue, Only Web Colors, gamut warning, Add to Swatches, Color Libraries, CMYK fields (colour management, Phase 7).
-- [x] Brush and Eraser (simple round brush: size, hardness, opacity, flow, spacing, pen pressure; [ ] { } and number-key shortcuts), painting off the main thread with tile-diff undo
-  ↳ note: Opacity caps a stroke, Flow builds up; Shift-click lines; selection and locked transparency respected; strokes recorded as replayable descriptors (D-028). Not in this item (Phase 2 painting engine): brush blend modes (the blend-mode shortcuts must then set the tool's mode while a painting tool is active; until then they do nothing with the Brush/Eraser), Brush Settings panel and presets, tilt/rotation, smoothing, Alt+right-drag size HUD, Pencil.
-- [x] Edit > Fill (foreground/background/colour/black/white/50% gray, mode, opacity, preserve transparency) and Delete/Backspace fills
-  ↳ note: Fill dialog (Color… opens the Color Picker over it), Alt/Ctrl+Backspace quick fills (Shift: preserve transparency), Delete on the Background opens Fill (D-029). Content-Aware, Pattern and History contents come with their features (PatchMatch, patterns, History Brush).
-- [x] Move tool: move layers (and selected pixels), auto-select, arrow nudge (Shift = 10 px), Alt-drag duplicate
-  ↳ note: also Shift-constrained drags, live preview, arrows moving the selection outline with selection tools (D-030). Not in this item (Part B): transform controls, align/distribute buttons, moving between documents.
-- [x] Crop tool and Image > Crop; Image Size (resample methods); Canvas Size (anchor, relative); Image Rotation (180°, 90° CW/CCW, Flip Canvas)
-  ↳ note: one snapshot-based command per change, pixel work in the worker with progress, 8/16/32-bit (D-031, FORMAT_NOTES §6); the view re-centres after a size change. Part B items above list what the full features still need (Crop tool straighten/overlays, Preserve Details, Arbitrary rotation, Trim, Reveal All).
-- [x] Free Transform (Ctrl/Cmd+T): scale, rotate, skew, distort, perspective, numeric fields, reference point, interpolation
-  ↳ note: layers (GPU live preview) and selected pixels (the selection moves too), proportional by default, 8/16/32-bit (D-032, FORMAT_NOTES §6.1). Ctrl/Cmd+T is browser-reserved in a normal tab (KNOWN_GAPS); the Edit menu works everywhere. Undo inside an open box, Warp and Transform Again are Part B.
-- [x] Save As JPEG and WebP with options; basic PSD open/save (layers, groups, names, visibility, opacity, fill, blend modes; 8-bit RGB) via ag-psd
-  ↳ note: Save As dialog with formats, JPEG Options (our own encoder: quality 0–12, baseline/optimised/progressive, matte, ICC, resolution), WebP Options (lossless ours; lossy via the browser's encoder, not in Safari), PSD open (8/16/32-bit RGB/Gray, groups, locks, Background; simplified features listed) and save (8-bit RGB) (D-033, D-034, FORMAT_NOTES §7).
-- [ ] Phase 1 exit test: edit a layered composition and round-trip it as PSD (automated), plus owner check with real Photoshop
-  ↳ partial: the automated round trip passes in Chromium, Firefox and WebKit (`tests/e2e/phase1-exit.spec.ts`: canvas size, brush stroke, move, Multiply square with opacity/fill and a lock, feathered ellipse turned with Free Transform inside a Screen group, a hidden layer — same layers and same image after saving and reopening, and again after a second save). Waiting for the owner's check with real Photoshop (`docs/phase1-check/README.md`).
-
----
-
-# PART E — PHASE 2 TASK BREAKDOWN
-
-Goal: a digital painter can paint a full illustration. Each item ticks only when its Definition of Done (CLAUDE.md §5)
-holds for the scope stated; the matching Part B items stay unticked until their full scope is complete. Order: the
-engine first, then its controls, then the tools built on it.
-
-- [x] Pen input and brush tips: Pointer Events pressure, tilt (tiltX/Y, altitude/azimuth), twist and stylus wheel, coalesced and predicted events; computed tips with angle, roundness, flip X/Y; sampled tips from images (Define Brush Preset); brush paint modes (the tool's blend mode in the options bar, and the blend-mode shortcuts setting it while a painting tool is active)
-  ↳ note: pen values are recorded with every stroke and drive the dynamics of the next item; predicted events move the cursor only; the brush preset picker replaces the Size/Hardness fields; tips are kept in IndexedDB (D-035, FORMAT_NOTES §8).
-- [x] Brush dynamics: Shape Dynamics (size/angle/roundness jitter, minimum diameter, tilt scale, flip jitter), Scattering, Transfer (opacity/flow jitter), Color Dynamics (FG/BG, hue/saturation/brightness, purity, per tip), Brush Pose; controls off/fade/pen pressure/pen tilt/stylus wheel/rotation/initial direction/direction; seeded jitter so recorded strokes replay identically
-  ↳ note: set in the Brush Settings panel (F5), built early with these sections and a live preview stroke; item 4 completes the panel. Spacing follows control-driven size so tapers stay joined (D-036, FORMAT_NOTES §8).
-- [x] Texture, Dual Brush, Noise, Wet Edges, Build-up (airbrush, paint while held still)
-  ↳ note: our own built-in patterns (Paper, Rough Paper, Canvas, Grain, Hatching, Dots) until Define Pattern (item 12); mode arithmetic is ours, to be checked against real output (D-037, FORMAT_NOTES §8). Protect Texture moved to item 7: it only matters when switching presets.
-- [x] Brush Settings panel and the full Brush options bar (size, hardness, mode, opacity and flow with pressure toggles, airbrush, angle), on-canvas size/hardness HUD (Alt+right-drag / Ctrl+Option-drag), brush cursor preferences
-  ↳ note: the Smoothing and Symmetry controls of the options bar moved to items 5 and 6, with the features they set; Edit > Preferences starts with the Tools and Cursors pages (D-038).
-- [x] Stroke smoothing: pulled-string mode, stroke catch-up, catch-up on stroke end, adjust for zoom; the Smoothing field and its options in the options bar and Brush Settings
-  ↳ note: the smoothed path is what a stroke records; the string shows while painting (D-039).
-- [x] Paint symmetry: vertical, horizontal, dual axis, diagonal, wavy, circle, spiral, parallel lines, radial and mandala (segments), with an editable symmetry path; the Symmetry menu in the options bar
-  ↳ note: the guide is moved, turned and sized on the canvas; editing its points and storing it in PSD files come with paths (Phase 5) (D-040, FORMAT_NOTES §8).
-- [x] Brushes panel and presets: groups, search, recent brushes, preview stroke; our own default brush library (general, dry media, wet media, special effects); our brush preset file; ABR import; Tool Presets panel; Protect Texture (keeps the texture when switching presets)
-  ↳ note: ABR files of format versions 6–10 (2003 on) through ag-psd; bristle and erodible tips are approximated by round tips until such tips exist; the options bar's tool icon is the tool preset picker (D-041, FORMAT_NOTES §9).
-- [x] Brush engine speed: dab rendering in WebAssembly (SIMD) so a 500 px soft brush paints at 60 fps on a 6000 × 4000 16-bit document
-  ↳ note: WebAssembly paints plain strokes (Normal, Behind, Clear, erasing; round and sampled tips; selection, locked transparency) pixel-identically to the TypeScript renderer, ~6× faster single-threaded and across tiles on the thread pool; strokes with blend modes, texture, dual brush, wet edges, noise or varying colour/opacity stay in TypeScript for now. Measured by tests/e2e/perf/paint-perf.spec.ts: 60 fps, paint done 13 ms after release (D-042).
-- [x] Eyedropper tool (I) and Alt-click sampling with painting tools (sample size, current/all layers, sampling ring); Color panel (sliders, ramp) and Swatches panel (add/delete, ASE/ACO import)
-  ↳ note: Color panel sliders RGB, HSB, Grayscale and Lab (CMYK with colour management, Phase 7); CMYK and Lab swatches become sRGB by simple conversion until then (D-043, FORMAT_NOTES §10).
-- [x] Pencil tool (aliased, Auto Erase) and Eraser modes (Brush/Pencil/Block)
-  ↳ note: hard pixels are painted by the WebAssembly painter too, pixel-identically; Block erases a square of 16 screen pixels, recorded in image pixels with each stroke (D-044).
-- [x] Gradient tool (G), classic mode: linear, radial, angle, reflected, diamond; reverse, dither, transparency; methods perceptual/linear/classic/smooth/stripes; Gradient Editor (colour and opacity stops, midpoints, smoothness, noise gradients); Gradients panel; GRD import
-  ↳ note: the method curves and noise patterns are our own approximation, to be compared with real reference output; .grd version 5 is read and written (version 3 is refused); the live gradient fill layer comes with fill layers in Phase 3 (D-045, FORMAT_NOTES §11).
-- [x] Patterns: Edit > Define Pattern, Patterns panel, PAT import, Pattern contents in Edit > Fill, Pattern Stamp tool
-  ↳ note: patterns are stored as 8-bit RGBA and converted to the document when used; .pat files are read (RGB, Grayscale, Indexed, CMYK, Lab; 8/16-bit; raw or RLE) and written; scripted patterns are not included; Pattern Stamp strokes use the TypeScript painter (D-046, FORMAT_NOTES §12).
-- [x] Paint Bucket: foreground or pattern, tolerance, contiguous, anti-alias, all layers, mode and opacity
-  ↳ note: colours compared premultiplied (all transparent pixels alike), 4-neighbour contiguity, our own anti-aliased edge; the image is composited only as far as the fill reaches; blend-mode shortcuts and number keys now set the Gradient tool's and Paint Bucket's mode and opacity (D-047, FORMAT_NOTES §13).
-- [x] History Brush (Y), Art History Brush, the History panel's source column, Eraser's Erase to History, History contents in Edit > Fill
-  ↳ note: the source state is captured when chosen and falls back to the opening state when its row goes; painting needs the same layer and canvas in the source state, as in the reference app; in Normal mode pixels return to the source's, transparency included; history strokes use the TypeScript painter; the Art History Brush's strokes are our own design; snapshots stay with the History panel item (B16) (D-048, FORMAT_NOTES §14).
-- [x] Mixer Brush: wet, load, mix, flow, load/clean after each stroke, sample all layers, presets
-  ↳ note: our own model of wet paint (reservoir + paint taken up, per pass so spacing hardly matters), checked visually, to be compared with real output; strokes record what the brush held, so Actions replay them exactly; Sample All Layers reads the layers below plus the painted layer; mirror images have their own brush; Texture, Dual Brush, Color Dynamics and Wet Edges are greyed for it; painted by the TypeScript renderer (~1,300 px/s of travel with a 500 px brush). Also fixed: a stroke begun while the previous one was still finishing could lose the end of that stroke (D-049, FORMAT_NOTES §15).
-- [x] Brush-based retouching that painters rely on: Smudge (finger painting), Blur and Sharpen (protect detail), Dodge, Burn and Sponge
-  ↳ note: Dodge, Burn and Sponge use the brush engine's coverage (one stroke never goes past its Exposure) with our own tone curves, not on 32-bit images (D-050); Blur, Sharpen and Smudge work dab by dab like the Mixer Brush, sharing its painter base, Strength per distance painted so spacing hardly matters (D-051); these and the Mixer Brush work only inside the canvas; all checked visually, to be compared with real output.
-- [ ] Phase 2 exit test: a scripted painting session (pressure strokes, dynamics, symmetry, gradient, pattern, history brush, mixer brush) round-trips through PSD, plus the owner painting a small illustration with a tablet
-  ↳ partial: the automated part passes in Chromium, Firefox and WebKit (`tests/e2e/phase2-exit.spec.ts`: File > New, gradient sky, wet Mixer Brush, History Brush from an earlier state, pen-pressure strokes with shape and colour dynamics, radial symmetry, Define Pattern and the Pattern Stamp on a Multiply layer — the same layers, layer pixels and image after saving as PSD and reopening, and the same image when its History steps are replayed on a new document). File > New was built first for it (D-052, D-053). Waiting for the owner's tablet painting and Photoshop check (`docs/phase2-check/README.md`).
+_Written when Phase 0 ends (CLAUDE.md §4: no phase jumps)._

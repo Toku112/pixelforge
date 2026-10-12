@@ -1,7 +1,13 @@
 # Format and maths notes
 
 Pixel formats, colour maths, blend-mode formulas and file-format details, written in our own words.
-Every blend mode and adjustment formula must be documented here (CLAUDE.md §3.3).
+Every blend mode, grade, adjustment and colour conversion formula must be documented here (CLAUDE.md §3.2).
+
+> **Status (2026-10-12, D-065):** these notes were written for the browser prototype (branch
+> `archive/web-prototype`). The maths and file-format sections (§2, §3, §4, §6, §8–§17, and §1.1's 16-bit PSD
+> conversion) remain the reference for the native app. Prototype-only, superseded by D-062: §1 storage types (except
+> §1.1), §1.3 tiles, §3.9 GPU precision, §5 and §7 (the prototype's codecs and ag-psd). Source paths such as `src/…`
+> refer to the archive branch. New native sections are added from §18 on.
 
 ---
 
