@@ -1258,3 +1258,9 @@ unknown licences still need the owner first. **Consequences:** `cmake/LicensePol
   a compiler update rebuilds them. A failing run uploads the golden output. Third-party actions (all MIT:
   `actions/*`, `lukka/get-cmake`, `ilammy/msvc-dev-cmd`) are pinned by version tag for now; pinning by commit hash can
   follow once the workflow is stable. CI tools and their output never ship (THIRD_PARTY "Other components").
+- **Windows CI set-up, learned from the first runs:** the Visual Studio environment step rewrites PATH and sets
+  VCPKG_ROOT to Visual Studio's own vcpkg, so Python and Qt are installed before it (Python called by its full path)
+  and our VCPKG_ROOT is set after it. Qt 6.11+ for Windows uses a new layout in Qt's download repository that
+  aqtinstall 3.3.0 (its latest release) cannot read; the fix (aqtinstall pull request 1000, merged March 2026) is not
+  released, so CI installs aqtinstall from a fixed commit of its main branch (`076e165`, checked to contain the fix
+  and to list Qt 6.11.3 for Windows, macOS and Linux). Back to a release once 3.4.0 is out.

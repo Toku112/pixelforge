@@ -20,7 +20,9 @@ permissions:
 env:
   # Pinned like the developer machines (README.md): Qt (D-068), the vcpkg ports baseline (vcpkg.json), CMake, Ninja.
   QT_VERSION: 6.11.3
-  AQTINSTALL_VERSION: 3.3.0
+  # aqtinstall from a fixed commit: release 3.3.0 cannot read Qt's newer Windows repository layout (Qt 6.11+); the fix
+  # (aqtinstall pull request 1000) is merged but not released yet (D-072).
+  AQTINSTALL_COMMIT: 076e1659807d0b362a3ed684d54c2e9c775eb9c7
   VCPKG_COMMIT: e456309491fd875487bf02b8a0dca76c1b1b00cc
   CMAKE_VERSION: 4.4.4
   NINJA_VERSION: 1.13.2
@@ -116,7 +118,8 @@ jobs:
           PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then PYTHON="$(cygpath -u "$PYTHON")"; fi
-          "$PYTHON" -m pip install --disable-pip-version-check "aqtinstall==$AQTINSTALL_VERSION"
+          "$PYTHON" -m pip install --disable-pip-version-check \
+            "aqtinstall @ git+https://github.com/miurahr/aqtinstall@$AQTINSTALL_COMMIT"
           "$PYTHON" -m aqt install-qt ${{ matrix.qt-host }} desktop "$QT_VERSION" ${{ matrix.qt-arch }} \
             -m qtshadertools -O "${{ steps.paths.outputs.temp }}/Qt"
           test -f "$PF_QT_ROOT/lib/cmake/Qt6/Qt6Config.cmake"

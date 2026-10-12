@@ -29,7 +29,9 @@ Toolchain (PLAN Part C item 1), versions used on the reference Mac (Apple M5 Pro
 | Qt | 6.11.3 (+ Qt Shader Tools) | `aqt install-qt mac desktop 6.11.3 clang_64 -m qtshadertools -O ~/Qt` |
 | clang-format, clang-tidy | 21.1.8 | `brew install llvm@21` (Xcode's own clang-format 21 is the fallback) |
 
-Windows (Visual Studio 2022 Build Tools) and Linux set-up come later in Phase 0.
+Windows (Visual Studio 2022 Build Tools) and Linux set-up come later in Phase 0. On Windows, Qt 6.11 needs an
+aqtinstall newer than release 3.3.0, which cannot read Qt's newer Windows download layout: install it from the commit
+CI uses (`AQTINSTALL_COMMIT` in `.github/workflows/ci.yml`) until a release includes the fix.
 
 Build and run on the Mac (all commands: CLAUDE.md §9):
 
