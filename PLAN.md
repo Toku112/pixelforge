@@ -891,7 +891,8 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   `NodeOp::prepare()`, worked out once per frame and evaluation, so the cache key, description and pixels agree
   while files change. The "Missing: 7, 12–14" list is computed (`Sequence::missing`); the Read panel shows it with
   item 13. 45 new tests (frame maths 8, patterns 9, sequences 10, Read node 17 incl. the owner's 20-frame render,
-  prepared frames 1), 461/461 in debug (sanitizers) and release; tidy, format and licence checks clean. Speed
+  prepared frames 1), 461/461 in debug (sanitizers) and release; tidy, format and licence checks clean; CI green on
+  macOS, Windows and Linux (run 38393493783; the tests of the owner's render skip there). Speed
   (`spikes/sequence-scan`, M5 Pro): ~10 µs per frame to pick the file at any length; 10,000 frames list in 6 ms (only
   when the folder changed); a 10,000-frame snapshot 56 ms. DoD (D-006/D-078): OCIO item 11; panels, Open and drag
   and drop item 13; persistence with the project file (Phase 1); frame settings deliberately not animatable;
