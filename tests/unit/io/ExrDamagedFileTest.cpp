@@ -119,8 +119,9 @@ TEST(ExrDamagedFile, FilesCutShortAtAnyLength) {
             lengths.push_back(length);
         }
         for (const std::size_t length : lengths) {
-            testing::writeBytes(folder.file("cut.exr"),
-                                std::vector<std::uint8_t>(whole.begin(), whole.begin() + static_cast<long>(length)));
+            testing::writeBytes(
+                folder.file("cut.exr"),
+                std::vector<std::uint8_t>(whole.begin(), whole.begin() + static_cast<std::ptrdiff_t>(length)));
             tryFile(folder.file("cut.exr"), kind.front().displayWindow, outcome);
         }
     }

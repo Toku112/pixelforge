@@ -162,9 +162,9 @@ std::vector<CompressionCase> allCompressions() {
 }
 
 INSTANTIATE_TEST_SUITE_P(AllCompressions, ExrCompression, ::testing::ValuesIn(allCompressions()),
-                         [](const ::testing::TestParamInfo<CompressionCase>& info) {
-                             return compressionLabel(info.param.compression) +
-                                    (info.param.storage == ExrStorage::Tiled ? "_tiled" : "_scanline");
+                         [](const ::testing::TestParamInfo<CompressionCase>& test) {
+                             return compressionLabel(test.param.compression) +
+                                    (test.param.storage == ExrStorage::Tiled ? "_tiled" : "_scanline");
                          });
 
 // ---- regions and channels

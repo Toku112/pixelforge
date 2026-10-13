@@ -78,7 +78,7 @@ INSTANTIATE_TEST_SUITE_P(LossyCompressions, ExrLossyGolden,
                                            LossyCase{"dwaa", 8}, LossyCase{"dwab", 9}, LossyCase{"lj2k", 12},
                                            LossyCase{"dwaa_tiled", 8, ExrStorage::Tiled},
                                            LossyCase{"b44_tiled", 6, ExrStorage::Tiled}),
-                         [](const ::testing::TestParamInfo<LossyCase>& info) { return info.param.name; });
+                         [](const ::testing::TestParamInfo<LossyCase>& test) { return test.param.name; });
 
 } // namespace
 } // namespace pf::io

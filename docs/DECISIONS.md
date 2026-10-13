@@ -1535,6 +1535,9 @@ Behaviour: `docs/specs/exr-reading.md`; exact rules: FORMAT_NOTES §22; timings:
   convention, applied to both storage forms so a stereo file looks the same either way. A view selector in the viewer
   can map views to these names later; full stereo in the graph is not planned for Phase 0–1. Clashing names in
   non-conforming multi-part files get their part's name as prefix (`specular.R`) rather than disappearing.
+  Redshift's and Octane's single-part multi-layer files keep their names as stored; only generic files of that layout
+  are tested so far — real renders from both arrive for Phase 1 (PLAN Part C item 15), where the renderer presets
+  that organise their passes are built.
 - **Lower-case r, g, b, a sort right after R, G, B, A** (§19.2): Cycles writes Cryptomatte layers as `…00.r/g/b/a`,
   which byte order listed as a, b, g, r. Only the canonical order changes (hashes of channel sets with such names
   change; none are stored yet). Lower-case `a` is still not treated as alpha (Cryptomatte's `a` is coverage data).
