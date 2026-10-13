@@ -31,6 +31,7 @@ pf_add_gtest(pf_test_core_image LABEL unit
 pf_add_gtest(pf_test_core_graph LABEL unit
     SOURCES
         core_anim/AnimCurveTest.cpp
+        core_anim/FrameRangeTest.cpp
         core_graph/GraphDeltaTest.cpp
         core_graph/GraphTest.cpp
         core_graph/ParamJsonTest.cpp
@@ -66,7 +67,9 @@ pf_add_gtest(pf_test_io LABEL unit
         io/ExrMetadataTest.cpp
         io/ExrNamingTest.cpp
         io/ExrReaderTest.cpp
+        io/FramePatternTest.cpp
         io/ImageReaderTest.cpp
+        io/SequenceTest.cpp
     LIBRARIES pf_test_node_bench pf_test_exr)
 # The owner's render (tests/fixtures/README.md) is read from the source tree when it is there.
 target_compile_definitions(pf_test_io PRIVATE PF_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
@@ -76,7 +79,10 @@ pf_add_gtest(pf_test_nodes LABEL unit
         nodes/ActionReplayTest.cpp
         nodes/ExposureTest.cpp
         nodes/ReadExrTest.cpp
+        nodes/ReadSequenceTest.cpp
         nodes/ReadTest.cpp
         nodes/ShuffleTest.cpp
         nodes/ViewerTest.cpp
     LIBRARIES pf_test_node_bench pf_test_graph_types pf_test_exr)
+# The owner's render (tests/fixtures/README.md) is read from the source tree when it is there.
+target_compile_definitions(pf_test_nodes PRIVATE PF_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

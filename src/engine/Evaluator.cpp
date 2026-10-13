@@ -102,8 +102,9 @@ private:
         bool resolved = false;
         NodeFrame* target = nullptr; // after skipping pass-through nodes; null: nothing
         std::optional<HashValue> hash;
+        std::shared_ptr<const graph::PreparedFrame> prepared; // set when the node is hashed
 
-        [[nodiscard]] graph::NodeContext context() const { return {frame, params, connected}; }
+        [[nodiscard]] graph::NodeContext context() const { return {frame, params, connected, prepared.get()}; }
         [[nodiscard]] const graph::NodeOp& op() const { return *node->def().op; }
         [[nodiscard]] bool isConnected(std::size_t input) const {
             return input < connected.size() && connected[input] != 0;
@@ -180,6 +181,7 @@ private:
                 graph::addToHash(hasher, node.params[i]);
             }
         }
+        node.prepared = guarded(*node.node, [&] { return node.op().prepare(node.context()); });
         guarded(*node.node, [&] { node.op().hashExtra(node.context(), hasher); });
         for (std::size_t i = 0; i < node.connected.size(); ++i) {
             hasher.addUnsigned(node.isConnected(i) ? hashShown(inputNode(node, i), inputFrame(node, i)) : emptyHash);

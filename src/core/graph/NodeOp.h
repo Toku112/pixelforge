@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 
@@ -45,13 +46,27 @@ public:
     virtual void throwIfCancelled() const = 0;
 };
 
-// A node at one frame: its parameter values there and which inputs are connected.
+// What a node works out once per frame and evaluation, before it is hashed (NodeOp::prepare()): the Read node's
+// answer to "which file shows at this frame". Node types derive their own.
+class PreparedFrame {
+public:
+    PreparedFrame() = default;
+    virtual ~PreparedFrame() = default;
+    PreparedFrame(const PreparedFrame&) = delete;
+    PreparedFrame(PreparedFrame&&) = delete;
+    PreparedFrame& operator=(const PreparedFrame&) = delete;
+    PreparedFrame& operator=(PreparedFrame&&) = delete;
+};
+
+// A node at one frame: its parameter values there, which inputs are connected and what prepare() worked out.
 class NodeContext {
 public:
-    NodeContext(double frame, const ParamValues& params, std::span<const std::uint8_t> connected)
+    NodeContext(double frame, const ParamValues& params, std::span<const std::uint8_t> connected,
+                const PreparedFrame* prepared = nullptr)
         : m_frame(frame),
           m_params(&params),
-          m_connected(connected) {}
+          m_connected(connected),
+          m_prepared(prepared) {}
 
     [[nodiscard]] double frame() const { return m_frame; }
     [[nodiscard]] const ParamValues& params() const { return *m_params; }
@@ -59,11 +74,15 @@ public:
     [[nodiscard]] bool isConnected(std::size_t input) const {
         return input < m_connected.size() && m_connected[input] != 0;
     }
+    // What the node type's prepare() returned (null for types that prepare nothing). Set for hashExtra(), info(),
+    // inputRequest() and render(); null in passThroughInput() and inputFrame().
+    [[nodiscard]] const PreparedFrame* prepared() const { return m_prepared; }
 
 private:
     double m_frame;
     const ParamValues* m_params;
     std::span<const std::uint8_t> m_connected;
+    const PreparedFrame* m_prepared;
 };
 
 // A node at one frame and proxy scale, about to render `region` × `channels` of its output.
@@ -155,8 +174,16 @@ public:
     [[nodiscard]] virtual double inputFrame(const NodeContext& node, std::size_t /*index*/) const {
         return node.frame();
     }
+    // Work done once per frame in each evaluation, before the node is hashed; the result reaches hashExtra(), info(),
+    // inputRequest() and render() of that evaluation through NodeContext::prepared(). Whatever reads the outside world
+    // (which file exists) belongs here, so that the cache key, the description and the pixels all rest on the same
+    // answer even when files change in between. Not called for bypassed nodes or nodes passing an input through.
+    // May read files. Default: nothing.
+    [[nodiscard]] virtual std::shared_ptr<const PreparedFrame> prepare(const NodeContext& /*node*/) const {
+        return nullptr;
+    }
     // Adds anything the output depends on besides the type, the pixel-affecting parameters and the inputs (the Read
-    // node adds the file's size and modification time). May read files.
+    // node adds the file it shows and that file's size and modification time).
     virtual void hashExtra(const NodeContext& /*node*/, Hasher& /*hasher*/) const {}
 
     // ---- per proxy scale

@@ -1,0 +1,34 @@
+
+100 frames (every 50th missing) + 200 other files
+  scan the pattern               0.215 ms
+  scan with stamps (snapshot)    0.635 ms
+  detect from one file           0.228 ms
+  list the folder                0.234 ms
+  index, unchanged folder       0.0029 ms
+  (98 frames found; 2 sequences in the folder: the frames and other_###.txt)
+  Read hash per frame           0.0088 ms (all frames)
+  Read hash, missing frame      0.0104 ms (slowest)
+
+1000 frames (every 50th missing) + 200 other files
+  scan the pattern               0.718 ms
+  scan with stamps (snapshot)    5.395 ms
+  detect from one file           0.749 ms
+  list the folder                0.787 ms
+  index, unchanged folder       0.0029 ms
+  (980 frames found; 2 sequences in the folder: the frames and other_###.txt)
+  Read hash per frame           0.0094 ms (all frames)
+  Read hash, missing frame      0.0106 ms (slowest)
+
+10000 frames (every 50th missing) + 200 other files
+  scan the pattern               6.110 ms
+  scan with stamps (snapshot)   56.142 ms
+  detect from one file           6.173 ms
+  list the folder                6.446 ms
+  index, unchanged folder       0.0030 ms
+  (9800 frames found; 2 sequences in the folder: the frames and other_###.txt)
+  Read hash per frame           0.0098 ms (all frames)
+  Read hash, missing frame      0.0103 ms (slowest)
+
+real sequence blender render: render####.exr, frames 1-20 (20 files)
+  detect from one file           0.066 ms
+  Read hash per frame           0.0071 ms

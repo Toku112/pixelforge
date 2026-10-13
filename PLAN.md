@@ -47,8 +47,15 @@ _Update this section at the end of every session._
   parallel decoding (only the parts, chunks and channels a request needs), metadata of every part, deep parts and
   subsampled channels reported, damaged files give clear errors (fuzz-tested). The owner's Cycles frame: beauty in
   2 ms, every pass in 16 ms (`spikes/exr-read`).
-- Next up: item 10 (sequences: frame-pattern detection, frame range and gaps, missing frames held/black/checker,
-  file-change detection groundwork).
+- Done: item 10 (2026-10-13) — image sequences (`io/sequence`, `core/anim/FrameRange`, Read node; spec
+  `docs/specs/sequences.md`, FORMAT_NOTES §23, D-078): frame numbers in any common naming (Blender's `render0001.exr`
+  included), `####`/`@@@@`/`%04d` patterns, negative frames, mixed padding, detection from one file or a whole
+  folder; Read node frame range (from the files by default, so it grows while a render runs), offset,
+  hold/loop/bounce/black, missing frames as checkerboard (default), held, black or an error; snapshots for live
+  linking. A new `NodeOp::prepare()` step keeps cache keys and pixels consistent while files change. About 10 µs per
+  frame to pick the file (`spikes/sequence-scan`).
+- Next up: item 11 (OCIO: bundled ACES 2.0 config, AgX from the user's Blender or our own, `$OCIO`, input colour
+  space from EXR metadata, CPU and GPU processors).
 - Owner check later (Phase 5): compare our Exposure node with Photoshop's Exposure adjustment at a few settings
   (D-075).
 - Fixtures: the owner's Cycles sequence arrived 2026-10-13 (`blender render/`, 20 frames, 13-part EXR with DWAA,
@@ -107,6 +114,8 @@ The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see t
 - [ ] Node view: create (Tab search menu), connect, disconnect, insert into a wire, select, move, group/backdrop, collapse into a group node, bypass, view node in viewer (number keys / click), viewer A/B inputs (Phase 0 basic, Phase 1 complete)
 - [ ] Layer view: a linear part of the graph as a Photoshop-style layer stack — layers, groups, blend modes, opacity/fill, masks, adjustment layers, visibility, locks; edits in either view change the same graph (Phase 1)
 - [ ] Read node: still, sequence or movie; colour-space setting auto-detected from metadata; frame range, offset, hold/loop/black for frames outside the range; missing-frame handling; reload (Phase 0)
+  ↳ partial: stills and sequences with frame range (from the files or custom), offset, hold/loop/bounce/black and
+  missing-frame handling done in Part C item 10 (D-078); colour space item 11; Reload button item 13; movies Phase 1
 - [ ] Project file: graph, parameters, keyframes, paint descriptors, viewer/workspace state, relative file links; versioned; autosave and crash recovery (Phase 1)
 - [ ] OCIO: bundled ACES 2.0 and Blender-compatible AgX configs (licences permitting), load any config, `$OCIO`, per-input colour space, working space setting, display/view menus in the viewer (Phase 0)
 - [ ] Merge node with all Photoshop blend modes plus compositing operators (over, under, in, out, atop, xor, plus, minus, multiply, screen, max, min, difference, mask, stencil, copy) on premultiplied float (Phase 1)
@@ -125,6 +134,8 @@ The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see t
   only the requested channels unpacked (a chunk is decompressed whole — the codecs work per chunk); checked by
   counting decoded chunks; the depth pass of the owner's 13-part render reads in 0.6 ms against 16 ms for all
 - [ ] Automatic sequence detection, including frame-number patterns (`name.1001.exr`, `name_1001.exr`, `name1001.exr`, `####`, `%04d`, `@@@@`), negative frames, gaps; missing frames reported and shown as held/black/checker (Phase 0)
+  ↳ partial: all done in Part C item 10 (D-078) except showing the missing-frame list ("Missing: 7, 12–14", already
+  computed) in the Read node's panel and opening sequences from File > Open / drag and drop — item 13
 - [ ] Metadata panel: every EXR header attribute per part (renderer, camera, render time, chromaticities, custom attributes) (Phase 0)
   ↳ partial: the metadata model is done (Part C item 9, FORMAT_NOTES §22.5: every attribute of every part, typed with
   display text); the panel comes with item 13
@@ -133,6 +144,9 @@ The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see t
   - [ ] **Redshift**: AOVs, light groups, Cryptomatte, raw vs filtered AOVs
   - [ ] **Octane**: render passes, light passes, Cryptomatte, info passes
 - [ ] Live file linking: when frames are re-rendered on disk, the comp reloads them automatically and keeps all grades (Phase 1, polish in Phase 4)
+  ↳ partial: groundwork in Part C item 10 (D-078): every evaluation picks up re-rendered, new and deleted frames;
+  sequence snapshots and their comparison list added/removed/changed frames. Watching, waiting for a frame to finish
+  writing and refreshing caches and the viewer: Phase 1
 
 ### B0.3 AOV rebuild
 - [ ] Render Stack node: rebuilds the beauty from component passes — diffuse/specular/transmission (direct + indirect, colour/albedo where the renderer splits it), emission, SSS, volume, background/environment, and so on — using the renderer preset's recipe (Phase 1)
@@ -192,6 +206,8 @@ The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see t
 
 ### B0.9 Output
 - [ ] Render queue: multiple jobs, any node as output, frame ranges, progress, logs, renders in the background while the UI stays usable (Phase 1 basic, Phase 4 full)
+  ↳ note: missing input frames show a checkerboard by default (D-078), so the queue must list every frame rendered
+  from a stand-in (checkerboard, black or a held frame) in its log and warn before it finishes
 - [ ] EXR sequences: choose compression, which channels/layers, half/float, single- or multi-part, metadata pass-through (Phase 1)
 - [ ] PNG/TIFF/DPX sequences, with the view transform baked in or not (Phase 1 PNG, rest Phase 2)
 - [ ] ProRes (422 Proxy/LT/422/HQ, 4444, 4444 XQ) via VideoToolbox on Mac and FFmpeg elsewhere; DNxHR; H.264/H.265 (Phase 1 ProRes, rest Phase 2) — see KNOWN_GAPS for H.264/H.265 encoders
@@ -858,10 +874,28 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   all 41 channels 16 ms on all cores (OpenEXR's own threaded reader: 2.1 / 21 ms); open + beauty of a sequence 285
   fps. DoD (D-006/D-077): OCIO item 11 (colour attributes are in the metadata); sequences item 10; panels item 13;
   documents/selections/history/shortcuts N/A for a file reader.
-- [ ] 10. **Sequences (`io/sequence`):** frame-pattern detection (`name.1001.exr`, `name_1001.exr`, `name1001.exr`,
+- [x] 10. **Sequences (`io/sequence`):** frame-pattern detection (`name.1001.exr`, `name_1001.exr`, `name1001.exr`,
   `####`, `%04d`, `@@@@`, negative frames, mixed padding), frame range and gaps, missing frames (hold / black /
   checker, listed in the Read node), file-change detection groundwork for live linking. Unit tests on generated
   folders.
+  ↳ note (2026-10-13): spec `docs/specs/sequences.md`, rules FORMAT_NOTES §23, decisions D-078. `core/anim/
+  FrameRange`: whole frames (nearest, halves up), ranges with Hold/Loop/Bounce/Black, frame runs as text.
+  `io/sequence`: frame numbers in names (last digit group before the extension, ≤ 9 digits; minus signs in Blender's
+  and C's spelling), patterns (`#`/`@` one digit each, `%d`/`%0Nd`; the last placeholder of the file name), a pattern
+  finds its frames with any padding, detection from one file (padding from the files; Blender's `render-0001` next to
+  `render0000` is frame −1), whole folders as sequences and single files, gaps as runs, snapshots with stamps and
+  their comparison (added/removed/changed: live-linking groundwork), a listing cache refreshed when the folder's time
+  changes. Read node: `file` is a still or a pattern; frame range from the files (default, follows a render in
+  progress) or First/Last, offset, before/after, missing frames (Checkerboard default, Hold previous, Black, Error);
+  stand-ins take size and channels from the nearest real frame; frames showing one file share results. Core:
+  `NodeOp::prepare()`, worked out once per frame and evaluation, so the cache key, description and pixels agree
+  while files change. The "Missing: 7, 12–14" list is computed (`Sequence::missing`); the Read panel shows it with
+  item 13. 45 new tests (frame maths 8, patterns 9, sequences 10, Read node 17 incl. the owner's 20-frame render,
+  prepared frames 1), 461/461 in debug (sanitizers) and release; tidy, format and licence checks clean. Speed
+  (`spikes/sequence-scan`, M5 Pro): ~10 µs per frame to pick the file at any length; 10,000 frames list in 6 ms (only
+  when the folder changed); a 10,000-frame snapshot 56 ms. DoD (D-006/D-078): OCIO item 11; panels, Open and drag
+  and drop item 13; persistence with the project file (Phase 1); frame settings deliberately not animatable;
+  documents/selections N/A.
 - [ ] 11. **OCIO (`color/`):** OpenColorIO 2.x; bundled ACES 2.0 config (the ACES CG/studio configs from the OpenColorIO-Config-ACES project, BSD-3; recent OCIO releases also build them in — verify version and licence) and an AgX config —
   only after its licence is confirmed (THIRD_PARTY; otherwise use the config from the user's own Blender install or
   our own AgX-style config, D-066); load a config file; `$OCIO`; input colour-space detection from EXR metadata

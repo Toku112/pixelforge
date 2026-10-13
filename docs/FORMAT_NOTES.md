@@ -793,9 +793,14 @@ are checked by a unit test on all three platforms.
 
 **A node's hash at a frame** = hash of: `"pf.node"`, type id, type version; for each parameter that affects pixels,
 its id and its value at that frame (value: the variant index, then the components / text); the node's extra data
-(Read: file exists, size, modification time); then, for each input in order, the hash of what that input shows at the
+(Read since item 10: what it shows — nothing, file, black, checkerboard — as an integer, the file's path, then file
+exists, size, modification time; §23.4); then, for each input in order, the hash of what that input shows at the
 frame the node reads it (a fixed "nothing" value `0x6E6F7468696E6721` when unconnected). Pass-through and bypassed
 nodes have the hash of the input they hand on.
+
+**Prepared frames:** before a node is hashed at a frame, its type's `prepare()` runs once for that (node, frame) in
+the evaluation; its result is handed to `hashExtra()`, `info()`, `inputRequest()` and `render()` of the same
+evaluation. It does not run for bypassed or pass-through nodes.
 
 **Cache keys:** tiles under (node hash, proxy scale, channel name, tile x, tile y); output descriptions under
 (node hash, proxy scale). A tile's pixels are its grid cell ∩ the node's data window, whatever region was asked.
@@ -977,3 +982,105 @@ on the stored float or double: a float 0.64 shows as `0.64`).
 | preview | none | `preview image, w × h` |
 | bytes, custom types | none | `n bytes` |
 
+
+## 23. Image sequences (`src/io/sequence`, `src/core/anim/FrameRange`, the Read node)
+
+Behaviour in plain language: `docs/specs/sequences.md`. Decisions: D-078. File names are compared as UTF-8 text,
+byte for byte (case included, on every platform).
+
+### 23.1 Frame numbers in file names
+
+- **Splitting a name** (`splitFrameNumber`): the extension starts at the last `.` (none: no extension). The frame
+  number is the last run of ASCII digits before it; 1 to 9 digits (a longer run: no frame number). The prefix is
+  everything before the digits, the suffix everything from the end of the digits on (extension included).
+- **Minus sign:** a `-` right before the digits is a sign, and belongs to neither prefix nor digits, when it is the
+  first character of the name or follows `.`, `_` or a space, and the digits are not all zero. Otherwise it stays in
+  the prefix.
+- **Matching a pattern** (`frameOf`): a name of the pattern is prefix + optional `-` + 1–9 digits + suffix, exactly;
+  any number of leading zeros. `-` followed by zeros only is not a frame number.
+- **Writing a name** (`fileName`): prefix + (`-` for negative frames) + |frame| with leading zeros up to the padding
+  + suffix (`-0005` with padding 4). For negative frames the C-style spelling, whose width counts the sign (`-005`),
+  is the second name tried (`fileNames`). Frames are limited to ±999,999,999.
+
+### 23.2 Patterns and detection
+
+- **Placeholders** in the file name (not the folder): a run of `#` or of `@` (padding = run length), `%d` (padding 1)
+  or `%0Nd` (N written with 1–3 digits; padding N). The last placeholder in the name counts; earlier ones are
+  literal. Padding must be 1–9, otherwise the path is not a pattern (and is read as a still). `%Nd` without the zero
+  is not a placeholder. A pattern's text uses `#` (`render####.exr`); patterns with the same folder, prefix, padding
+  and suffix are the same, however they were written.
+- **The files of a pattern:** the regular files in its folder (links followed, subfolders skipped) whose names match
+  (§23.1), one per frame. Two names of one frame: the one equal to `fileNames(frame)[0]`, then `[1]`, wins; else the
+  first in byte order.
+- **Detecting the sequence of a file:** split its name; the candidate pattern is (folder, prefix, suffix). When the
+  prefix ends with `-`, the pattern without that `-` is also tried and wins when it matches more files (then the dash
+  was a sign: Blender's `render-0001.exr` next to `render0000.exr`). Two or more files make a sequence; one is a still.
+- **Listing a folder:** regular files whose names do not start with `.`; names with a frame number grouped by
+  (prefix, suffix); a group whose prefix ends with `-` next to a group with the same prefix without it gives that
+  group its non-zero frames as negative frames. Groups of two or more files are sequences, ordered by their pattern's
+  text (byte order); everything else is a single file, ordered by name.
+- **Detected padding:** among the files of non-negative frames (of all files when every frame is negative), the digit
+  count of names written with leading zeros (digits > the frame's significant digits) — the most common one, the
+  smaller on a tie; when no name has leading zeros, the smallest digit count. Clamped to 1–9. Examples: `0001` → 4;
+  `1001` → 4; `8 … 11` → 1; `998, 999, 1000` → 3; `01, 002, 003` → 3.
+
+### 23.3 Whole frames and ranges
+
+- **Comp frame → whole frame:** `floor(t + 0.5)` (halves round up: 1.5 → 2, −1.5 → −1), clamped to ±2⁵³; NaN → 0.
+- **Range** `[first, last]`, `n = last − first + 1`; `mod(a, b)` is the remainder in `[0, b)`. For a frame `f` outside
+  it, with the mode of its side (before: `f < first`, after: `f > last`):
+
+| Mode | Frame shown |
+|---|---|
+| Hold | `first` (before), `last` (after) |
+| Loop | `first + mod(f − first, n)` |
+| Bounce | `n = 1`: `first`; else with `p = 2(n − 1)`, `k = mod(f − first, p)`: `first + k` if `k < n`, else `first + p − k` |
+| Black | nothing |
+
+- **Runs as text:** consecutive frames joined as `a–b` (U+2013 EN DASH), runs separated by `, `; negative frames with
+  `-` (`-5–-1, 3, 7–9`).
+
+### 23.4 The Read node's frame
+
+For a `file` that is a pattern (§23.2; a plain path is a still: the same file at every comp frame, the frame settings
+unused):
+
+1. `f = wholeFrame(t) − offset`. The range is the first to the last frame on disk when `autoRange` is on, else
+   `[min(first, last), max(first, last)]`.
+2. `f` outside the range: the before/after mode (§23.3). Black gives a **black frame** whose size and channels come
+   from the file of the frame on disk nearest to `clamp(f, range)` (the earlier one of two equally near).
+3. Otherwise the file of frame `f`: from the folder's listing, or, when the listing has none, the first of
+   `fileNames(f)` that exists. If neither, the frame is **missing**:
+   - Error: the error `frame f of <pattern> is missing (<name> does not exist in <folder>)`;
+   - Hold previous frame: the nearest earlier frame on disk that is ≥ `first`, else the nearest later one ≤ `last`,
+     else the error `none of the frames first–last of <pattern> exist in <folder>`;
+   - Black: a black frame, size and channels from the file of the frame nearest to `f`;
+   - Checkerboard: a checkerboard frame (§23.5), size and channels from the same file.
+4. A pattern with no files on disk is the error `no files match <pattern> in <folder>`; a folder that cannot be
+   listed, `cannot read the folder <folder>: <reason>`.
+
+- **Listings** of a pattern's folder are cached (64 patterns, least recently used dropped) with the folder's
+  modification time taken just before listing; a later look at a different time lists again. When a listing
+  disagrees with the files (a listed file is gone, or an unlisted file of frame `f` exists), the folder is listed
+  again once and the result of the new listing stands.
+- **Once per frame and evaluation** (NodeOp::prepare, §20.5): the outcome — what is shown (file, black, checkerboard),
+  the file's path and its stamp (existence, size, modification time) — is decided before hashing, and the node's
+  extra hash data is exactly that outcome. Hashing, description and pixels of one evaluation use the same outcome.
+  Frames with the same outcome share cached results.
+- **Black frame:** the reference file's display window and channels (proxy-scaled as usual), empty data window.
+
+### 23.5 Checkerboard frame
+
+- Data window = display window (proxy-scaled). Squares of 64 × 64 full-resolution pixels aligned to pixel (0, 0):
+  pixel `(x, y)` lies in square `(⌊x/s⌋, ⌊y/s⌋)` with `s = 64 / proxy` (an integer for every proxy scale 1–32); light
+  when the sum of the square's indices is even.
+- Channels of the main layer (no layer name) with suffix `R`, `G`, `B` or `Y`: light 0.4, dark 0.1 (scene-linear).
+  The main layer's `A`: 1. Every other channel: 0.
+- At a proxy scale each pixel equals the average of the p × p full-resolution pixels it covers, except proxy pixels
+  that reach beyond the full-resolution frame's right or bottom edge (which are filled as if the frame went on).
+
+### 23.6 Snapshots
+
+A scan with stamps records `(frame, file name, stamp)` per frame. Comparing two scans of one pattern frame by frame:
+only in the first → **removed**; only in the second → **added**; in both with a different name or stamp →
+**changed**. Each list is in ascending frame order.

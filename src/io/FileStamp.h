@@ -23,4 +23,9 @@ struct FileStamp {
 // never on the UI thread.
 [[nodiscard]] FileStamp fileStamp(const std::filesystem::path& file) noexcept;
 
+// The stamp of a folder: its modification time, which changes when files are added to it, removed from it or renamed
+// in it (not when a file's contents change); size 0. {exists = false} when `folder` is not a folder or cannot be
+// examined. Never on the UI thread.
+[[nodiscard]] FileStamp folderStamp(const std::filesystem::path& folder) noexcept;
+
 } // namespace pf::io

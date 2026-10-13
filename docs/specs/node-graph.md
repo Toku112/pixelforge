@@ -73,9 +73,12 @@ node has.
 
 1. **Pass-through first.** A bypassed node, or a node that hands one input on unchanged at this frame (the Viewer's
    active input, Exposure at its neutral settings), is skipped: the request goes to that input.
-2. **Hash.** A node's hash at a frame combines its type and version, every pixel-affecting parameter's value at that
-   frame, anything else the node depends on (the Read node adds the file's size and modification time) and the
-   hashes of its inputs at the frames it reads them. Identical work gets identical hashes — two identical Exposure
+2. **Prepare, then hash.** Before hashing, a node type may work something out once for this frame and evaluation
+   (`NodeOp::prepare`): the Read node decides which file shows (docs/specs/sequences.md §5). Hashing, the
+   description and the pixels of that evaluation all use this one answer, even if files change in between. A node's
+   hash at a frame combines its type and version, every pixel-affecting parameter's value at that frame, anything
+   else the node depends on (the Read node adds which file it shows, with that file's size and modification time)
+   and the hashes of its inputs at the frames it reads them. Identical work gets identical hashes — two identical Exposure
    nodes share results, and a still image is computed once for every frame. Hashes ignore names, positions and
    display settings. The hash function is our own, deterministic on every platform (FORMAT_NOTES §20.5).
 3. **Info.** The node describes its output (display window, data window, channels) from its parameters and its
@@ -107,9 +110,11 @@ descriptions) cannot pile up for ever.
 ### Read
 
 - Opens an image file through the format registry (`io/`), by file extension. Item 7 has the registry and the node;
-  the first real format, OpenEXR, plugs in with item 9, sequences (frame patterns, frame range, before/after,
-  missing frames) with item 10 and the input colour space with item 11.
-- **Parameters:** `file` (path, UTF-8).
+  the first real format, OpenEXR, plugs in with item 9, sequences with item 10 and the input colour space with item
+  11.
+- **Parameters:** `file` (path, UTF-8: a still, or a sequence's frame pattern such as `render####.exr`), and for
+  sequences `autoRange`, `first`, `last`, `offset`, `before`, `after` and `missing` — which file shows at which frame
+  and what stands in for frames outside the range or missing on disk: docs/specs/sequences.md §4.
 - **Output:** the file's display and data window and all of its channels, scene-linear and premultiplied (the
   format reader converts at the boundary).
 - An empty path gives nothing; a path that cannot be opened is an error naming the file and the reason.

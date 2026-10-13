@@ -1566,3 +1566,74 @@ Behaviour: `docs/specs/exr-reading.md`; exact rules: FORMAT_NOTES §22; timings:
   file reader (the Metadata panel is item 13); persistence: reading only; tests: 69 new (58 reader unit tests, 2
   Read-node tests with EXR files, 1 channel-order test, 8 golden), debug (sanitizers) and release; performance
   measured on the owner's render (`spikes/exr-read`).
+
+## D-078 — 2026-10-13 — Image sequences (PLAN Part C item 10)
+
+Behaviour: `docs/specs/sequences.md`; exact rules: FORMAT_NOTES §23; timings: `spikes/sequence-scan`.
+
+- **Where things live.** Frame maths (rounding, ranges, hold/loop/bounce/black, "7, 12–14" lists) is pure and sits in
+  `core/anim/FrameRange`; frame numbers in names, patterns, folder listings, detection, the listing cache and
+  snapshots in `io/sequence`; the frame settings and the choice of file in the Read node.
+- **A new step in the node interface: `NodeOp::prepare()`.** Before a node is hashed at a frame, its type may work
+  something out once for that evaluation; hashing, the description and the pixels then all use that one answer.
+  The Read node decides there which file shows. Without it, the cache key and the pixels were worked out separately:
+  a frame rendered to disk in the middle of an evaluation could have its pixels stored under the key of the frame
+  that stood in for it (say frame 6 holding for a missing 7), and frame 6 would later show frame 7's pixels. Putting
+  the requested frame into the hash instead would have lost the sharing of held frames and still left a gap when the
+  frame range itself follows the disk. Nodes that do not need it are unaffected (no cost, null by default).
+- **Frame numbers: the last group of digits before the extension, at most 9 digits** — the common convention of
+  compositors, viewers and render managers; it handles `name.1001.exr`, `name_1001.exr`, Blender's `name1001.exr` and
+  `shot010_v002.1001.exr`. Longer runs are dates or times, not frames.
+- **Negative frames, two spellings.** Blender pads the digits (`-0005`), C-style `%04d` counts the sign (`-005`);
+  both are read, and the app writes Blender's form. In a single name a dash is a minus sign only after `.`, `_`, a
+  space or at the start (names like `shot-0001` are common); a folder holding both `render0000.exr` and
+  `render-0001.exr` makes the dash a sign, because that is how Blender writes frame −1 without a separator.
+- **Placeholders: `#` and `@` are one digit each; `%d` / `%0Nd` as in C.** One digit per `#` is the convention of the
+  compositors and of Blender's output paths (some viewers read a single `#` as four digits; not followed). Only the
+  file name holds a placeholder, and only the last one counts, so folders and names with `#` in them still work.
+- **Mixed padding: frames are found by number, not by spelling.** A pattern finds `f.1.exr`, `f.01.exr` and
+  `f.0001.exr` alike; when two files claim one frame, the pattern's own spelling wins. Detected padding follows the
+  files (FORMAT_NOTES §23.2).
+- **Names are compared exactly, case included**, even on macOS and Windows where the file system ignores case: the
+  Open dialog and drag and drop give exact names, and exact matching keeps `Render0004.exr` out of `render####.exr`.
+  A hand-typed pattern in the wrong case finds nothing (revisit if this ever bites).
+- **Read node settings** (all not animatable — retiming is a job for a time node later): `autoRange` "Frame range
+  from files" (default **on**), `first`/`last` (used when it is off), `offset`, `before`/`after` (Hold, Loop,
+  Bounce, Black; default Hold, as in established compositors), `missing` (Error, Hold previous frame, Black,
+  Checkerboard). **The range follows the disk by default** — unlike compositors that fix the range when the file is
+  picked — because the owner composites renders while they are still rendering: new frames simply extend the range.
+  A fixed range is one switch away. **Bounce does not repeat the end frames** (1 2 3 2 1), the usual ping-pong.
+  "Start at frame" is an offset; the panel (item 13) can offer it as a convenience.
+- **Missing frames show a checkerboard by default.** It is impossible to mistake for a real frame and keeps the comp
+  working while a render is still running, where "Error" would stop the viewer at every gap. Established compositors
+  often default to Error for safety in final renders; **the render queue (Phase 1) must therefore list every frame
+  that used a stand-in** (black, checkerboard or held frame) in its log and warn before finishing (noted in PLAN
+  B0.9). "Hold previous frame" holds within the range (falling back to the next frame of the range).
+- **Stand-ins take their size and channels from the nearest real frame**, so windows, passes and everything
+  downstream stay steady through a gap; black frames have an empty data window (no tiles, no memory). The
+  checkerboard is grey, 0.1 / 0.4 scene-linear in 64-pixel squares aligned to pixel (0, 0) — 64 is divisible by every
+  proxy scale, so proxy frames are the averaged full one; only the main layer's colour gets it, alpha is 1, other
+  passes 0.
+- **Comp frames round to the nearest whole frame, halves up**, for sub-frame requests (motion blur, retimes later).
+- **Listings are cached per pattern and checked against the folder's modification time** (taken before listing, so a
+  file added during the listing triggers another). Every evaluation still checks the file it shows, and an unlisted
+  frame's usual names, so re-rendered and newly written frames inside the range appear at once even where folder
+  times update late (some network shares); disagreement between listing and files triggers one fresh listing.
+- **Opening a numbered file** — whether it opens the whole sequence — is the Open dialog's call (item 13). Proposal
+  for then: render formats (EXR, DPX) open as sequences, photo formats (JPEG, camera raw) as stills, with a checkbox to
+  switch, because `IMG_4021.jpg … IMG_4022.jpg` would otherwise open as a "sequence" of holiday photos.
+- **Live-linking groundwork:** scans with stamps and a comparison listing added, removed and changed frames. Watching
+  (when to look, waiting until a renderer has finished writing a frame, refreshing caches and the viewer) is Phase 1.
+  A frame read while it is still being written gives that evaluation the reader's "damaged file" error; the next one
+  after the renderer finishes reads it.
+- **Speed** (`spikes/sequence-scan`, Apple M5 Pro): deciding which file shows costs about 10 µs per frame at any
+  sequence length, missing frames included; listing 10,000 frames takes 6 ms and happens only when the folder
+  changed; a snapshot with stamps of 10,000 frames takes 56 ms (one file-system call per frame), so live linking
+  must take snapshots in the background and not every frame.
+- DoD (D-006/D-075): float — the node passes pixels through unchanged, stand-ins are plain scene-linear values;
+  OCIO — item 11; sequences — the subject (results cached per frame, frames showing one file share them, identical in
+  any evaluation); keyframes — the frame settings are deliberately not animatable; documents/selections — N/A;
+  history — the settings change through the graph commands (undoable, recordable); shortcuts, menus, panels — item 13
+  (Read panel with the missing-frame list, Open, drag and drop of files and folders); persistence — the graph
+  (project file Phase 1); tests — 45 new (frame maths 8, patterns 9, sequences 10, Read node 17, prepared frames 1),
+  debug (sanitizers) and release; performance measured; memory — the caches are bounded (64 listings, 64 open files).

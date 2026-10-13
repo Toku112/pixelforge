@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -206,6 +207,51 @@ public:
     }
 };
 
+// Shows a number from the outside world (as the Read node shows a file on disk), looked at once per frame and
+// evaluation in prepare(); `afterPrepare` lets a test change the world in the middle of an evaluation.
+class WorldOp final : public graph::NodeOp {
+public:
+    class Seen final : public graph::PreparedFrame {
+    public:
+        explicit Seen(int seenValue) : value(seenValue) {}
+        int value;
+    };
+
+    mutable std::atomic<int> world{1};
+    mutable std::atomic<int> prepares{0};
+    std::function<void()> afterPrepare;
+
+    [[nodiscard]] std::shared_ptr<const graph::PreparedFrame> prepare(const NodeContext& /*node*/) const override {
+        prepares.fetch_add(1);
+        auto now = std::make_shared<const Seen>(world.load());
+        if (afterPrepare) {
+            afterPrepare();
+        }
+        return now;
+    }
+    void hashExtra(const NodeContext& node, graph::Hasher& hasher) const override { hasher.addInteger(seen(node)); }
+    [[nodiscard]] OutputInfo info(const NodeContext& node, int /*proxyScale*/,
+                                  std::span<const OutputInfo> /*inputs*/) const override {
+        (void)seen(node);
+        return {.displayWindow = {.x0 = 0, .y0 = 0, .x1 = 64, .y1 = 64},
+                .dataWindow = {.x0 = 0, .y0 = 0, .x1 = 64, .y1 = 64},
+                .channels = {"R"}};
+    }
+    void render(const graph::RenderContext& context) const override {
+        const auto value = static_cast<float>(seen(context.node()));
+        context.forEachTile([&](TileCoord tile) { context.output().setTileConstant(0, tile, value); });
+    }
+
+private:
+    static int seen(const NodeContext& node) {
+        const auto* found = dynamic_cast<const Seen*>(node.prepared());
+        if (found == nullptr) {
+            throw std::logic_error("not prepared");
+        }
+        return found->value;
+    }
+};
+
 std::shared_ptr<const NodeDef> makeDef(const std::string& id, std::size_t inputCount,
                                        std::vector<graph::ParamDef> params, std::shared_ptr<const graph::NodeOp> op) {
     std::vector<graph::PortDef> inputs;
@@ -249,6 +295,8 @@ public:
     std::shared_ptr<const NodeDef> offsetType = makeDef(
         "TimeOffset", 1, {graph::intParam("offset", "Offset", 0, -1000, 1000)}, std::make_shared<TimeOffsetOp>());
     std::shared_ptr<const NodeDef> failType = makeDef("Fail", 0, {}, failOp);
+    std::shared_ptr<WorldOp> worldOp = std::make_shared<WorldOp>();
+    std::shared_ptr<const NodeDef> worldType = makeDef("World", 0, {}, worldOp);
 
     MemoryBudget budget{std::size_t{1} << 40};
     Evaluator evaluator{budget};
@@ -421,6 +469,29 @@ TEST_F(EvaluatorTest, BypassedNodesPassTheirFirstInputThrough) {
     EXPECT_EQ(evaluator.hash(graph, add, 1.0), evaluator.hash(graph, source, 1.0));
     expectPattern(evaluate(add), 0.0);
     EXPECT_EQ(addOp->tilesRendered, 0);
+}
+
+TEST_F(EvaluatorTest, PreparedFramesGiveTheHashAndThePixelsTheSameAnswer) {
+    const NodeId world = graph.addNode(worldType);
+    // The world changes right after the node looked at it: this evaluation still shows what it saw, and caches it
+    // under the hash of what it saw.
+    worldOp->afterPrepare = [&] { worldOp->world = 2; };
+    EXPECT_EQ(evaluate(world, everything, {"R"}).sample("R", 5, 5), 1.0F);
+    EXPECT_EQ(worldOp->prepares, 1);
+    worldOp->afterPrepare = nullptr;
+    // The next evaluation sees the change; going back reuses the first result.
+    EXPECT_EQ(evaluate(world, everything, {"R"}).sample("R", 5, 5), 2.0F);
+    worldOp->world = 1;
+    EXPECT_EQ(evaluate(world, everything, {"R"}).sample("R", 5, 5), 1.0F);
+    EXPECT_EQ(rendered(), 2U);
+
+    // Once per frame and evaluation; not for bypassed nodes.
+    EXPECT_EQ(worldOp->prepares, 3);
+    (void)evaluator.info(graph, world, 2.0, 1);
+    EXPECT_EQ(worldOp->prepares, 4);
+    graph.setBypassed(world, true);
+    EXPECT_TRUE(evaluate(world).channels().empty());
+    EXPECT_EQ(worldOp->prepares, 4);
 }
 
 TEST_F(EvaluatorTest, UnconnectedInputsGiveNothing) {

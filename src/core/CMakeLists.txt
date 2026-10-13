@@ -5,6 +5,7 @@ find_package(Imath CONFIG REQUIRED)
 add_library(pf_core STATIC
     actions/Action.cpp
     anim/AnimCurve.cpp
+    anim/FrameRange.cpp
     commands/Command.cpp
     commands/GraphCommands.cpp
     graph/Evaluation.cpp
