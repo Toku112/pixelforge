@@ -12,6 +12,7 @@
 // for unknown nodes, inputs and parameters; std::invalid_argument for values of the wrong type.
 
 #include "core/anim/AnimCurve.h"
+#include "core/graph/GraphDelta.h"
 #include "core/graph/Node.h"
 #include "core/graph/NodeDef.h"
 #include "core/graph/NodeId.h"
@@ -58,6 +59,11 @@ public:
     [[nodiscard]] std::vector<NodeId> nodeIds() const; // in creation order
     [[nodiscard]] std::size_t nodeCount() const { return m_nodes.size(); }
     [[nodiscard]] std::optional<NodeId> findNode(std::string_view name) const;
+    // The name a new node of type `def` gets when none is given: "<Label>N" with the first free N.
+    [[nodiscard]] std::string freeName(const NodeDef& def) const;
+    // `wanted` when it is a free node name; otherwise its letters without trailing digits (or "Node") followed by
+    // the first free number: "Grade" → "Grade1", "Exposure1" → "Exposure2".
+    [[nodiscard]] std::string freeName(std::string_view wanted) const;
     void renameNode(NodeId id, std::string name);
     void setBypassed(NodeId id, bool bypassed);
     void setPosition(NodeId id, NodePosition position);
@@ -89,11 +95,23 @@ public:
     // Extrapolation of every component's curve.
     void setExtrapolation(NodeId id, std::string_view param, anim::Extrapolation before, anim::Extrapolation after);
 
+    // ---- states (the History, docs/specs/commands-history.md §4). Ids handed out stay used: a node id is never
+    // given to a new node again, even after the node that had it is undone.
+    // Moves from the delta's before state to its after state. Throws std::logic_error, changing nothing, when this
+    // graph is not in the before state (checked node by node: the very same node objects).
+    void apply(const GraphDelta& delta);
+    // Moves from the delta's after state back to its before state; std::logic_error as for apply().
+    void revert(const GraphDelta& delta);
+    // Takes the nodes of `state`, an earlier or later state of this graph.
+    void restore(const Graph& state);
+
 private:
+    friend class GraphDelta;
+
     // A private copy of a node to edit (the shared one stays as it was).
     [[nodiscard]] Node& edit(NodeId id);
-    [[nodiscard]] std::string uniqueName(const NodeDef& def) const;
     void checkName(std::string_view name, NodeId except) const;
+    void move(const GraphDelta& delta, bool forward);
 
     std::map<NodeId, std::shared_ptr<const Node>> m_nodes;
     std::uint64_t m_lastId = 0;

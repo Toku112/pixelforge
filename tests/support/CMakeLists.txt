@@ -29,3 +29,12 @@ pf_target_defaults(pf_test_node_bench)
 set_target_properties(pf_test_node_bench PROPERTIES AUTOMOC OFF)
 target_include_directories(pf_test_node_bench PUBLIC "${PROJECT_SOURCE_DIR}/tests")
 target_link_libraries(pf_test_node_bench PUBLIC pf_nodes pf_engine pf_io pf_test_golden)
+
+# Graph, command and History tests: node types with every kind of parameter and no pixel work, the built-in commands,
+# and a comparison of graphs by node name (support/graph/TestTypes.h).
+add_library(pf_test_graph_types STATIC
+    graph/TestTypes.cpp)
+pf_target_defaults(pf_test_graph_types)
+set_target_properties(pf_test_graph_types PROPERTIES AUTOMOC OFF)
+target_include_directories(pf_test_graph_types PUBLIC "${PROJECT_SOURCE_DIR}/tests")
+target_link_libraries(pf_test_graph_types PUBLIC pf_core GTest::gtest)

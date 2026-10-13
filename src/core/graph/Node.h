@@ -61,6 +61,9 @@ public:
     // Every parameter's value at `frame`, for node code.
     [[nodiscard]] ParamValues valuesAt(double frame) const;
 
+    // The same node in the same state: id, name, type (the same definition), inputs, parameters, bypass, position.
+    friend bool operator==(const Node& a, const Node& b);
+
 private:
     friend class Graph;
 

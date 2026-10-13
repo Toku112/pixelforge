@@ -1,6 +1,9 @@
 #include "core/graph/Graph.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace pf::graph {
@@ -27,7 +30,7 @@ NodeId Graph::addNode(std::shared_ptr<const NodeDef> def, std::string name) {
         throw std::invalid_argument("Graph::addNode: no node type");
     }
     if (name.empty()) {
-        name = uniqueName(*def);
+        name = freeName(*def);
     } else {
         checkName(name, NodeId{});
     }
@@ -242,7 +245,20 @@ Node& Graph::edit(NodeId id) {
     return result;
 }
 
-std::string Graph::uniqueName(const NodeDef& def) const {
+namespace {
+
+std::string firstFree(const Graph& graph, const std::string& base) {
+    for (std::uint64_t n = 1;; ++n) {
+        std::string candidate = base + std::to_string(n);
+        if (!graph.findNode(candidate)) {
+            return candidate;
+        }
+    }
+}
+
+} // namespace
+
+std::string Graph::freeName(const NodeDef& def) const {
     std::string base;
     for (const char c : def.label) {
         if (isIdentifier(std::string(1, c)) || (c >= '0' && c <= '9')) {
@@ -252,12 +268,60 @@ std::string Graph::uniqueName(const NodeDef& def) const {
     if (!isIdentifier(base)) {
         base = "Node";
     }
-    for (std::uint64_t n = 1;; ++n) {
-        std::string candidate = base + std::to_string(n);
-        if (!findNode(candidate)) {
-            return candidate;
+    return firstFree(*this, base);
+}
+
+std::string Graph::freeName(std::string_view wanted) const {
+    if (isIdentifier(wanted) && !findNode(wanted)) {
+        return std::string(wanted);
+    }
+    std::string base(wanted);
+    while (!base.empty() && base.back() >= '0' && base.back() <= '9') {
+        base.pop_back();
+    }
+    if (!isIdentifier(base)) {
+        base = "Node";
+    }
+    return firstFree(*this, base);
+}
+
+void Graph::apply(const GraphDelta& delta) {
+    move(delta, true);
+}
+
+void Graph::revert(const GraphDelta& delta) {
+    move(delta, false);
+}
+
+void Graph::move(const GraphDelta& delta, bool forward) {
+    const auto from = [&](const NodeChange& change) -> const std::shared_ptr<const Node>& {
+        return forward ? change.before : change.after;
+    };
+    const auto to = [&](const NodeChange& change) -> const std::shared_ptr<const Node>& {
+        return forward ? change.after : change.before;
+    };
+    // Check everything first, so a mismatch changes nothing.
+    for (const NodeChange& change : delta.changes()) {
+        const auto found = m_nodes.find(change.id);
+        const Node* current = found == m_nodes.end() ? nullptr : found->second.get();
+        if (current != from(change).get()) {
+            throw std::logic_error("Graph: node " + std::to_string(change.id.value) +
+                                   " is not in the state this change starts from");
         }
     }
+    for (const NodeChange& change : delta.changes()) {
+        if (const std::shared_ptr<const Node>& node = to(change)) {
+            m_nodes[change.id] = node;
+            m_lastId = std::max(m_lastId, change.id.value);
+        } else {
+            m_nodes.erase(change.id);
+        }
+    }
+}
+
+void Graph::restore(const Graph& state) {
+    m_nodes = state.m_nodes;
+    m_lastId = std::max(m_lastId, state.m_lastId);
 }
 
 void Graph::checkName(std::string_view name, NodeId except) const {

@@ -798,3 +798,77 @@ nodes have the hash of the input they hand on.
 
 **Cache keys:** tiles under (node hash, proxy scale, channel name, tile x, tile y); output descriptions under
 (node hash, proxy scale). A tile's pixels are its grid cell ∩ the node's data window, whatever region was asked.
+
+## 21. Command descriptors and action files (`src/core/json`, `src/core/commands`, `src/core/actions`)
+
+Behaviour in plain language: `docs/specs/commands-history.md`. Decisions: D-076.
+
+### 21.1 JSON
+
+RFC 8259, UTF-8, read strictly and written the same way every time:
+
+- **Reading** refuses comments, trailing commas, single quotes, leading zeros (`01`), `NaN`/`Infinity`, unescaped
+  control characters in text, invalid UTF-8 (overlong forms, encoded surrogates, values above U+10FFFF, cut-short
+  sequences), lone `\u` surrogates, a key repeated in one object, anything after the value, and nesting deeper than
+  256 levels. A UTF-8 byte order mark at the start is skipped. Errors name the line and the column (in characters).
+- **Numbers:** a number without a fraction or exponent that fits in 64 bits is an *integer*; everything else is a
+  *real number* (double), parsed correctly rounded and independent of the system locale (`std::from_chars`; on macOS
+  `strtod_l` with the C locale, since `from_chars` for doubles needs macOS 26). An integer and a real number never
+  compare equal (1 ≠ 1.0). Real numbers too small for a double read as 0; too large ones are an error.
+- **Writing:** compact (no spaces) or indented (two or more spaces per level; lists of plain values stay on one line).
+  Real numbers use the shortest text that reads back to the same double (`std::to_chars`), with `.0` added when that
+  text looks like an integer (`2.0`, not `2`), so every double survives a write and a read bit for bit (tested with
+  20,000 random bit patterns and the edge values). NaN and infinity cannot be written. Text escapes `"`, `\` and
+  control characters (`\b \f \n \r \t`, others as `\u00XX`); everything else, including non-ASCII, is written as
+  UTF-8. Invalid UTF-8 cannot be written.
+- **Objects** keep their members in the order they were added; two objects are equal when they have the same keys
+  with equal values, in any order.
+
+### 21.2 Parameter values and keyframes
+
+| Parameter type | JSON written | Also read |
+|---|---|---|
+| Float | real number: `1.5`, `2.0` | an integer |
+| Int | integer: `12` | a whole real number |
+| Bool | `true` / `false` | — |
+| Enum | the item's id: `"hold"` | the item's index |
+| Color | `[r, g, b, a]` real numbers | `[r, g, b]` (alpha 1) |
+| Vector2 / Vector3 | `[x, y]` / `[x, y, z]` | integers for any component |
+| String, File | text, UTF-8 (a file path exactly as the parameter holds it) | — |
+
+Values read are checked and clamped when they are set, like any value (node-graph spec §3).
+
+A keyframe is `{"frame": f, "value": v, "interpolation": "constant" | "linear" | "smooth" | "bezier"}`; a Bezier key
+adds `"inSlope"`, `"outSlope"`, `"inWeight"`, `"outWeight"` (slopes in value units per frame, weights 0–1, FORMAT_NOTES
+§20.1). When reading, only frame and value are required (defaults: linear, flat slopes, weights 1/3). Extrapolation is
+`"constant"` or `"linear"`.
+
+### 21.3 Command descriptors
+
+`{"command": "<name>", "params": {…}}`. Names are dot-separated parts of letters and digits, each starting with a
+letter: `graph.setValue`, `group`. `params` may be left out (empty). The parameters of each command are listed in
+`docs/specs/commands-history.md` §3. Nodes are named by their node names; inputs are numbered from 0. Example:
+
+```json
+{"command": "graph.setValue", "params": {"node": "Exposure1", "param": "exposure", "value": 1.5, "frame": 12.0}}
+```
+
+A `group` holds its steps as descriptors: `{"command": "group", "params": {"label": "Add Exposure", "steps": [ … ]}}`.
+
+### 21.4 Action files
+
+```json
+{
+  "format": "pixelforge-action",
+  "version": 1,
+  "name": "Grade plate",
+  "steps": [
+    {"command": "graph.addNode", "params": {"type": "Exposure", "name": "Exposure1"}},
+    {"command": "graph.connect", "params": {"source": "Read1", "target": "Exposure1", "input": 0}}
+  ]
+}
+```
+
+`format` must be `"pixelforge-action"`. `version` is an integer: files with a higher version than the program knows
+are refused; version 1 is the first. `name` is optional. Steps are descriptors (§21.3), played in order. Written with
+two-space indentation.

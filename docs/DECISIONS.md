@@ -1452,3 +1452,62 @@ Behaviour: `docs/specs/node-graph.md`; maths and hashing: FORMAT_NOTES §20; tim
   precision recomputation, worst relative error 3·10⁻⁷), debug (sanitizers) and release; performance: 2–10 ms per
   slider step at 1080p, ≤ 41 ms at 4K (`spikes/node-eval`); memory bounded by the budget across repeated changes
   (tested with 50 changes under a 4 MB limit).
+
+## D-076 — 2026-10-13 — Commands, History and Actions (PLAN Part C item 8)
+
+Behaviour: `docs/specs/commands-history.md`; file forms: FORMAT_NOTES §21; timings: `spikes/history-cost`.
+
+- **A command is its descriptor.** There is no separate command object with its own undo code: a command is a name
+  and JSON parameters, a registered *perform* function makes the edit on a private copy of the graph, and the
+  History works out what changed by comparing the two graphs. Undo and redo are the same for every command (put the
+  changed nodes back), so no command can get its undo wrong, and a recorded or scripted descriptor runs through
+  exactly the code a live edit runs through — "replays identically" holds by construction (tested with real nodes:
+  the replayed comp renders the same pixels bit for bit). CLAUDE.md §3.6's `do()` is *perform*, its `undo()` is the
+  delta the History keeps.
+- **Undo data is the changed nodes, before and after (a graph delta).** Nodes are immutable and shared (D-075), so a
+  step holds references, not copies — the graph's version of tile diffs. Undo and redo give back the very same node
+  objects, so cached results stay valid and nothing is recomputed. Nodes replaced by an equal copy are left out of a
+  delta, and the committed graph keeps the old object for them; applying a delta checks that the graph holds exactly
+  the nodes the delta starts from (a bug guard: `std::logic_error`).
+- **Cost:** each edit copies the node table and compares it — 0.05 ms at 1000 nodes, 0.3 ms at 5000 (Apple M5 Pro);
+  undo, redo and jumps take microseconds at any size. Comparing only the nodes an edit touched can replace the full
+  comparison if comps ever grow far beyond that.
+- **Descriptors name nodes, not ids,** so Actions and scripts read naturally and work on other projects. Performing
+  a command completes its descriptor (a new node's automatic name, canonical values such as enum item ids), and the
+  History keeps the completed one, so what is recorded replays to the same result.
+- **Replays rename on conflict.** A node an Action creates under a taken name gets the next free one, and the
+  Action's later steps follow it (a name map that lives for one playback); renames to a taken name likewise. Outside a
+  replay a taken name is an error for the user. This lets an Action that builds part of a comp run twice in one
+  project, as the image editor's actions can run on any document.
+- **Continuous edits:** the UI marks the second and later changes of one drag as "continuing"; each command type says
+  which following command continues it (setValue: same node, parameter and frame; moveNodes: same nodes; setKey:
+  same key). A drag is one step that keeps the value before the drag and the last value. Merging only joins the step
+  that was executed last — after any undo, redo or click a new step starts — so two separate drags of one slider stay
+  two steps, as in the image editor.
+- **History model:** the image editor's linear history: the opening state ("New"/"Open") then the steps, default
+  limit 50 (1–1000), oldest steps dropped over the limit while the opening state stays clickable (the earlier prototype's
+  D-014, now with graph values the opening state is simply a kept copy of the graph). Undo stops at the oldest kept
+  step. Lowering the limit never drops the current entry (undone steps go first when it is the oldest). Toggle Last
+  State alternates between the current entry and the one before it. A command that changes nothing leaves no step.
+  Node ids are never reused, even after undo (the graph keeps its id counter when states are restored).
+- **Actions** record the History's steps (a drag records its final value; undo is not recorded, matching the image
+  editor) and play each step as its own History step; playback stops at the first failing step and names it. Action
+  files are versioned JSON (`pixelforge-action`, version 1); newer versions are refused, not half-read.
+- **Our own JSON in `core/json`** instead of a library: the stack table (CLAUDE.md §2) has no JSON library and
+  `core/` may only use the standard library and Imath; the needed part (values, strict reading, stable writing) is
+  small and fully tested. Numbers round-trip exactly (64-bit integers; doubles bit for bit via shortest `to_chars`
+  output). Reading doubles is locale-independent: `std::from_chars`, except on macOS where `from_chars` for doubles
+  needs macOS 26 and `strtod_l` with the C locale is used (Qt sets the user's locale at startup, so plain `strtod`
+  would read "1,5" in a Croatian locale). Objects keep insertion order for readable files.
+- **Undo memory accounting** against the memory budget is left for Phase 3: graph nodes hold parameters only (bytes),
+  and dropped steps free their nodes at once (tested). The first node type that holds pixels of its own (Paint/
+  Retouch) brings it.
+- **UI parts come with item 13:** Edit > Undo/Redo/Toggle Last State with the image editor's shortcuts (Cmd/Ctrl+Z,
+  Shift+Cmd/Ctrl+Z, Option/Alt+Cmd/Ctrl+Z), the History panel and the History States preference read this model.
+- DoD (D-006): float/OCIO/sequence/document-mode/selection items N/A (no pixels are touched; value parameters
+  round-trip exactly); undoable as single named steps — the subject of the item (tested); recordable and replayable
+  (tested, including a saved action file and pixel-identical rendering); shortcuts, menus and panels: item 13;
+  persistence: action files now, project files Phase 1; tests: 58 new unit tests (JSON 11, graph deltas 7, value
+  forms 5, commands 13, History 14, Actions 7, replay with real nodes 1), debug (sanitizers) and release; tidy,
+  format and licence checks clean; performance measured (`spikes/history-cost`); memory: 500 edits under the limit
+  keep 51 entries and free every dropped node (tested).

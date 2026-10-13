@@ -31,9 +31,23 @@ pf_add_gtest(pf_test_core_image LABEL unit
 pf_add_gtest(pf_test_core_graph LABEL unit
     SOURCES
         core_anim/AnimCurveTest.cpp
+        core_graph/GraphDeltaTest.cpp
         core_graph/GraphTest.cpp
+        core_graph/ParamJsonTest.cpp
         core_graph/ParamTest.cpp
+    LIBRARIES pf_test_graph_types)
+
+pf_add_gtest(pf_test_core_json LABEL unit
+    SOURCES
+        core_json/JsonTest.cpp
     LIBRARIES pf_core)
+
+pf_add_gtest(pf_test_core_commands LABEL unit
+    SOURCES
+        core_actions/ActionTest.cpp
+        core_commands/GraphCommandsTest.cpp
+        core_history/HistoryTest.cpp
+    LIBRARIES pf_test_graph_types)
 
 pf_add_gtest(pf_test_engine LABEL unit
     SOURCES
@@ -53,8 +67,9 @@ pf_add_gtest(pf_test_io LABEL unit
 
 pf_add_gtest(pf_test_nodes LABEL unit
     SOURCES
+        nodes/ActionReplayTest.cpp
         nodes/ExposureTest.cpp
         nodes/ReadTest.cpp
         nodes/ShuffleTest.cpp
         nodes/ViewerTest.cpp
-    LIBRARIES pf_test_node_bench)
+    LIBRARIES pf_test_node_bench pf_test_graph_types)

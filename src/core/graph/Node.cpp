@@ -47,6 +47,11 @@ ParamValue Node::valueAt(std::size_t param, double frame) const {
     return fromComponents(def, components);
 }
 
+bool operator==(const Node& a, const Node& b) {
+    return a.m_id == b.m_id && a.m_name == b.m_name && a.m_def == b.m_def && a.m_inputs == b.m_inputs &&
+           a.m_params == b.m_params && a.m_bypassed == b.m_bypassed && a.m_position == b.m_position;
+}
+
 ParamValues Node::valuesAt(double frame) const {
     std::vector<ParamValue> values;
     values.reserve(m_params.size());

@@ -9,7 +9,7 @@ Run everything with `ctest --preset <preset>`. Every test carries one label; sel
 | `unit/` | GoogleTest tests of maths and models; the `layering` and `license_policy` checks | `unit` |
 | `golden/<feature>/` | golden-image tests and their expected images (`<case>.expected.exr`) | `golden` |
 | `integration/` | the app itself, run headless (`app_startup`: starts, shows its window, quits) | `integration` |
-| `support/` | test-only libraries: the golden-image harness (`support/golden/`); the node bench (`support/nodes/`: a `.pftest` image format of the tests' own, a temporary folder, built-in node types and an evaluator) | — |
+| `support/` | test-only libraries: the golden-image harness (`support/golden/`); the node bench (`support/nodes/`: a `.pftest` image format of the tests' own, a temporary folder, built-in node types and an evaluator); graph test types (`support/graph/`: node types with every kind of parameter, the built-in commands, graph comparison by node name) | — |
 | `fixtures/` | input files: our own generated ones and owner-provided renders (added when first needed) | — |
 
 A new GoogleTest program is one line in a `CMakeLists.txt` (helper in `cmake/PfTesting.cmake`):

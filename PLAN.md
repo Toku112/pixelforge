@@ -37,8 +37,13 @@ _Update this section at the end of every session._
   format registry; spec `docs/specs/node-graph.md`, FORMAT_NOTES §20, D-075): keyframes, typed parameters, graph with
   loop checks, pull evaluation with per-tile caching, region-of-interest propagation, proxy scales, hashing; nodes
   Read, Viewer, Shuffle, Exposure. 1080p slider changes re-render in 2–10 ms (`spikes/node-eval`).
-- Next up: item 8 (commands and history: every graph edit as an undoable Command with a JSON descriptor, slider-drag
-  coalescing, History panel model, action recording and replay).
+- Done: item 8 (2026-10-13) — commands, History and Actions (`core/json`, `core/commands`, `core/history`,
+  `core/actions`; spec `docs/specs/commands-history.md`, FORMAT_NOTES §21, D-076): every graph edit is a JSON
+  descriptor; undo/redo keep only the changed nodes; a slider drag is one step; History panel model with the 50-step
+  limit and Toggle Last State; Actions record, save as files and replay with identical pixels. 0.3 ms per edit even
+  at 5000 nodes (`spikes/history-cost`).
+- Next up: item 9 (EXR reading: OpenEXR scanline/tiled, multi-part and multi-layer naming, every compression,
+  lazy per-channel decode, metadata).
 - Owner check later (Phase 5): compare our Exposure node with Photoshop's Exposure adjustment at a few settings
   (D-075).
 - Fixtures: the owner's Cycles sequence arrived 2026-10-13 (`blender render/`, 20 frames, 13-part EXR with DWAA,
@@ -301,6 +306,7 @@ The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see t
 ## B4. Edit menu
 
 - [ ] Undo, Redo, Toggle Last State; configurable history states count
+  ↳ partial: the model is done (Part C item 8, D-076); menu items and shortcuts come with the shell (item 13), the History States setting with Preferences (B21)
 - [ ] Fade (opacity + blend mode of last filter/adjustment/paint)
 - [ ] Cut, Copy, Copy Merged, Paste, Paste Special (Paste in Place, Paste Into, Paste Outside, Paste without formatting), Clear — integrate with system clipboard (images and text)
 - [ ] Search
@@ -591,6 +597,7 @@ These Photoshop features sit on top of our own timeline (B0 Animation): the same
 ## B19. Automation, scripting & extensibility
 
 - [ ] Actions panel: list & button mode, sets, record, stop, play, play from step, step-by-step playback speed, toggle dialogs on/off per step, toggle items, insert menu item, insert stop (with message, allow continue), insert conditional, insert path, record again, duplicate/delete/move steps, playback options (accelerated, step by step, pause for), reset/load/replace/save actions
+  ↳ partial: recording, playback and action files exist in the core (Part C item 8, D-076); the panel and the rest are Phase 13
 - [ ] Import Photoshop .ATN action files (map descriptors to our commands; unknown steps reported, not silently dropped)
 - [ ] Our own default action sets (frames, text effects, production, image effects, grid presets)
 - [ ] Batch: source (folder / file list / opened files / a watched folder), override open, include subfolders, suppress dialogs, destination (folder/save and close), file naming tokens, error log
@@ -795,9 +802,23 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   and licence checks clean; CI green on macOS, Windows and Linux (run 38309857915, 284/284 tests each). Timing: 2–10 ms per slider step at 1080p, ≤ 41 ms at 4K (`spikes/node-eval`). DoD
   (D-006/D-075): OCIO N/A until item 11; commands/history item 8; panels and shortcuts item 13; persistence Phase 1;
   owner check of Exposure against Photoshop in Phase 5.
-- [ ] 8. **Commands and history (`core/commands`, `core/history`):** Command interface with descriptors (JSON) and
+- [x] 8. **Commands and history (`core/commands`, `core/history`):** Command interface with descriptors (JSON) and
   labels; graph edit commands (add/remove/connect/disconnect node, set parameter, set/delete keyframe); slider-drag
   coalescing; undo/redo; History panel model; action recording of descriptors with a replay test.
+  ↳ note (2026-10-13): spec `docs/specs/commands-history.md`, file forms FORMAT_NOTES §21, decisions D-076. `core/json`
+  (our own strict JSON: exact 64-bit integers, doubles bit for bit, locale-independent). `core/commands`: a command is
+  its descriptor (name + JSON parameters) performed on a private copy of the graph; 12 graph commands (add, delete,
+  connect, disconnect, rename, bypass, move, set value, set/delete key, delete animation, extrapolation) and `group`
+  (several commands as one step); descriptors name nodes and are completed when performed; replays give conflicting
+  new names free ones and follow them. `core/graph`: graph deltas (changed nodes before/after) with checked
+  apply/revert, node equality, free names. `core/history`: undo/redo/click/Toggle Last State, linear history with the
+  opening state, limit 50 (1–1000) with the opening state kept reachable, continuous edits (slider, node and key
+  drags) as one step, Edit-menu labels, observers. `core/actions`: recorder, player (stops at the failing step,
+  names it), versioned action files. 58 new unit tests incl. a replay with real nodes that renders identical pixels,
+  debug (ASan/UBSan) and release; tidy, format and licence checks clean. Timing: 0.05 ms per edit at 1000 nodes,
+  0.3 ms at 5000; undo/redo microseconds (`spikes/history-cost`). DoD (D-006/D-076): pixels/OCIO/sequences/
+  documents/selections N/A for the command layer; Edit-menu items, shortcuts (Cmd/Ctrl+Z, Shift+…, Option/Alt+…) and
+  the History panel item 13; project-file persistence Phase 1; undo memory against the budget Phase 3.
 - [ ] 9. **EXR reading (`io/exr`):** OpenEXR ≥ 3.4.14; scanline and tiled; multi-part and multi-layer channel naming
   (`layer.view.channel`, Cycles `ViewLayer.Pass.Channel`, Redshift/Octane conventions); half/float/uint; every
   compression incl. HTJ2K; data/display window; multi-view; deep parts detected and reported (flattening is Phase 1);
