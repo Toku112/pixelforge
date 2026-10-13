@@ -41,7 +41,11 @@ _Update this section at the end of every session._
   coalescing, History panel model, action recording and replay).
 - Owner check later (Phase 5): compare our Exposure node with Photoshop's Exposure adjustment at a few settings
   (D-075).
-- Blockers: sample renders from Cycles (Phase 0), Redshift and Octane (Phase 1) for test fixtures (Part C item 15).
+- Fixtures: the owner's Cycles sequence arrived 2026-10-13 (`blender render/`, 20 frames, 13-part EXR with DWAA,
+  Cryptomatte intact; not in git — `tests/fixtures/README.md`). It covers the Phase 0 exit test. Still needed for
+  Phase 1: a Cycles render with the full pass set and a light group, losslessly compressed, plus Redshift and Octane
+  renders (Part C item 15).
+- Blockers: none for the next items.
 
 ---
 
@@ -826,6 +830,11 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   synthetic sequences. Automated integration test: open the Cycles sequence headless, list all AOVs, evaluate any AOV
   through the AgX view at every frame, measure cached playback at 1080p (must hold the frame rate). Owner check
   (`docs/phase0-check/README.md`): play it on the Mac, scrub, switch AOVs; the Windows build runs the same steps.
+  ↳ partial: Cycles sequence received 2026-10-13 (`blender render/`, described in `tests/fixtures/README.md`): enough
+  for this item. For Phase 1 the owner renders a second Cycles sequence (5–10 frames) with Diffuse, Glossy and
+  Transmission Direct/Indirect/Color, Volume Direct/Indirect, Emission, Environment, one or two light groups,
+  Cryptomatte Object and Material, ZIP or PIZ compression and denoising off (or the Noisy Image kept), plus Redshift
+  and Octane renders.
 - [ ] 16. **Developer packaging:** a double-clickable macOS `.app` (Qt deployed, ad-hoc signed) and a Windows zip build
   for the owner's checks; real signing/notarizing and installers come in Phase 15.
   ↳ note: the Windows zip must also ship vcpkg's DLLs (oneTBB's `tbb12.dll` and `tbbmalloc.dll` since item 6;

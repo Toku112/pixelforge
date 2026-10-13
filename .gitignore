@@ -12,6 +12,9 @@ vcpkg_installed/
 # test output
 Testing/
 
+# owner renders used as test fixtures: too large for git (tests/fixtures/README.md)
+/blender render/
+
 # OS / editor
 .DS_Store
 *.log
