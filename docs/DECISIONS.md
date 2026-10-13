@@ -1511,3 +1511,55 @@ Behaviour: `docs/specs/commands-history.md`; file forms: FORMAT_NOTES §21; timi
   forms 5, commands 13, History 14, Actions 7, replay with real nodes 1), debug (sanitizers) and release; tidy,
   format and licence checks clean; performance measured (`spikes/history-cost`); memory: 500 edits under the limit
   keep 51 entries and free every dropped node (tested).
+
+## D-077 — 2026-10-13 — EXR reading (PLAN Part C item 9)
+
+Behaviour: `docs/specs/exr-reading.md`; exact rules: FORMAT_NOTES §22; timings: `spikes/exr-read`.
+
+- **OpenEXR's low-level library (OpenEXRCore, C) instead of its C++ reader.** One open file can be decoded by many
+  threads at once, chunk by chunk, with only the requested channels unpacked; its C++ reader serialises reads of one
+  file and brings its own thread pool (IlmThread) next to ours. With the core library all decoding runs on the
+  engine's oneTBB threads (D-061, D-074), and the reader matches or beats OpenEXR's threaded C++ reader on the owner's
+  render (beauty 2.0 ms against 2.1 ms, all 41 channels 16 ms against 21 ms, 18 cores). The C++ library stays a
+  test-only dependency: tests write their files with it and compare lossy decoding with it, so the reader is never
+  checked against itself. Both come from the same vcpkg port (BSD-3-Clause, already listed).
+- **The reader interface grew** (`io/ImageReader.h`): `read()` takes a `ParallelFor` (the Read node passes its task
+  runner, so decoding stops at cancellation; the default runs serially); `statistics()` counts decoded blocks and
+  bytes (lazy reading is tested by counting chunks); the description carries per-channel details (stored name, type,
+  part, view), the views, the pixel aspect ratio, all metadata and plain-language notes. `io/Formats.h` registers the
+  built-in formats at startup.
+- **Channel names: stored names, with views and clashes resolved** (FORMAT_NOTES §22.2). Blender's multi-part files
+  already store full names in every part (`ViewLayer.Combined.R`, checked on the owner's render), as OpenEXR
+  recommends, so part names are not prepended. For stereo files the default view looks exactly like a mono image and
+  other views carry their name before the channel (`right.R`, `diffuse.right.R`) — OpenEXR's own single-part
+  convention, applied to both storage forms so a stereo file looks the same either way. A view selector in the viewer
+  can map views to these names later; full stereo in the graph is not planned for Phase 0–1. Clashing names in
+  non-conforming multi-part files get their part's name as prefix (`specular.R`) rather than disappearing.
+- **Lower-case r, g, b, a sort right after R, G, B, A** (§19.2): Cycles writes Cryptomatte layers as `…00.r/g/b/a`,
+  which byte order listed as a, b, g, r. Only the canonical order changes (hashes of channel sets with such names
+  change; none are stored yet). Lower-case `a` is still not treated as alpha (Cryptomatte's `a` is coverage data).
+- **Deep parts are detected and listed in the notes**, their channels left out; a deep-only file opens (metadata
+  shows) and its Read node reports "holds deep data, which is not read yet". Flattening is Phase 1 (PLAN B0.2).
+- **Subsampled channels are left out with a note** (only luminance/chroma files use them). Expanding them and turning
+  Y/RY/BY files into RGB comes with the full format work in Phase 9 (PLAN B0.2 note). Such files still show their
+  luminance (Y is full resolution).
+- **Tiled files are read at level 0.** Reading a lower mipmap level for proxy scales is a possible optimisation
+  later; the Read node's box filter (FORMAT_NOTES §20.4) is the reference result either way.
+- **Damaged files never crash and say what is wrong:** opening fails on damaged headers; reading fails on missing or
+  broken chunks with the rows (or tile) and the part named. A chunk claiming more than 256 MB of decoded samples is
+  refused before anything is allocated. Tested with every truncation through the headers and steps through the data,
+  and 2,700 files with changed bytes, nine kinds of file, under AddressSanitizer and UndefinedBehaviorSanitizer.
+- **Open files:** the Read node's cache keeps up to 64 readers, each holding one file handle. OpenEXR opens files on
+  Windows with read, write and delete sharing, so renderers can rewrite frames that are open (live linking, B0.2);
+  on macOS and Linux a rewritten file is a new file and the stamp check (D-075) reopens it.
+- **Golden files for lossy compressions:** the inputs are committed (`tests/fixtures/exr/`, ~90 KB, written once by
+  the test writer; update-golden writes missing ones) so encoder changes in future OpenEXR versions cannot change the
+  inputs; the expected images (~160 KB) catch decoder changes. Lossy decoders use platform-specific vector code, so
+  the golden comparison allows one half-float step (relative 2·10⁻³); each result must also equal OpenEXR's own
+  decoding on the platform exactly.
+- DoD (D-006/D-075): float-correct (half and float exact, NaN/±∞/IDs bit for bit, uint by value — tested on every
+  compression in scanline and tiled form); OCIO N/A until item 11 (colour attributes are in the metadata for it);
+  sequences item 10 (a re-rendered frame is reopened, D-075); documents/selections/history/shortcuts/panels N/A for a
+  file reader (the Metadata panel is item 13); persistence: reading only; tests: 69 new (58 reader unit tests, 2
+  Read-node tests with EXR files, 1 channel-order test, 8 golden), debug (sanitizers) and release; performance
+  measured on the owner's render (`spikes/exr-read`).

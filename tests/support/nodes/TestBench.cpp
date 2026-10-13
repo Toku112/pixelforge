@@ -1,6 +1,7 @@
 #include "support/nodes/TestBench.h"
 
 #include "core/image/Rect.h"
+#include "io/Formats.h"
 #include "nodes/Builtins.h"
 
 #include <array>
@@ -75,7 +76,8 @@ public:
 
     [[nodiscard]] const io::ImageFileInfo& info() const override { return m_info; }
 
-    [[nodiscard]] image::Image read(const image::ChannelSet& channels, const image::Rect& region) const override {
+    [[nodiscard]] image::Image read(const image::ChannelSet& channels, const image::Rect& region,
+                                    const io::ParallelFor& /*parallel*/) const override {
         ++m_counters->reads;
         const image::Rect window = image::intersect(region, m_info.dataWindow);
         const image::ChannelSet wanted = image::intersect(channels, m_info.channels);
@@ -164,6 +166,7 @@ std::filesystem::path TemporaryFolder::file(std::string_view name) const {
 }
 
 NodeBench::NodeBench() {
+    io::addBuiltinFormats(*formats);
     formats->add(testImageFormat(counters));
     nodes::registerBuiltinNodes(types, formats);
 }

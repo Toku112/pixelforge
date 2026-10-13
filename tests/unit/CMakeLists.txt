@@ -62,14 +62,21 @@ pf_add_gtest(pf_test_engine LABEL unit
 
 pf_add_gtest(pf_test_io LABEL unit
     SOURCES
+        io/ExrDamagedFileTest.cpp
+        io/ExrMetadataTest.cpp
+        io/ExrNamingTest.cpp
+        io/ExrReaderTest.cpp
         io/ImageReaderTest.cpp
-    LIBRARIES pf_test_node_bench)
+    LIBRARIES pf_test_node_bench pf_test_exr)
+# The owner's render (tests/fixtures/README.md) is read from the source tree when it is there.
+target_compile_definitions(pf_test_io PRIVATE PF_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 pf_add_gtest(pf_test_nodes LABEL unit
     SOURCES
         nodes/ActionReplayTest.cpp
         nodes/ExposureTest.cpp
+        nodes/ReadExrTest.cpp
         nodes/ReadTest.cpp
         nodes/ShuffleTest.cpp
         nodes/ViewerTest.cpp
-    LIBRARIES pf_test_node_bench pf_test_graph_types)
+    LIBRARIES pf_test_node_bench pf_test_graph_types pf_test_exr)

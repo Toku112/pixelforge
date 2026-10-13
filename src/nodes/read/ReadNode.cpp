@@ -84,6 +84,14 @@ public:
             return {};
         }
         const io::ImageFileInfo& file = reader->info();
+        if (file.channels.empty() && !file.notes.empty()) {
+            // Nothing readable, and the reader says why (a file of deep data only).
+            std::string why = file.notes.front();
+            for (std::size_t i = 1; i < file.notes.size(); ++i) {
+                why += "; " + file.notes[i];
+            }
+            throw io::FileError("cannot show " + node.params().getString("file") + ": " + why);
+        }
         return {.displayWindow = graph::scaleForProxy(file.displayWindow, proxyScale),
                 .dataWindow = graph::scaleForProxy(file.dataWindow, proxyScale),
                 .channels = file.channels};
@@ -96,8 +104,12 @@ public:
         }
         const int p = context.proxyScale();
         const Rect& region = context.region();
+        // Decoding is spread over the evaluation's threads (and stops when it is cancelled).
+        const io::ParallelFor parallel(
+            [&](std::size_t count, const io::ParallelFor::Body& body) { context.tasks().forEach(count, body); });
         const Image pixels = reader->read(
-            context.channels(), {.x0 = region.x0 * p, .y0 = region.y0 * p, .x1 = region.x1 * p, .y1 = region.y1 * p});
+            context.channels(), {.x0 = region.x0 * p, .y0 = region.y0 * p, .x1 = region.x1 * p, .y1 = region.y1 * p},
+            parallel);
         Image& output = context.output();
         context.forEachTile([&](TileCoord tile) {
             for (const std::string& channel : context.channels()) {

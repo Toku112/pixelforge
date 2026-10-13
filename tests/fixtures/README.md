@@ -2,6 +2,16 @@
 
 Input files for tests: our own generated ones and renders from the owner.
 
+## Generated files (in git)
+
+### `exr/` — lossy-compression inputs of the EXR golden tests
+
+One small render-like frame (40 × 32 with overscan, R, G, B in half and Z in float, soft gradients and a highlight
+up to about 40) per lossy compression: PXR24, B44, B44A, DWAA, DWAB and LJ2K scanline, DWAA and B44 tiled. Written once
+by the tests' EXR writer (`tests/support/exr/`, OpenEXR's own library); kept in git so that encoder changes in later
+OpenEXR versions cannot change the inputs (`tests/golden/exr/`, D-077). The update-golden target writes any that are
+missing. Most EXR tests write their files at run time instead and need nothing here.
+
 ## Owner renders (not in git)
 
 Real renders are too large for the repository (hundreds of MB per sequence), so they stay on the owner's machine,

@@ -42,8 +42,13 @@ _Update this section at the end of every session._
   descriptor; undo/redo keep only the changed nodes; a slider drag is one step; History panel model with the 50-step
   limit and Toggle Last State; Actions record, save as files and replay with identical pixels. 0.3 ms per edit even
   at 5000 nodes (`spikes/history-cost`).
-- Next up: item 9 (EXR reading: OpenEXR scanline/tiled, multi-part and multi-layer naming, every compression,
-  lazy per-channel decode, metadata).
+- Done: item 9 (2026-10-13) — EXR reading (`io/exr` on OpenEXRCore; spec `docs/specs/exr-reading.md`, FORMAT_NOTES
+  §22, D-077): every compression in scanline and tiled form, multi-part/multi-layer/multi-view naming, lazy and
+  parallel decoding (only the parts, chunks and channels a request needs), metadata of every part, deep parts and
+  subsampled channels reported, damaged files give clear errors (fuzz-tested). The owner's Cycles frame: beauty in
+  2 ms, every pass in 16 ms (`spikes/exr-read`).
+- Next up: item 10 (sequences: frame-pattern detection, frame range and gaps, missing frames held/black/checker,
+  file-change detection groundwork).
 - Owner check later (Phase 5): compare our Exposure node with Photoshop's Exposure adjustment at a few settings
   (D-075).
 - Fixtures: the owner's Cycles sequence arrived 2026-10-13 (`blender render/`, 20 frames, 13-part EXR with DWAA,
@@ -109,10 +114,20 @@ The browser prototype implemented parts of B2, B3, B5, B6, B8, B9 and B16 (see t
 
 ### B0.2 EXR & renderer support
 - [ ] Multi-layer and multi-part EXR stills and frame sequences: all compressions (none, RLE, ZIPS, ZIP, PIZ, PXR24, B44, B44A, DWAA, DWAB, HTJ2K), half/float/uint, scanline and tiled, data window vs display window, multi-view (stereo) (Phase 0)
+  ↳ partial: stills done in Part C item 9 (D-077: every compression OpenEXR 3.5 has, incl. HTJ2K, lossy HTJ2K and
+  ZSTD; mipmap/ripmap files at full resolution; views named as in one part); sequences come with item 10.
+  Subsampled channels (luminance/chroma files) are left out with a note until the Phase 9 format work
 - [ ] Deep EXR read: detect deep parts, flatten to a regular image; full deep compositing later (Phase 1)
-- [ ] Lazy per-channel loading: only the channels the graph reads are decoded (Phase 0)
+  ↳ partial: detection done (Part C item 9: deep parts listed in the file's notes; a deep-only file is a Read-node
+  error that says so); flattening Phase 1
+- [x] Lazy per-channel loading: only the channels the graph reads are decoded (Phase 0)
+  ↳ note: Part C item 9 (D-077): only the parts holding requested channels, only the chunks overlapping the request,
+  only the requested channels unpacked (a chunk is decompressed whole — the codecs work per chunk); checked by
+  counting decoded chunks; the depth pass of the owner's 13-part render reads in 0.6 ms against 16 ms for all
 - [ ] Automatic sequence detection, including frame-number patterns (`name.1001.exr`, `name_1001.exr`, `name1001.exr`, `####`, `%04d`, `@@@@`), negative frames, gaps; missing frames reported and shown as held/black/checker (Phase 0)
 - [ ] Metadata panel: every EXR header attribute per part (renderer, camera, render time, chromaticities, custom attributes) (Phase 0)
+  ↳ partial: the metadata model is done (Part C item 9, FORMAT_NOTES §22.5: every attribute of every part, typed with
+  display text); the panel comes with item 13
 - [ ] Renderer presets that auto-detect and organise passes (Phase 1):
   - [ ] **Blender/Cycles**: view layers, light groups, Cryptomatte, denoising data, pass naming
   - [ ] **Redshift**: AOVs, light groups, Cryptomatte, raw vs filtered AOVs
@@ -820,11 +835,29 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   (`spikes/history-cost`). DoD (D-006/D-076): pixels/OCIO/sequences/
   documents/selections N/A for the command layer; Edit-menu items, shortcuts (Cmd/Ctrl+Z, Shift+…, Option/Alt+…) and
   the History panel item 13; project-file persistence Phase 1; undo memory against the budget Phase 3.
-- [ ] 9. **EXR reading (`io/exr`):** OpenEXR ≥ 3.4.14; scanline and tiled; multi-part and multi-layer channel naming
+- [x] 9. **EXR reading (`io/exr`):** OpenEXR ≥ 3.4.14; scanline and tiled; multi-part and multi-layer channel naming
   (`layer.view.channel`, Cycles `ViewLayer.Pass.Channel`, Redshift/Octane conventions); half/float/uint; every
   compression incl. HTJ2K; data/display window; multi-view; deep parts detected and reported (flattening is Phase 1);
   lazy per-channel decode on background threads; metadata to a key/value model. Golden tests with our own generated
   fixtures for every compression type, plus fuzz-style tests with truncated/corrupt files (no crash, clear error).
+  ↳ note (2026-10-13): spec `docs/specs/exr-reading.md`, rules FORMAT_NOTES §22, decisions D-077. Built on OpenEXR's
+  low-level library (OpenEXRCore 3.5.2), so one open file decodes on all the engine's threads. Every compression
+  (14, incl. HTJ2K 256/32, lossy HTJ2K, ZSTD) in scanline and tiled form, mipmap/ripmap (full resolution), any line
+  order, half/float/uint (half and float exact, NaN/∞/Cryptomatte IDs bit for bit, uint by value), any data window;
+  multi-part names as stored (Blender's full names), views: default view plain, others `right.R`/`diffuse.right.R`
+  in both storage forms; clashes prefixed with the part name; lower-case r, g, b, a sort after R, G, B, A (§19.2).
+  Lazy: only needed parts, chunks and channels (counted in tests). Deep parts and subsampled channels are listed in
+  the file's notes (a deep-only file is a Read-node error saying so). Metadata: every attribute of every part, typed
+  with display text. The reader interface gained a `ParallelFor`, statistics and a richer file description; the app
+  and the test bench register OpenEXR (`io/Formats.h`). Damaged files: thousands of cut and changed files of nine
+  kinds, no crash under ASan/UBSan, errors name the file, the part and the rows. Tests: 74 new (58 reader unit tests
+  incl. all 28 compression/storage cases against the pattern or OpenEXR's own decoding, metadata, naming, damaged
+  files, the owner's render; 2 Read-node tests; 1 channel order; 8 golden tests of lossy compressions with committed
+  inputs in `tests/fixtures/exr/`), 416/416 in debug (sanitizers) and release; tidy, format and licence checks
+  clean. Speed on the owner's 1080p 13-part DWAA frame (M5 Pro, `spikes/exr-read`): open 0.17 ms, beauty 2.0 ms,
+  all 41 channels 16 ms on all cores (OpenEXR's own threaded reader: 2.1 / 21 ms); open + beauty of a sequence 285
+  fps. DoD (D-006/D-077): OCIO item 11 (colour attributes are in the metadata); sequences item 10; panels item 13;
+  documents/selections/history/shortcuts N/A for a file reader.
 - [ ] 10. **Sequences (`io/sequence`):** frame-pattern detection (`name.1001.exr`, `name_1001.exr`, `name1001.exr`,
   `####`, `%04d`, `@@@@`, negative frames, mixed padding), frame range and gaps, missing frames (hold / black /
   checker, listed in the Read node), file-change detection groundwork for live linking. Unit tests on generated

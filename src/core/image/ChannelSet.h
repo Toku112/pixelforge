@@ -20,9 +20,9 @@ namespace pf::image {
 // "R" for "diffuse_direct.R" and for "R".
 [[nodiscard]] std::string_view suffixOf(std::string_view channel);
 
-// The canonical channel order: by layer name (the main layer first), then within a layer R, G, B, A, then X, Y, Z,
-// W, then U, V, then every other suffix in byte order. Gives RGBA-like groups their natural order in lists and makes
-// channel sets (and everything hashed from them) independent of the order channels arrived in.
+// The canonical channel order: by layer name (the main layer first), then within a layer R, G, B, A, then r, g, b, a,
+// then X, Y, Z, W, then U, V, then every other suffix in byte order. Gives RGBA-like groups their natural order in
+// lists and makes channel sets (and everything hashed from them) independent of the order channels arrived in.
 [[nodiscard]] std::strong_ordering compareChannels(std::string_view a, std::string_view b);
 
 // An ordered set of channel names, kept in the canonical order. Names are case-sensitive and must not be empty.

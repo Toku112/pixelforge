@@ -38,3 +38,13 @@ pf_target_defaults(pf_test_graph_types)
 set_target_properties(pf_test_graph_types PROPERTIES AUTOMOC OFF)
 target_include_directories(pf_test_graph_types PUBLIC "${PROJECT_SOURCE_DIR}/tests")
 target_link_libraries(pf_test_graph_types PUBLIC pf_core GTest::gtest)
+
+# EXR reader tests: files written with OpenEXR's own high-level library, pixel checks against their pattern, and a
+# thread pool for concurrency tests (support/exr/ExrFixture.h).
+add_library(pf_test_exr STATIC
+    exr/ExrFixture.cpp)
+pf_target_defaults(pf_test_exr)
+set_target_properties(pf_test_exr PROPERTIES AUTOMOC OFF)
+target_include_directories(pf_test_exr PUBLIC "${PROJECT_SOURCE_DIR}/tests")
+target_link_libraries(pf_test_exr
+    PUBLIC pf_core pf_io GTest::gtest OpenEXR::OpenEXR Imath::Imath)

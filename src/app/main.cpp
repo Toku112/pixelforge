@@ -5,6 +5,7 @@
 #include "core/graph/NodeDef.h"
 #include "engine/Engine.h"
 #include "engine/Scheduler.h"
+#include "io/Formats.h"
 #include "io/ImageReader.h"
 #include "nodes/Builtins.h"
 
@@ -20,6 +21,7 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <utility>
 
 namespace {
 
@@ -48,10 +50,11 @@ int run(int argc, char** argv) {
     // before the application object: running jobs are cancelled and finish first.
     const pf::engine::Engine engine;
 
-    // Image formats the Read node opens (OpenEXR arrives with PLAN item 9) and the node types of the graph.
-    const auto formats = std::make_shared<const pf::io::FormatRegistry>();
+    // Image formats the Read node opens and the node types of the graph.
+    auto formats = std::make_shared<pf::io::FormatRegistry>();
+    pf::io::addBuiltinFormats(*formats);
     pf::graph::NodeRegistry nodeTypes;
-    pf::nodes::registerBuiltinNodes(nodeTypes, formats);
+    pf::nodes::registerBuiltinNodes(nodeTypes, std::move(formats));
 
     QMainWindow window;
     window.setWindowTitle(toQString(pf::APP_NAME));

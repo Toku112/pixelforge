@@ -8,8 +8,10 @@
 namespace pf::image {
 namespace {
 
-// Suffixes with a fixed place inside a layer; every other suffix follows them in byte order.
-constexpr std::array<std::string_view, 10> rankedSuffixes{"R", "G", "B", "A", "X", "Y", "Z", "W", "U", "V"};
+// Suffixes with a fixed place inside a layer; every other suffix follows them in byte order. Lower-case r, g, b, a
+// (Cycles' Cryptomatte layers) follow R, G, B, A.
+constexpr std::array<std::string_view, 14> rankedSuffixes{"R", "G", "B", "A", "r", "g", "b",
+                                                          "a", "X", "Y", "Z", "W", "U", "V"};
 
 std::size_t suffixRank(std::string_view suffix) {
     for (std::size_t rank = 0; rank < rankedSuffixes.size(); ++rank) {

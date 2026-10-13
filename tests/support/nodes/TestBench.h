@@ -1,8 +1,8 @@
 #pragma once
 
-// Test support for nodes: a small image file format of our own (".pftest", tests only — real formats arrive with
-// PLAN item 9), a temporary folder, and a bench holding the format registry, the built-in node types, a memory
-// budget and an evaluator.
+// Test support for nodes: a small image file format of our own (".pftest", tests only), a temporary folder, and a
+// bench holding the format registry (the built-in formats and .pftest), the built-in node types, a memory budget and
+// an evaluator.
 
 #include "core/graph/Graph.h"
 #include "core/graph/NodeDef.h"

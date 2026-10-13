@@ -648,7 +648,8 @@ scene-linear float32 samples (D-062).
   (`ViewLayer.Combined.R` → layer `ViewLayer.Combined`, suffix `R`). A name without a dot is in the main layer.
   Names are case-sensitive.
 - **Canonical order** (channel sets, lists, anything hashed from them): by layer name in byte order with the main
-  layer first; inside a layer R, G, B, A, then X, Y, Z, W, then U, V, then all other suffixes in byte order.
+  layer first; inside a layer R, G, B, A, then r, g, b, a (Cycles writes Cryptomatte with lower-case suffixes; added
+  with item 9, D-077), then X, Y, Z, W, then U, V, then all other suffixes in byte order.
 
 ### 19.3 Tiles and copy-on-write
 
@@ -872,3 +873,107 @@ A `group` holds its steps as descriptors: `{"command": "group", "params": {"labe
 `format` must be `"pixelforge-action"`. `version` is an integer: files with a higher version than the program knows
 are refused; version 1 is the first. `name` is optional. Steps are descriptors (§21.3), played in order. Written with
 two-space indentation.
+
+## 22. OpenEXR reading (`src/io/exr`)
+
+Behaviour in plain language: `docs/specs/exr-reading.md`. Decisions: D-077. Built on OpenEXRCore (OpenEXR's C
+library, ≥ 3.4.14; 3.5.2 at the time of writing).
+
+### 22.1 Samples and windows
+
+| Stored as | Read as float32 |
+|---|---|
+| half | its exact value (every half fits in a float); NaN, ±infinity and subnormals kept |
+| float | the same 32 bits (Cryptomatte IDs and NaN payloads survive bit for bit) |
+| uint (32-bit) | its value rounded to the nearest float (exact up to 2²⁴ = 16,777,216; above that, ties to even) |
+
+- No other change: no clamping, no colour conversion, no alpha change (EXR colour is premultiplied, as in the engine,
+  §19.4).
+- Windows: OpenEXR's inclusive boxes become half-open rectangles (`x1 = max.x + 1`, computed in 64 bits). A window
+  with any edge beyond ±2²⁹ is refused when the file is opened (§19.1).
+- **Display window** = the first part's. A later part with a different one is noted (OpenEXR requires parts to share
+  it). **Data window** = the union of the data windows of the parts that deliver channels (of all parts when none
+  does). A channel reads as 0 where the request lies outside its own part's data window.
+- **Pixel aspect ratio** = the first part's `pixelAspectRatio` when finite and positive, else 1.
+
+### 22.2 Channel names
+
+Let `views` be the file's views: for a single-part file the `multiView` attribute (string vector; the first entry is
+the default view); for a multi-part file the `view` attributes of its parts, in order of first appearance (the first
+part with a view gives the default view). Channels of subsampled storage (x or y sampling ≠ 1) are left out with a
+note (§22.4). Then, per stored channel, in part order and, within a part, in the file's (alphabetical) order:
+
+1. **Single part with views.** The channel's view by OpenEXR's rule: a name without a dot belongs to the default
+   view; otherwise the next-to-last dot-separated part of the name, if it is one of `views`; otherwise no view. A
+   default-view channel loses its view part (`diffuse.left.R` → `diffuse.R`, `left.Z` → `Z`); others keep their names
+   (`diffuse.right.R`, `tmp.R`).
+2. **Several parts, a part with a `view` other than the default view:** the view is inserted before the last part of
+   the name: `R` → `right.R`, `diffuse.R` → `diffuse.right.R`. Default-view parts and parts without a view keep their
+   names.
+3. **Otherwise** the stored name, unchanged (single-part files; Blender's multi-part files, whose channels carry
+   their full names, `ViewLayer.Combined.R`).
+4. **Clashes:** if the name is taken by an earlier channel, a multi-part file names it `<part name>.<name>` if that is
+   free; otherwise (or in a single-part file) the channel is left out. Both are noted. A channel with an empty name is
+   left out with a note.
+
+The result is sorted into the canonical order (§19.2); `FileChannel` records each channel's stored name, stored type,
+part and view (empty for the default view and for channels of no view).
+
+### 22.3 Reading
+
+- Parts are read only when a requested channel lives in them; chunks only when they overlap the requested region ∩
+  the part's data window. Scanline chunk `k` of a part with `L` lines per chunk (1 for none/RLE/ZIPS/ZSTD, 16 for
+  ZIP/PXR24, 32 for PIZ/B44/B44A/DWAA/HTJ2K32, 256 for DWAB/HTJ2K256/LJ2K) covers rows `y0 + k·L` to
+  `min(y0 + (k+1)·L, y1) − 1`, all columns. Tiles are read at level 0 (full resolution), tile `(i, j)` covering
+  `[x0 + i·w, x0 + (i+1)·w) × [y0 + j·h, y0 + (j+1)·h)` clipped to the data window.
+- Each chunk is decompressed whole (the codecs work on whole chunks) and only the requested channels are unpacked,
+  as float, into a scratch plane per channel; the part of the chunk inside the region is copied into the image's
+  256 × 256 tiles. Tiles covered entirely by the read are written without being cleared first; others start at 0.
+- Chunks are grouped into batches of at least 65,536 pixels (one decoder set-up per batch) and the batches run in
+  parallel through the caller's `ParallelFor`. Every pixel of the result belongs to exactly one chunk, so batches
+  never write the same samples.
+- A chunk that would need more than 2²⁶ float samples (256 MB) to decode is refused as damaged (real files need far
+  less; a damaged header could otherwise make the reader allocate gigabytes).
+
+### 22.4 Notes (in `ImageFileInfo::notes`)
+
+| Situation | Note |
+|---|---|
+| deep part | `part '<name>' holds deep data, which is not read yet` (single-part: `the file holds …`) |
+| unknown storage type | `part '<name>' is stored in a way this version cannot read` |
+| subsampled channel | `channel '<name>' of part '<part>' is stored at reduced resolution (x × y), which is not read yet` |
+| renamed after a clash | `channel '<stored>' of part '<part>' is shown as '<new>': an earlier part has a channel named '<name>'` |
+| left out after a clash | `channel '<stored>' of part '<part>' is left out: another channel is named '<name>'` |
+| different display window | `part '<name>' has a different frame (display window) from the first part; the first part's frame is used` |
+
+Parts without a name are called `#n` (1-based). In single-part files the `of part …` is omitted.
+
+### 22.5 Metadata entries
+
+Every attribute of every part, in file order, as `{name, type, value, text}`; `type` is the file's type name. Text is
+locale-independent; numbers are written as the shortest text that reads back to the stored number (`std::to_chars`
+on the stored float or double: a float 0.64 shows as `0.64`).
+
+| Type | Value | Text |
+|---|---|---|
+| int | integer | `42` |
+| float, double | number | `0.64` |
+| string | text | the text |
+| stringvector | list of text | items joined by `, ` |
+| floatvector | numbers | items joined by `, ` |
+| v2i/v2f/v2d, v3i/v3f/v3d | numbers | `(3, -4)`, `(1, 2.5, -3)` |
+| box2i, box2f | numbers min.x, min.y, max.x, max.y | `(0, 0) – (1919, 1079)` (inclusive corners, as stored) |
+| chromaticities | 8 numbers (red x, y, green, blue, white) | `red (0.64, 0.33), green (0.3, 0.6), blue (0.15, 0.06), white (0.3127, 0.329)` |
+| m33f/m33d/m44f/m44d | 9 or 16 numbers, row by row | `[1, 0, 0; 0, 1, 0; 0, 0, 1]` |
+| rational | numerator, denominator | `24000/1001` |
+| keycode | 7 numbers | `manufacturer 1, film type 2, prefix 3, count 4, perforation offset 5, 4 perforations per frame, 64 perforations per count` |
+| timecode | text | `hh:mm:ss:ff` from the SMPTE BCD fields (`;` before the frames when the drop-frame bit 6 is set) |
+| compression | text | `None`, `RLE`, `ZIPS`, `ZIP`, `PIZ`, `PXR24`, `B44`, `B44A`, `DWAA`, `DWAB`, `HTJ2K256`, `HTJ2K32`, `LJ2K`, `ZSTD` |
+| lineOrder | text | `increasing Y`, `decreasing Y`, `random Y` |
+| envmap | text | `latitude-longitude`, `cube` |
+| deepImageState | text | `messy`, `sorted`, `non-overlapping`, `tidy` |
+| tiledesc | text | `64 × 64 tiles, one level` / `…, mipmap levels (sizes rounded down)` / `ripmap …` |
+| chlist | list of text | `R (half)`, `chroma (half, subsampled 2 × 2)`, … |
+| preview | none | `preview image, w × h` |
+| bytes, custom types | none | `n bytes` |
+

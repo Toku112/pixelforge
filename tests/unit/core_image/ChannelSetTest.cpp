@@ -40,7 +40,16 @@ TEST(ChannelName, CanonicalOrderAcrossLayers) {
 
 TEST(ChannelName, OrderIsCaseSensitiveAndOtherSuffixesSortByBytes) {
     const ChannelSet set{"r", "R", "depth", "Depth", "alpha"};
-    EXPECT_EQ(namesOf(set), (std::vector<std::string>{"R", "Depth", "alpha", "depth", "r"}));
+    EXPECT_EQ(namesOf(set), (std::vector<std::string>{"R", "r", "Depth", "alpha", "depth"}));
+}
+
+TEST(ChannelName, LowerCaseRgbaFollowsUpperCase) {
+    // Cycles writes Cryptomatte layers with lower-case suffixes; they list as r, g, b, a, not a, b, g, r.
+    const ChannelSet set{"CryptoObject00.a", "CryptoObject00.b", "CryptoObject00.g", "CryptoObject00.r"};
+    EXPECT_EQ(namesOf(set), (std::vector<std::string>{"CryptoObject00.r", "CryptoObject00.g", "CryptoObject00.b",
+                                                      "CryptoObject00.a"}));
+    const ChannelSet mixed{"x", "a", "Z", "A", "r"};
+    EXPECT_EQ(namesOf(mixed), (std::vector<std::string>{"A", "r", "a", "Z", "x"}));
 }
 
 TEST(ChannelSet, OrderDoesNotDependOnInsertionOrder) {

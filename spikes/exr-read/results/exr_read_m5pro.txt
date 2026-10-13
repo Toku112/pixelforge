@@ -1,0 +1,8 @@
+cores: 18
+blender render/render0001.exr: 1920 x 1080, 13 parts, 41 channels
+open (header only): 0.169 ms
+beauty (Combined RGBA)   ours 1 thread   24.06 ms | ours all cores   1.99 ms | OpenEXR C++ (18 threads)    2.11 ms
+depth (one channel)      ours 1 thread    7.76 ms | ours all cores   0.60 ms | OpenEXR C++ (18 threads)    0.86 ms
+position (XYZ)           ours 1 thread   34.26 ms | ours all cores   2.27 ms | OpenEXR C++ (18 threads)    2.57 ms
+everything               ours 1 thread  245.85 ms | ours all cores  15.89 ms | OpenEXR C++ (18 threads)   20.72 ms
+sequence: 21 frames, open + beauty, 3.5 ms per frame (285 fps)

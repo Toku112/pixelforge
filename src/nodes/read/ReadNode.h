@@ -6,6 +6,8 @@
 // file's size or modification time changes; the same stamp goes into the node's hash, so a re-rendered file is
 // picked up by the next evaluation.
 //
+// A file with nothing the node can show (only deep data, item 9) is an error that gives the reader's reasons.
+//
 // Still to come: image sequences and frame ranges (PLAN item 10), the input colour space (item 11).
 
 #include "core/graph/NodeDef.h"

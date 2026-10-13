@@ -25,6 +25,16 @@ std::string extensionOf(const std::filesystem::path& file) {
 
 } // namespace
 
+void ParallelFor::operator()(std::size_t count, const Body& body) const {
+    if (m_runner) {
+        m_runner(count, body);
+        return;
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        body(i);
+    }
+}
+
 void FormatRegistry::add(ImageFormat format) {
     if (format.name.empty() || format.extensions.empty() || !format.open) {
         throw std::invalid_argument("an image format needs a name, extensions and an open function");
