@@ -815,8 +815,9 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   opening state, limit 50 (1–1000) with the opening state kept reachable, continuous edits (slider, node and key
   drags) as one step, Edit-menu labels, observers. `core/actions`: recorder, player (stops at the failing step,
   names it), versioned action files. 58 new unit tests incl. a replay with real nodes that renders identical pixels,
-  debug (ASan/UBSan) and release; tidy, format and licence checks clean. Timing: 0.05 ms per edit at 1000 nodes,
-  0.3 ms at 5000; undo/redo microseconds (`spikes/history-cost`). DoD (D-006/D-076): pixels/OCIO/sequences/
+  debug (ASan/UBSan) and release; tidy, format and licence checks clean; CI green on macOS, Windows and Linux (run
+  38363294628, 342/342 tests each). Timing: 0.05 ms per edit at 1000 nodes, 0.3 ms at 5000; undo/redo microseconds
+  (`spikes/history-cost`). DoD (D-006/D-076): pixels/OCIO/sequences/
   documents/selections N/A for the command layer; Edit-menu items, shortcuts (Cmd/Ctrl+Z, Shift+…, Option/Alt+…) and
   the History panel item 13; project-file persistence Phase 1; undo memory against the budget Phase 3.
 - [ ] 9. **EXR reading (`io/exr`):** OpenEXR ≥ 3.4.14; scanline and tiled; multi-part and multi-layer channel naming
