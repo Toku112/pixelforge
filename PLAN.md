@@ -854,7 +854,7 @@ decide the foundations, 3–4 make every later item testable on all three platfo
   incl. all 28 compression/storage cases against the pattern or OpenEXR's own decoding, metadata, naming, damaged
   files, the owner's render; 2 Read-node tests; 1 channel order; 8 golden tests of lossy compressions with committed
   inputs in `tests/fixtures/exr/`), 416/416 in debug (sanitizers) and release; tidy, format and licence checks
-  clean. Speed on the owner's 1080p 13-part DWAA frame (M5 Pro, `spikes/exr-read`): open 0.17 ms, beauty 2.0 ms,
+  clean; CI green on macOS, Windows and Linux (run 38373620378; the three tests of the owner's render skip there). Speed on the owner's 1080p 13-part DWAA frame (M5 Pro, `spikes/exr-read`): open 0.17 ms, beauty 2.0 ms,
   all 41 channels 16 ms on all cores (OpenEXR's own threaded reader: 2.1 / 21 ms); open + beauty of a sequence 285
   fps. DoD (D-006/D-077): OCIO item 11 (colour attributes are in the metadata); sequences item 10; panels item 13;
   documents/selections/history/shortcuts N/A for a file reader.
